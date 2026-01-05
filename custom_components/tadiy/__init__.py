@@ -9,7 +9,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "tadiy"
-PLATFORMS = []  # Später: ["climate", "sensor"]
+PLATFORMS = ["climate"]  # Später: ["climate", "sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY from a config entry."""
