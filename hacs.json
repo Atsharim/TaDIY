@@ -1,0 +1,6 @@
+{
+  "name": "TaDIY - IntelliTRV Manager",
+  "content_in_root": false,
+  "country": ["DE"],
+  "homeassistant": "2025.12.0"
+}
