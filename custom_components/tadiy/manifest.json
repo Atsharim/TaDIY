@@ -1,6 +1,6 @@
 {
   "domain": "tadiy",
-  "name": "TaDIY - IntelliTRV Manager",
+  "name": "TaDIY - Adaptive Climate Orchestrator",
   "codeowners": ["@Atsharim"],
   "config_flow": true,
   "dependencies": [],
