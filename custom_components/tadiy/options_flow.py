@@ -6,87 +6,175 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry, OptionsFlow
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import selector
 
-from .const import DOMAIN
+from .const import (
+    CONF_DONT_HEAT_BELOW_OUTDOOR,
+    CONF_MAIN_TEMP_SENSOR,
+    CONF_OUTDOOR_SENSOR,
+    CONF_ROOM_NAME,
+    CONF_ROOMS,
+    CONF_TRV_ENTITIES,
+    CONF_WEATHER_ENTITY,
+    CONF_WINDOW_CLOSE_TIMEOUT,
+    CONF_WINDOW_OPEN_TIMEOUT,
+    CONF_WINDOW_SENSORS,
+    DEFAULT_DONT_HEAT_BELOW,
+    DEFAULT_WINDOW_CLOSE_TIMEOUT,
+    DEFAULT_WINDOW_OPEN_TIMEOUT,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class TaDIROptionsFlowHandler(config_entries.OptionsFlow):
+class TaDIYOptionsFlowHandler(OptionsFlow):
     """Handle TaDIY options."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         self.config_entry = config_entry
+        self._current_room: dict[str, Any] | None = None
+        self._room_index: int | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Room management overview."""
-        return self.async_show_form(
+        """Manage the options - main menu."""
+        return self.async_show_menu(
             step_id="init",
-            data_schema=vol.Schema({
-                vol.Required("action"): vol.In(["add_room"]),
-            }),
+            menu_options=["add_room", "edit_room", "delete_room"],
+            description_placeholders={
+                "room_count": str(len(self.config_entry.options.get(CONF_ROOMS, []))),
+            },
         )
 
     async def async_step_add_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Add/configure room."""
-        if user_input is not None:
-            room_config = {
-                "room_name": user_input["room_name"],
-                "trv_entities": [e.strip() for e in user_input["trv_entities"].split(",")],
-                "main_temp_sensor": user_input["main_temp_sensor"],
-                "window_sensors": [e.strip() for e in user_input["window_sensors"].split(",")] if user_input["window_sensors"] else [],
-                "weather_entity": user_input.get("weather_entity", ""),
-                "outdoor_sensor": user_input.get("outdoor_sensor", ""),
-                "window_open_timeout": int(user_input["window_open_timeout"]),
-                "window_close_timeout": int(user_input["window_close_timeout"]),
-                "dont_heat_below_outdoor": float(user_input["dont_heat_below_outdoor"]),
-            }
-            # Merge mit bestehenden Options
-            options = dict(self.config_entry.options)
-            options.setdefault("rooms", []).append(room_config)
-            
-            _LOGGER.info("Room config added: %s", room_config["room_name"])
-            return self.async_create_entry(title="Rooms", data=options)
+        """Add a new room."""
+        errors = {}
 
-        # Entity-Listen abrufen
-        registry = er.async_get(self.hass)
-        climates = [entity.entity_id for entity in er.async_all(self.hass) if entity.domain == "climate"]
-        temp_sensors = [entity.entity_id for entity in er.async_all(self.hass) 
-                       if entity.domain == "sensor" and "temp" in entity.entity_id.lower()]
-        window_sensors = [entity.entity_id for entity in er.async_all(self.hass)
-                         if entity.domain == "binary_sensor" and "fenster" in entity.entity_id.lower()]
-        weather_entities = [""] + [entity.entity_id for entity in er.async_all(self.hass) if entity.domain == "weather"]
+        if user_input is not None:
+            # Validation
+            room_name = user_input[CONF_ROOM_NAME].strip()
+            existing_rooms = self.config_entry.options.get(CONF_ROOMS, [])
+            
+            if any(r[CONF_ROOM_NAME] == room_name for r in existing_rooms):
+                errors["base"] = "room_exists"
+            else:
+                # Add room
+                new_room = {
+                    CONF_ROOM_NAME: room_name,
+                    CONF_TRV_ENTITIES: user_input[CONF_TRV_ENTITIES],
+                    CONF_MAIN_TEMP_SENSOR: user_input[CONF_MAIN_TEMP_SENSOR],
+                    CONF_WINDOW_SENSORS: user_input.get(CONF_WINDOW_SENSORS, []),
+                    CONF_WEATHER_ENTITY: user_input.get(CONF_WEATHER_ENTITY, ""),
+                    CONF_OUTDOOR_SENSOR: user_input.get(CONF_OUTDOOR_SENSOR, ""),
+                    CONF_WINDOW_OPEN_TIMEOUT: user_input[CONF_WINDOW_OPEN_TIMEOUT],
+                    CONF_WINDOW_CLOSE_TIMEOUT: user_input[CONF_WINDOW_CLOSE_TIMEOUT],
+                    CONF_DONT_HEAT_BELOW_OUTDOOR: user_input[CONF_DONT_HEAT_BELOW_OUTDOOR],
+                }
+                
+                updated_rooms = existing_rooms + [new_room]
+                
+                return self.async_create_entry(
+                    title="",
+                    data={CONF_ROOMS: updated_rooms},
+                )
+
+        # Entity selectors
+        data_schema = vol.Schema({
+            vol.Required(CONF_ROOM_NAME): str,
+            vol.Required(CONF_TRV_ENTITIES): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="climate",
+                    multiple=True,
+                )
+            ),
+            vol.Required(CONF_MAIN_TEMP_SENSOR): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            ),
+            vol.Optional(CONF_WINDOW_SENSORS): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="binary_sensor",
+                    device_class="window",
+                    multiple=True,
+                )
+            ),
+            vol.Optional(CONF_WEATHER_ENTITY): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="weather")
+            ),
+            vol.Optional(CONF_OUTDOOR_SENSOR): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            ),
+            vol.Optional(
+                CONF_WINDOW_OPEN_TIMEOUT, 
+                default=DEFAULT_WINDOW_OPEN_TIMEOUT
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=30,
+                    max=3600,
+                    step=30,
+                    unit_of_measurement="s",
+                    mode=selector.NumberSelectorMode.SLIDER,
+                )
+            ),
+            vol.Optional(
+                CONF_WINDOW_CLOSE_TIMEOUT, 
+                default=DEFAULT_WINDOW_CLOSE_TIMEOUT
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=60,
+                    max=7200,
+                    step=60,
+                    unit_of_measurement="s",
+                    mode=selector.NumberSelectorMode.SLIDER,
+                )
+            ),
+            vol.Optional(
+                CONF_DONT_HEAT_BELOW_OUTDOOR, 
+                default=DEFAULT_DONT_HEAT_BELOW
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=30,
+                    step=0.5,
+                    unit_of_measurement="°C",
+                    mode=selector.NumberSelectorMode.SLIDER,
+                )
+            ),
+        })
 
         return self.async_show_form(
             step_id="add_room",
-            data_schema=vol.Schema({
-                vol.Required("room_name"): str,
-                vol.Required("trv_entities"): str,
-                vol.Required("main_temp_sensor"): vol.In(temp_sensors),
-                vol.Optional("window_sensors", default=""): str,
-                vol.Optional("weather_entity"): vol.In(weather_entities),
-                vol.Optional("outdoor_sensor"): vol.In([""] + temp_sensors),
-                vol.Optional("window_open_timeout", default=300): vol.All(
-                    vol.Coerce(int), vol.Range(min=30, max=3600)
-                ),
-                vol.Optional("window_close_timeout", default=900): vol.All(
-                    vol.Coerce(int), vol.Range(min=60, max=7200)
-                ),
-                vol.Optional("dont_heat_below_outdoor", default=10.0): vol.All(
-                    vol.Coerce(float), vol.Range(min=0.0, max=30.0)
-                ),
-            }),
+            data_schema=data_schema,
+            errors=errors,
             description_placeholders={
-                "examples": "TRVs: climate.thermostat_wohnbereich_rechts,climate.thermostat_wohnbereich_links",
-                "timeout_hint": "Fenster offen: Zeit bis Heizung stoppt | Fenster zu: Wartezeit bis Wiederanfahren"
+                "info": "Multiple TRVs/window sensors can be selected simultaneously."
             },
         )
+
+    async def async_step_edit_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Edit existing room - select room first."""
+        existing_rooms = self.config_entry.options.get(CONF_ROOMS, [])
+        
+        if not existing_rooms:
+            return self.async_abort(reason="no_rooms")
+
+        if user_input is not None:
+            self._room_index = int(user_input["room_index"])
+            self._current_room = existing_rooms[self._room_index]
+            return await self.async_step_edit_room_config()
+
+        
