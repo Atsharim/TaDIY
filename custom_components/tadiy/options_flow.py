@@ -35,7 +35,6 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
         self._current_room: dict[str, Any] | None = None
         self._room_index: int | None = None
 
