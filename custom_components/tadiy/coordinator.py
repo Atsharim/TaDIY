@@ -22,12 +22,11 @@ class TaDIYCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=30),  # Platzhalter
+            update_interval=timedelta(seconds=30),
         )
         _LOGGER.debug("TaDIY Coordinator initialized")
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data - placeholder for now."""
         _LOGGER.debug("TaDIY Coordinator update (no-op)")
-        # Später: hier TRV-/Sensorzustände einsammeln
         return {}
