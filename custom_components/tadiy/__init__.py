@@ -1,4 +1,6 @@
 """TaDIY - Adaptive Climate Orchestrator integration."""
+from __future__ import annotations
+
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -9,13 +11,8 @@ from .coordinator import TaDIYCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-<<<<<<< HEAD
-DOMAIN = "tadiy"
-PLATFORMS = ["climate"]  # Später: ["climate", "sensor"]
-=======
 PLATFORMS: list[str] = ["climate"]
 
->>>>>>> 891f8af (Add basic climate wrapper entity)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY from a config entry."""
