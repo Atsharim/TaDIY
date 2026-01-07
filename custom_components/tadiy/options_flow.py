@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 from homeassistant import config_entries
-from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import config_validation as cv, selector
 import voluptuous as vol
@@ -27,7 +26,6 @@ from .const import (
     CONF_TOLERANCE,
     CONF_TRV_ENTITIES,
     CONF_USE_EARLY_START,
-    CONF_WEATHER_ENTITY,
     CONF_WINDOW_CLOSE_TIMEOUT,
     CONF_WINDOW_OPEN_TIMEOUT,
     CONF_WINDOW_SENSORS,
@@ -45,7 +43,7 @@ from .const import (
     TARGET_TEMP_STEP_OPTIONS,
     TOLERANCE_OPTIONS,
 )
-from .models.schedule import DaySchedule, RoomSchedule
+from .models.schedule import RoomSchedule
 from .ui.schedule_editor import ScheduleEditor
 
 _LOGGER = logging.getLogger(__name__)

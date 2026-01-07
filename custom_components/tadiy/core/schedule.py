@@ -10,7 +10,6 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DEFAULT_FROST_PROTECTION_TEMP,
     MODE_MANUAL,
-    MODE_NORMAL,
     MODE_OFF,
 )
 from ..models.schedule import RoomSchedule
