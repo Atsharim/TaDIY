@@ -1,7 +1,6 @@
 {
   "domain": "tadiy",
   "name": "TaDIY - Adaptive Climate Orchestrator",
-  "icon": "icon.png",
   "version": "0.1.8",
   "codeowners": ["@Atsharim"],
   "config_flow": true,

@@ -5,8 +5,6 @@ from dataclasses import dataclass
 import logging
 from typing import Any
 
-from ..const import MAX_TARGET_TEMP, MIN_TARGET_TEMP
-
 _LOGGER = logging.getLogger(__name__)
 
 OUTLIER_THRESHOLD: float = 10.0
