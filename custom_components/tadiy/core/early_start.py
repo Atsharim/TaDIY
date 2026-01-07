@@ -1,223 +1,244 @@
-"""Early start / preheating logic for TaDIY."""
+"""Early start calculation with learning for TaDIY."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import logging
 from typing import Any
 
 from homeassistant.util import dt as dt_util
 
+from ..const import (
+    DEFAULT_HEATING_RATE,
+    MAX_HEATING_RATE,
+    MIN_HEATING_RATE,
+)
+
+_LOGGER = logging.getLogger(__name__)
+
+LEARNING_RATE: float = 0.1
+MAX_SAMPLES_FOR_AVERAGING: int = 50
+MIN_TEMP_INCREASE: float = 0.05
+MAX_TEMP_INCREASE_PER_MINUTE: float = 0.5
+
 
 @dataclass
 class HeatUpModel:
-    """Room heat-up characteristics (learned over time)."""
-    
+    """Model for learning heating rates."""
+
     room_name: str
-    degrees_per_hour: float = 1.0  # Default: 1°C/h
+    degrees_per_hour: float = DEFAULT_HEATING_RATE
     sample_count: int = 0
     last_updated: datetime | None = None
-    samples: list[float] = field(default_factory=list)
-    
+    _running_sum: float = field(default=0.0, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        """Validate heating model."""
+        if not MIN_HEATING_RATE <= self.degrees_per_hour <= MAX_HEATING_RATE:
+            raise ValueError(
+                f"degrees_per_hour must be between {MIN_HEATING_RATE} "
+                f"and {MAX_HEATING_RATE}"
+            )
+        self._running_sum = self.degrees_per_hour * self.sample_count
+
     def update_with_measurement(
         self,
         temp_increase: float,
         time_minutes: float,
     ) -> None:
-        """Update model with new heating measurement.
+        """
+        Update model with a new measurement.
         
         Args:
             temp_increase: Temperature increase in °C
-            time_minutes: Time taken in minutes
+            time_minutes: Time period in minutes
         """
-        if time_minutes <= 0 or temp_increase <= 0:
+        if time_minutes <= 0:
+            _LOGGER.warning(
+                "%s: Invalid time_minutes %.2f, skipping update",
+                self.room_name,
+                time_minutes,
+            )
             return
-        
-        # Calculate rate for this sample
+
+        if temp_increase < MIN_TEMP_INCREASE:
+            _LOGGER.debug(
+                "%s: Temperature increase too small (%.3f°C), skipping",
+                self.room_name,
+                temp_increase,
+            )
+            return
+
         rate_per_hour = (temp_increase / time_minutes) * 60
-        
-        # Plausibility check (0.1 - 10 °C/h)
-        if 0.1 <= rate_per_hour <= 10.0:
-            self.samples.append(rate_per_hour)
-            
-            # Keep only the last 20 samples
-            if len(self.samples) > 20:
-                self.samples.pop(0)
-            
-            # Calculate moving average
-            self.degrees_per_hour = sum(self.samples) / len(self.samples)
+
+        if not MIN_HEATING_RATE <= rate_per_hour <= MAX_HEATING_RATE:
+            _LOGGER.warning(
+                "%s: Heating rate %.2f°C/h out of plausible range, skipping",
+                self.room_name,
+                rate_per_hour,
+            )
+            return
+
+        if rate_per_hour > (temp_increase / time_minutes) * 60 * 2:
+            _LOGGER.warning(
+                "%s: Heating rate suspiciously high (%.2f°C/h), skipping",
+                self.room_name,
+                rate_per_hour,
+            )
+            return
+
+        old_rate = self.degrees_per_hour
+
+        if self.sample_count < MAX_SAMPLES_FOR_AVERAGING:
+            self._running_sum += rate_per_hour
             self.sample_count += 1
-            self.last_updated = dt_util.utcnow()
-    
+            self.degrees_per_hour = self._running_sum / self.sample_count
+        else:
+            self.degrees_per_hour = (
+                (1 - LEARNING_RATE) * self.degrees_per_hour
+                + LEARNING_RATE * rate_per_hour
+            )
+            self.sample_count += 1
+
+        self.last_updated = dt_util.utcnow()
+
+        _LOGGER.info(
+            "%s: Heating rate updated: %.2f -> %.2f °C/h "
+            "(measured: %.2f °C/h over %.1f min, sample %d)",
+            self.room_name,
+            old_rate,
+            self.degrees_per_hour,
+            rate_per_hour,
+            time_minutes,
+            self.sample_count,
+        )
+
+    def get_confidence(self) -> float:
+        """
+        Get confidence score for the learned rate (0.0 to 1.0).
+        
+        Returns:
+            Confidence score based on sample count
+        """
+        if self.sample_count == 0:
+            return 0.0
+        if self.sample_count >= MAX_SAMPLES_FOR_AVERAGING:
+            return 1.0
+        return min(self.sample_count / MAX_SAMPLES_FOR_AVERAGING, 1.0)
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for storage."""
         return {
             "room_name": self.room_name,
             "degrees_per_hour": self.degrees_per_hour,
             "sample_count": self.sample_count,
-            "last_updated": self.last_updated.isoformat() if self.last_updated else None,
-            "samples": self.samples,
+            "last_updated": (
+                self.last_updated.isoformat() if self.last_updated else None
+            ),
+            "_running_sum": self._running_sum,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> HeatUpModel:
         """Create from dictionary."""
-        last_updated = None
-        if data.get("last_updated"):
-            last_updated = dt_util.parse_datetime(data["last_updated"])
-        
-        return cls(
+        model = cls(
             room_name=data["room_name"],
-            degrees_per_hour=data.get("degrees_per_hour", 1.0),
+            degrees_per_hour=data.get("degrees_per_hour", DEFAULT_HEATING_RATE),
             sample_count=data.get("sample_count", 0),
-            last_updated=last_updated,
-            samples=data.get("samples", []),
+            last_updated=(
+                datetime.fromisoformat(data["last_updated"])
+                if data.get("last_updated")
+                else None
+            ),
         )
+        model._running_sum = data.get("_running_sum", 0.0)
+        return model
 
 
 class EarlyStartCalculator:
-    """Calculate optimal heating start time (Tado-like)."""
+    """Calculate early start times based on learned heating rates."""
 
-    def __init__(self, heat_up_model: HeatUpModel) -> None:
-        """Initialize calculator with room heating model."""
-        self.model = heat_up_model
+    def __init__(self, heat_model: HeatUpModel) -> None:
+        """Initialize calculator with a heating model."""
+        self._heat_model = heat_model
 
     def calculate_start_time(
         self,
-        target_time: datetime,
         current_temp: float,
         target_temp: float,
-        outdoor_temp: float | None = None,
+        target_time: datetime,
     ) -> datetime:
-        """Calculate when to start heating to reach target at target_time.
+        """
+        Calculate when to start heating to reach target by target_time.
         
         Args:
-            target_time: Desired time to reach target temperature
-            current_temp: Current room temperature
-            target_temp: Desired temperature
-            outdoor_temp: Outdoor temperature (for compensation)
+            current_temp: Current room temperature in °C
+            target_temp: Target temperature in °C
+            target_time: Desired time to reach target
             
         Returns:
             Datetime when heating should start
         """
         if target_temp <= current_temp:
-            return target_time  # Already reached
-        
-        temp_diff = target_temp - current_temp
-        
-        # Heating rate with outdoor temperature compensation
-        effective_rate = self.model.degrees_per_hour
-        if outdoor_temp is not None and outdoor_temp < 0:
-            # Slower heating in frost (20% reduction)
-            effective_rate *= 0.8
-        
-        # Calculate required time
-        hours_needed = temp_diff / effective_rate
-        minutes_needed = int(hours_needed * 60)
-        
-        # Safety buffer (10%, min 5 min)
-        safety_buffer = max(5, int(minutes_needed * 0.1))
-        total_minutes = minutes_needed + safety_buffer
-        
-        # Calculate start time
-        start_time = target_time - timedelta(minutes=total_minutes)
-        
-        # Don't start in the past
-        now = dt_util.utcnow()
-        if start_time < now:
-            return now
-        
-        return start_time
+            _LOGGER.debug(
+                "%s: Already at or above target (%.1f°C >= %.1f°C)",
+                self._heat_model.room_name,
+                current_temp,
+                target_temp,
+            )
+            return target_time
 
-    def should_start_heating_now(
-        self,
-        scheduled_target_time: datetime,
-        current_temp: float,
-        target_temp: float,
-        outdoor_temp: float | None = None,
-    ) -> bool:
-        """Check if heating should start now for scheduled time.
-        
-        Args:
-            scheduled_target_time: When target temp should be reached
-            current_temp: Current temperature
-            target_temp: Target temperature
-            outdoor_temp: Outdoor temperature
-            
-        Returns:
-            True if heating should start now
-        """
-        start_time = self.calculate_start_time(
-            scheduled_target_time,
+        temp_delta = target_temp - current_temp
+        hours_needed = temp_delta / self._heat_model.degrees_per_hour
+
+        confidence = self._heat_model.get_confidence()
+        if confidence < 0.5:
+            safety_factor = 1.5
+            _LOGGER.debug(
+                "%s: Low confidence (%.1f%%), applying safety factor %.1fx",
+                self._heat_model.room_name,
+                confidence * 100,
+                safety_factor,
+            )
+            hours_needed *= safety_factor
+
+        start_time = target_time - timedelta(hours=hours_needed)
+
+        _LOGGER.info(
+            "%s: Early start calculated: %.1f°C -> %.1f°C (Δ%.1f°C) "
+            "needs %.2fh at %.2f°C/h, start at %s",
+            self._heat_model.room_name,
             current_temp,
             target_temp,
-            outdoor_temp,
+            temp_delta,
+            hours_needed,
+            self._heat_model.degrees_per_hour,
+            start_time.strftime("%H:%M:%S"),
         )
-        
-        now = dt_util.utcnow()
-        return now >= start_time
 
-    def estimate_reach_time(
+        return start_time
+
+    def should_start_heating(
         self,
         current_temp: float,
         target_temp: float,
-        outdoor_temp: float | None = None,
-    ) -> datetime:
-        """Estimate when target temperature will be reached if heating starts now.
+        target_time: datetime,
+        current_time: datetime | None = None,
+    ) -> bool:
+        """
+        Check if heating should start now to reach target by target_time.
         
         Args:
-            current_temp: Current temperature
+            current_temp: Current room temperature
             target_temp: Target temperature
-            outdoor_temp: Outdoor temperature
+            target_time: Desired time to reach target
+            current_time: Current time (defaults to now)
             
         Returns:
-            Estimated datetime when target is reached
+            True if heating should start
         """
-        if target_temp <= current_temp:
-            return dt_util.utcnow()
-        
-        temp_diff = target_temp - current_temp
-        
-        effective_rate = self.model.degrees_per_hour
-        if outdoor_temp is not None and outdoor_temp < 0:
-            effective_rate *= 0.8
-        
-        hours_needed = temp_diff / effective_rate
-        minutes_needed = int(hours_needed * 60)
-        
-        return dt_util.utcnow() + timedelta(minutes=minutes_needed)
+        if current_time is None:
+            current_time = dt_util.utcnow()
 
-
-def calculate_adaptive_setpoint(
-    target_temp: float,
-    outdoor_temp: float | None,
-    window_open: bool,
-) -> float:
-    """Calculate adaptive setpoint based on conditions.
-    
-    Tado-like: Lower setpoint slightly when outdoor is warm,
-    or when energy-saving is beneficial.
-    
-    Args:
-        target_temp: User's target temperature
-        outdoor_temp: Outdoor temperature
-        window_open: Window state
-        
-    Returns:
-        Adjusted setpoint
-    """
-    if window_open:
-        return 5.0  # Frost protection when window open
-    
-    adjusted = target_temp
-    
-    # Outdoor compensation
-    if outdoor_temp is not None:
-        if outdoor_temp > 15:
-            # Warm outside: heat less
-            adjusted -= 0.5
-        elif outdoor_temp < -5:
-            # Very cold: preheat more
-            adjusted += 0.5
-    
-    # Limits
-    return max(5.0, min(30.0, adjusted))
+        start_time = self.calculate_start_time(current_temp, target_temp, target_time)
+        return current_time >= start_time

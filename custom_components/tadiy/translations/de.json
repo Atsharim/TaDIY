@@ -2,122 +2,195 @@
   "config": {
     "step": {
       "user": {
-        "title": "TaDIY - Adaptive Climate Orchestrator",
-        "description": "Konfiguriere deinen Smart-Heating-Hub",
+        "title": "TaDIY einrichten",
+        "description": "Konfigurieren Sie Ihren TaDIY Climate Orchestrator.",
         "data": {
-          "name": "Hub-Name"
+          "name": "Name"
+        }
+      },
+      "global_defaults": {
+        "title": "Globale Standardwerte",
+        "description": "Konfigurieren Sie Standardeinstellungen für alle Räume. Einzelne Räume können diese Einstellungen überschreiben.",
+        "data": {
+          "global_window_open_timeout": "Fenster-Öffnungs-Timeout",
+          "global_window_close_timeout": "Fenster-Schließ-Timeout",
+          "global_dont_heat_below_outdoor": "Nicht heizen wenn Außentemperatur über",
+          "global_use_early_start": "Vorheizen aktivieren",
+          "global_learn_heating_rate": "Aufheizrate lernen"
+        },
+        "data_description": {
+          "global_window_open_timeout": "Wie lange ein Fenster geöffnet sein darf, bevor die Heizung gestoppt wird.",
+          "global_window_close_timeout": "Wartezeit nach Fensterschließung, bevor die Heizung wieder aktiviert wird.",
+          "global_dont_heat_below_outdoor": "Heizung stoppen, wenn die Außentemperatur über diesem Wert liegt.",
+          "global_use_early_start": "Intelligentes Vorheizen aktivieren, um Zieltemperatur pünktlich zu erreichen.",
+          "global_learn_heating_rate": "Automatisch lernen, wie schnell sich Ihre Räume aufheizen."
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen",
-      "invalid_auth": "Ungültige Authentifizierung",
-      "unknown": "Unerwarteter Fehler"
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {
-      "already_configured": "Hub ist bereits konfiguriert"
+      "already_configured": "Diese TaDIY-Instanz ist bereits konfiguriert."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "TaDIY Konfiguration",
-        "description": "Aktuell werden {room_count} Raum/Räume verwaltet",
+        "title": "TaDIY konfigurieren",
+        "description": "Verwalten Sie Ihre Räume und globalen Einstellungen. Sie haben {room_count} Raum/Räume konfiguriert.",
         "menu_options": {
+          "global_defaults": "Globale Standardwerte bearbeiten",
           "add_room": "Neuen Raum hinzufügen",
-          "edit_room_select": "Bestehenden Raum bearbeiten",
-          "delete_room_select": "Raum entfernen"
+          "edit_room_select": "Vorhandenen Raum bearbeiten",
+          "delete_room_select": "Raum löschen"
+        }
+      },
+      "global_defaults": {
+        "title": "Globale Standardwerte",
+        "description": "Diese Einstellungen gelten für alle Räume, sofern nicht individuell überschrieben.",
+        "data": {
+          "global_window_open_timeout": "Fenster-Öffnungs-Timeout",
+          "global_window_close_timeout": "Fenster-Schließ-Timeout",
+          "global_dont_heat_below_outdoor": "Nicht heizen wenn Außentemperatur über",
+          "global_use_early_start": "Vorheizen aktivieren",
+          "global_learn_heating_rate": "Aufheizrate lernen"
         }
       },
       "add_room": {
         "title": "Neuen Raum hinzufügen",
-        "description": "Heizungssteuerung für einen neuen Raum konfigurieren",
+        "description": "Konfigurieren Sie einen neuen Raum für die Klimasteuerung.",
         "data": {
           "room_name": "Raumname",
-          "trv_entities": "Thermostatventile (TRVs)",
+          "trv_entities": "Heizkörperthermostate (Climate)",
           "main_temp_sensor": "Haupttemperatursensor",
-          "window_sensors": "Fenster-/Türkontakte",
-          "weather_entity": "Wetter-Integration",
-          "outdoor_sensor": "Außentemperatursensor",
-          "window_open_timeout": "Verzögerung vor Heizungsreduzierung (Fenster offen)",
-          "window_close_timeout": "Verzögerung vor Heizungsfortsetzung (Fenster geschlossen)",
-          "dont_heat_below_outdoor": "Heizung stoppen wenn Außentemperatur überschreitet",
-          "target_temp_step": "Temperatur-Anpassungsschritt",
-          "tolerance": "Temperatur-Kontroll-Toleranz"
+          "window_sensors": "Fenstersensoren (Optional)",
+          "weather_entity": "Wetter-Entität (Optional)",
+          "outdoor_sensor": "Außentemperatursensor (Optional)",
+          "window_open_timeout": "Fenster-Öffnungs-Timeout",
+          "window_close_timeout": "Fenster-Schließ-Timeout",
+          "dont_heat_below_outdoor": "Nicht heizen wenn Außentemperatur über",
+          "use_early_start": "Vorheizen aktivieren",
+          "learn_heating_rate": "Aufheizrate lernen",
+          "target_temp_step": "Zieltemperatur-Schrittweite",
+          "tolerance": "Temperaturtoleranz"
         },
         "data_description": {
-          "room_name": "Eindeutige Bezeichnung für diesen Raum",
-          "trv_entities": "Wähle alle Heizkörperthermostate in diesem Raum",
-          "main_temp_sensor": "Der Sensor, der als Referenztemperatur verwendet wird",
-          "window_sensors": "Sensoren, die eine Heizpause auslösen wenn geöffnet",
-          "weather_entity": "Optional: Wetter-Integration für erweiterte Steuerung",
-          "outdoor_sensor": "Optional: Außentemperatursensor",
-          "window_open_timeout": "Wie lange warten bevor Heizung pausiert wird (Fenster öffnet)",
-          "window_close_timeout": "Wie lange warten bevor Heizung fortgesetzt wird (Fenster schließt)",
-          "dont_heat_below_outdoor": "Heizung deaktivieren wenn Außentemperatur diesen Wert überschreitet",
-          "target_temp_step": "Schrittgröße für Temperaturänderungen (auto = Gerätestandard)",
-          "tolerance": "Minimale Temperaturdifferenz vor Anpassung (auto = 0,5°C)"
+          "room_name": "Eindeutiger Name für diesen Raum.",
+          "trv_entities": "Ein oder mehrere Heizkörperthermostate (Climate-Entitäten).",
+          "main_temp_sensor": "Primärer Temperatursensor für diesen Raum.",
+          "window_sensors": "Binärsensoren, die offene Fenster/Türen erkennen.",
+          "weather_entity": "Wetter-Entität für Außentemperatur (falls kein Außensensor vorhanden).",
+          "outdoor_sensor": "Außentemperatursensor.",
+          "window_open_timeout": "Global überschreiben: Wie lange Fenster geöffnet sein darf.",
+          "window_close_timeout": "Global überschreiben: Abkühlphase nach Fensterschließung.",
+          "dont_heat_below_outdoor": "Global überschreiben: Heizung stoppen bei Außentemperatur über diesem Wert.",
+          "use_early_start": "Global überschreiben: Vorheizen für geplante Temperaturen aktivieren.",
+          "learn_heating_rate": "Global überschreiben: Lernen, wie schnell sich dieser Raum aufheizt.",
+          "target_temp_step": "Schrittweite für Temperaturanpassungen.",
+          "tolerance": "Temperaturtoleranz für Regellogik."
         }
       },
       "edit_room_select": {
         "title": "Raum zum Bearbeiten auswählen",
-        "description": "Wähle einen Raum um dessen Konfiguration zu ändern",
+        "description": "Wählen Sie den Raum aus, den Sie bearbeiten möchten.",
         "data": {
           "room": "Raum"
         }
       },
       "edit_room": {
         "title": "Raum bearbeiten: {room_name}",
-        "description": "Heizungskonfiguration für diesen Raum ändern",
+        "description": "Einstellungen für {room_name} ändern.",
         "data": {
           "room_name": "Raumname",
-          "trv_entities": "Thermostatventile (TRVs)",
+          "trv_entities": "Heizkörperthermostate",
           "main_temp_sensor": "Haupttemperatursensor",
-          "window_sensors": "Fenster-/Türkontakte",
-          "weather_entity": "Wetter-Integration",
+          "window_sensors": "Fenstersensoren",
+          "weather_entity": "Wetter-Entität",
           "outdoor_sensor": "Außentemperatursensor",
-          "window_open_timeout": "Verzögerung vor Heizungsreduzierung (Fenster offen)",
-          "window_close_timeout": "Verzögerung vor Heizungsfortsetzung (Fenster geschlossen)",
-          "dont_heat_below_outdoor": "Heizung stoppen wenn Außentemperatur überschreitet",
-          "target_temp_step": "Temperatur-Anpassungsschritt",
-          "tolerance": "Temperatur-Kontroll-Toleranz"
-        },
-        "data_description": {
-          "room_name": "Eindeutige Bezeichnung für diesen Raum",
-          "trv_entities": "Wähle alle Heizkörperthermostate in diesem Raum",
-          "main_temp_sensor": "Der Sensor, der als Referenztemperatur verwendet wird",
-          "window_sensors": "Sensoren, die eine Heizpause auslösen wenn geöffnet",
-          "weather_entity": "Optional: Wetter-Integration für erweiterte Steuerung",
-          "outdoor_sensor": "Optional: Außentemperatursensor",
-          "window_open_timeout": "Wie lange warten bevor Heizung pausiert wird (Fenster öffnet)",
-          "window_close_timeout": "Wie lange warten bevor Heizung fortgesetzt wird (Fenster schließt)",
-          "dont_heat_below_outdoor": "Heizung deaktivieren wenn Außentemperatur diesen Wert überschreitet",
-          "target_temp_step": "Schrittgröße für Temperaturänderungen (auto = Gerätestandard)",
-          "tolerance": "Minimale Temperaturdifferenz vor Anpassung (auto = 0,5°C)"
+          "window_open_timeout": "Fenster-Öffnungs-Timeout",
+          "window_close_timeout": "Fenster-Schließ-Timeout",
+          "dont_heat_below_outdoor": "Nicht heizen wenn Außentemperatur über",
+          "use_early_start": "Vorheizen aktivieren",
+          "learn_heating_rate": "Aufheizrate lernen",
+          "target_temp_step": "Zieltemperatur-Schrittweite",
+          "tolerance": "Temperaturtoleranz"
         }
       },
       "delete_room_select": {
         "title": "Raum zum Löschen auswählen",
-        "description": "Wähle einen Raum um ihn aus TaDIY zu entfernen",
+        "description": "Wählen Sie den Raum aus, den Sie löschen möchten.",
         "data": {
           "room": "Raum"
         }
       }
     },
     "error": {
-      "no_rooms": "Noch keine Räume konfiguriert. Füge deinen ersten Raum hinzu!",
-      "invalid_room": "Ausgewählter Raum nicht gefunden",
-      "unknown": "Ein unerwarteter Fehler ist aufgetreten"
+      "name_exists": "Ein Raum mit diesem Namen existiert bereits.",
+      "no_rooms": "Noch keine Räume konfiguriert.",
+      "invalid_room": "Ungültiger Raum ausgewählt."
+    },
+    "abort": {
+      "no_rooms": "Keine Räume konfiguriert. Fügen Sie zuerst einen Raum hinzu.",
+      "invalid_room": "Der ausgewählte Raum existiert nicht mehr."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "main_temperature": {
+        "name": "Haupttemperatur"
+      },
+      "outdoor_temperature": {
+        "name": "Außentemperatur"
+      },
+      "fused_temperature": {
+        "name": "Fusionierte Temperatur"
+      },
+      "window_state": {
+        "name": "Fensterstatus",
+        "state": {
+          "closed": "Geschlossen",
+          "open_within_timeout": "Offen (Schonfrist)",
+          "open_heating_stopped": "Offen (Heizung gestoppt)",
+          "closed_cooldown": "Geschlossen (Abkühlphase)"
+        }
+      },
+      "heating_rate": {
+        "name": "Aufheizrate"
+      }
+    },
+    "climate": {
+      "room": {
+        "name": "{room_name}"
+      }
     }
   },
   "services": {
     "force_refresh": {
       "name": "Aktualisierung erzwingen",
-      "description": "Sofortige Datenaktualisierung für TaDIY Koordinator erzwingen",
+      "description": "Erzwingt eine sofortige Aktualisierung aller Raumdaten und Sensorwerte."
+    },
+    "reset_learning": {
+      "name": "Lerndaten zurücksetzen",
+      "description": "Setzt die gelernten Aufheizraten für einen oder alle Räume zurück.",
       "fields": {
-        "entry_id": {
-          "name": "Eintrag-ID",
-          "description": "Optional: Config Entry ID zum Aktualisieren (leer lassen für alle)"
+        "room": {
+          "name": "Raumname",
+          "description": "Name des Raums, dessen Lerndaten zurückgesetzt werden sollen. Leer lassen für alle Räume."
+        }
+      }
+    },
+    "set_heating_curve": {
+      "name": "Heizkurve festlegen",
+      "description": "Manuelles Festlegen der Aufheizrate für einen Raum (überschreibt gelernten Wert).",
+      "fields": {
+        "room": {
+          "name": "Raumname",
+          "description": "Name des zu konfigurierenden Raums."
+        },
+        "heating_rate": {
+          "name": "Aufheizrate",
+          "description": "Aufheizrate in Grad Celsius pro Stunde."
         }
       }
     }

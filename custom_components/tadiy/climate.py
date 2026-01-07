@@ -15,7 +15,21 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import (
+    ATTR_HEATING_ACTIVE,
+    ATTR_HEATING_BLOCKED,
+    ATTR_HEATING_RATE,
+    ATTR_LEARNING_SAMPLES,
+    ATTR_LAST_LEARNING_UPDATE,
+    ATTR_LEARN_HEATING_RATE,
+    ATTR_USE_EARLY_START,
+    ATTR_WINDOW_REASON,
+    DOMAIN,
+    MANUFACTURER,
+    MAX_TARGET_TEMP,
+    MIN_TARGET_TEMP,
+    MODEL_NAME,
+)
 from .coordinator import TaDIYDataUpdateCoordinator
 from .models.room import RoomData
 
@@ -28,11 +42,13 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TaDIY climate entities."""
-    coordinator: TaDIYDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: TaDIYDataUpdateCoordinator = data["coordinator"]
+    version: str = data["version"]
 
     entities = []
     for room in coordinator.rooms:
-        entities.append(TaDIYClimate(coordinator, room.name))
+        entities.append(TaDIYClimate(coordinator, entry.entry_id, room.name, version))
 
     async_add_entities(entities)
     _LOGGER.info("TaDIY climate platform setup complete (%d rooms)", len(entities))
@@ -49,20 +65,29 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
         | ClimateEntityFeature.TURN_ON
     )
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
+    _attr_min_temp = MIN_TARGET_TEMP
+    _attr_max_temp = MAX_TARGET_TEMP
     _enable_turn_on_off_backwards_compatibility = False
 
-    def __init__(self, coordinator: TaDIYDataUpdateCoordinator, room_name: str) -> None:
+    def __init__(
+        self,
+        coordinator: TaDIYDataUpdateCoordinator,
+        entry_id: str,
+        room_name: str,
+        version: str,
+    ) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._room_name = room_name
-        self._attr_unique_id = f"{DOMAIN}_{room_name.lower().replace(' ', '_')}"
+        self._attr_unique_id = f"{entry_id}_{room_name.lower().replace(' ', '_')}_climate"
         self._attr_name = room_name
+        
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, self._attr_unique_id)},
+            "identifiers": {(DOMAIN, f"{entry_id}_{room_name}")},
             "name": f"TaDIY {room_name}",
-            "manufacturer": "TaDIY",
-            "model": "Adaptive Climate Orchestrator",
-            "sw_version": "1.0.0",
+            "manufacturer": MANUFACTURER,
+            "model": MODEL_NAME,
+            "sw_version": version,
         }
         
         _LOGGER.debug("TaDIY Climate created: %s", self._attr_name)
@@ -111,16 +136,29 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
             "main_sensor_temperature": room_data.main_sensor_temperature,
             "trv_temperatures": room_data.trv_temperatures,
             "window_open": room_data.window_state.is_open,
-            "heating_blocked": room_data.is_heating_blocked,
-            "heating_active": room_data.heating_active,
+            ATTR_WINDOW_REASON: room_data.window_state.reason,
+            ATTR_HEATING_BLOCKED: room_data.is_heating_blocked,
+            ATTR_HEATING_ACTIVE: room_data.heating_active,
+            ATTR_HEATING_RATE: f"{room_data.heating_rate:.2f} °C/h",
         }
 
-        if room_data.outdoor_temperature:
+        if room_data.outdoor_temperature is not None:
             attrs["outdoor_temperature"] = room_data.outdoor_temperature
 
         if room_config := self.room_config:
             attrs["trv_entities"] = room_config.trv_entity_ids
             attrs["window_sensors"] = room_config.window_sensor_ids
+            attrs[ATTR_USE_EARLY_START] = room_config.use_early_start
+            attrs[ATTR_LEARN_HEATING_RATE] = room_config.learn_heating_rate
+            
+            heat_model = self.coordinator._heat_models.get(self._room_name)
+            if heat_model:
+                attrs[ATTR_LEARNING_SAMPLES] = heat_model.sample_count
+                attrs[ATTR_LAST_LEARNING_UPDATE] = (
+                    heat_model.last_updated.isoformat()
+                    if heat_model.last_updated
+                    else None
+                )
 
         return attrs
 
@@ -139,7 +177,6 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
             _LOGGER.error("Room config not found for %s", self._room_name)
             return
 
-        # Send temperature to all TRVs
         for trv_entity in room_config.trv_entity_ids:
             await self.hass.services.async_call(
                 "climate",
@@ -148,12 +185,10 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
                     "entity_id": trv_entity,
                     "temperature": temperature,
                 },
-                blocking=True,
+                blocking=False,
             )
 
         _LOGGER.info("%s: Target temperature set to %.1f°C", self._attr_name, temperature)
-        
-        # Update coordinator
         await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -163,7 +198,6 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
             _LOGGER.error("Room config not found for %s", self._room_name)
             return
 
-        # Send HVAC mode to all TRVs
         ha_hvac_mode = "heat" if hvac_mode == HVACMode.HEAT else "off"
         
         for trv_entity in room_config.trv_entity_ids:
@@ -174,12 +208,10 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
                     "entity_id": trv_entity,
                     "hvac_mode": ha_hvac_mode,
                 },
-                blocking=True,
+                blocking=False,
             )
 
         _LOGGER.info("%s: HVAC mode set to %s", self._attr_name, hvac_mode)
-        
-        # Update coordinator
         await self.coordinator.async_request_refresh()
 
     @callback

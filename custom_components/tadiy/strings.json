@@ -2,122 +2,195 @@
   "config": {
     "step": {
       "user": {
-        "title": "TaDIY - Adaptive Climate Orchestrator",
-        "description": "Configure your smart heating hub",
+        "title": "Set up TaDIY",
+        "description": "Configure your TaDIY Climate Orchestrator.",
         "data": {
-          "name": "Hub Name"
+          "name": "Name"
+        }
+      },
+      "global_defaults": {
+        "title": "Global Defaults",
+        "description": "Configure default settings for all rooms. Individual rooms can override these settings.",
+        "data": {
+          "global_window_open_timeout": "Window Open Timeout",
+          "global_window_close_timeout": "Window Close Timeout",
+          "global_dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
+          "global_use_early_start": "Use Early Start",
+          "global_learn_heating_rate": "Learn Heating Rate"
+        },
+        "data_description": {
+          "global_window_open_timeout": "How long a window can be open before heating is stopped.",
+          "global_window_close_timeout": "How long to wait after closing a window before resuming heating.",
+          "global_dont_heat_below_outdoor": "Stop heating if outdoor temperature is above this value.",
+          "global_use_early_start": "Enable intelligent pre-heating to reach target temperature on time.",
+          "global_learn_heating_rate": "Automatically learn how fast your rooms heat up."
         }
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error"
+      "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "Hub is already configured"
+      "already_configured": "This TaDIY instance is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "TaDIY Configuration",
-        "description": "Currently managing {room_count} room(s)",
+        "title": "Configure TaDIY",
+        "description": "Manage your rooms and global settings. You have {room_count} room(s) configured.",
         "menu_options": {
+          "global_defaults": "Edit Global Defaults",
           "add_room": "Add New Room",
-          "edit_room": "Edit Existing Room",
-          "delete_room": "Remove Room"
+          "edit_room_select": "Edit Existing Room",
+          "delete_room_select": "Delete Room"
+        }
+      },
+      "global_defaults": {
+        "title": "Global Defaults",
+        "description": "These settings apply to all rooms unless overridden individually.",
+        "data": {
+          "global_window_open_timeout": "Window Open Timeout",
+          "global_window_close_timeout": "Window Close Timeout",
+          "global_dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
+          "global_use_early_start": "Use Early Start",
+          "global_learn_heating_rate": "Learn Heating Rate"
         }
       },
       "add_room": {
         "title": "Add New Room",
-        "description": "Configure heating control for a new room",
+        "description": "Configure a new room for climate control.",
         "data": {
           "room_name": "Room Name",
-          "trv_entities": "Thermostatic Radiator Valves (TRVs)",
-          "main_temp_sensor": "Primary Temperature Sensor",
-          "window_sensors": "Window/Door Contact Sensors",
-          "weather_entity": "Weather Integration",
-          "outdoor_sensor": "Outdoor Temperature Sensor",
-          "window_open_timeout": "Delay before reducing heat (window open)",
-          "window_close_timeout": "Delay before resuming heat (window closed)",
-          "dont_heat_below_outdoor": "Stop heating when outdoor temp exceeds",
-          "target_temp_step": "Temperature Adjustment Step",
-          "tolerance": "Temperature Control Tolerance"
+          "trv_entities": "TRV Entities (Climate)",
+          "main_temp_sensor": "Main Temperature Sensor",
+          "window_sensors": "Window Sensors (Optional)",
+          "weather_entity": "Weather Entity (Optional)",
+          "outdoor_sensor": "Outdoor Temperature Sensor (Optional)",
+          "window_open_timeout": "Window Open Timeout",
+          "window_close_timeout": "Window Close Timeout",
+          "dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
+          "use_early_start": "Use Early Start",
+          "learn_heating_rate": "Learn Heating Rate",
+          "target_temp_step": "Target Temperature Step",
+          "tolerance": "Temperature Tolerance"
         },
         "data_description": {
-          "room_name": "Unique identifier for this room",
-          "trv_entities": "Select all radiator thermostats in this room",
-          "main_temp_sensor": "The sensor used as reference temperature",
-          "window_sensors": "Sensors that trigger heating pause when open",
-          "weather_entity": "Optional weather integration for advanced control",
-          "outdoor_sensor": "Optional outdoor temperature sensor",
-          "window_open_timeout": "How long to wait before pausing heating when window opens",
-          "window_close_timeout": "How long to wait before resuming heating after window closes",
-          "dont_heat_below_outdoor": "Disable heating if outdoor temperature exceeds this value",
-          "target_temp_step": "Step size for temperature changes (auto = use device default)",
-          "tolerance": "Minimum temperature difference before adjusting (auto = 0.5°C)"
+          "room_name": "Unique name for this room.",
+          "trv_entities": "One or more climate entities (TRVs) to control.",
+          "main_temp_sensor": "Primary temperature sensor for this room.",
+          "window_sensors": "Binary sensors that detect open windows/doors.",
+          "weather_entity": "Weather entity for outdoor temperature (if no outdoor sensor).",
+          "outdoor_sensor": "Outdoor temperature sensor.",
+          "window_open_timeout": "Override global: How long window can be open before stopping heating.",
+          "window_close_timeout": "Override global: Cooldown period after closing window.",
+          "dont_heat_below_outdoor": "Override global: Stop heating if outdoor temp is above this.",
+          "use_early_start": "Override global: Enable pre-heating for scheduled temperatures.",
+          "learn_heating_rate": "Override global: Learn how fast this room heats up.",
+          "target_temp_step": "Temperature adjustment step size.",
+          "tolerance": "Temperature tolerance for control logic."
         }
       },
       "edit_room_select": {
         "title": "Select Room to Edit",
-        "description": "Choose a room to modify its configuration",
+        "description": "Choose which room you want to edit.",
         "data": {
           "room": "Room"
         }
       },
       "edit_room": {
         "title": "Edit Room: {room_name}",
-        "description": "Modify heating configuration for this room",
+        "description": "Modify settings for {room_name}.",
         "data": {
           "room_name": "Room Name",
-          "trv_entities": "Thermostatic Radiator Valves (TRVs)",
-          "main_temp_sensor": "Primary Temperature Sensor",
-          "window_sensors": "Window/Door Contact Sensors",
-          "weather_entity": "Weather Integration",
+          "trv_entities": "TRV Entities",
+          "main_temp_sensor": "Main Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "weather_entity": "Weather Entity",
           "outdoor_sensor": "Outdoor Temperature Sensor",
-          "window_open_timeout": "Delay before reducing heat (window open)",
-          "window_close_timeout": "Delay before resuming heat (window closed)",
-          "dont_heat_below_outdoor": "Stop heating when outdoor temp exceeds",
-          "target_temp_step": "Temperature Adjustment Step",
-          "tolerance": "Temperature Control Tolerance"
-        },
-        "data_description": {
-          "room_name": "Unique identifier for this room",
-          "trv_entities": "Select all radiator thermostats in this room",
-          "main_temp_sensor": "The sensor used as reference temperature",
-          "window_sensors": "Sensors that trigger heating pause when open",
-          "weather_entity": "Optional weather integration for advanced control",
-          "outdoor_sensor": "Optional outdoor temperature sensor",
-          "window_open_timeout": "How long to wait before pausing heating when window opens",
-          "window_close_timeout": "How long to wait before resuming heating after window closes",
-          "dont_heat_below_outdoor": "Disable heating if outdoor temperature exceeds this value",
-          "target_temp_step": "Step size for temperature changes (auto = use device default)",
-          "tolerance": "Minimum temperature difference before adjusting (auto = 0.5°C)"
+          "window_open_timeout": "Window Open Timeout",
+          "window_close_timeout": "Window Close Timeout",
+          "dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
+          "use_early_start": "Use Early Start",
+          "learn_heating_rate": "Learn Heating Rate",
+          "target_temp_step": "Target Temperature Step",
+          "tolerance": "Temperature Tolerance"
         }
       },
       "delete_room_select": {
         "title": "Select Room to Delete",
-        "description": "Choose a room to remove from TaDIY",
+        "description": "Choose which room you want to delete.",
         "data": {
           "room": "Room"
         }
       }
     },
     "error": {
-      "no_rooms": "No rooms configured yet. Add your first room to get started!",
-      "invalid_room": "Selected room not found",
-      "unknown": "An unexpected error occurred"
+      "name_exists": "A room with this name already exists.",
+      "no_rooms": "No rooms configured yet.",
+      "invalid_room": "Invalid room selected."
+    },
+    "abort": {
+      "no_rooms": "No rooms configured. Add a room first.",
+      "invalid_room": "The selected room no longer exists."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "main_temperature": {
+        "name": "Main Temperature"
+      },
+      "outdoor_temperature": {
+        "name": "Outdoor Temperature"
+      },
+      "fused_temperature": {
+        "name": "Fused Temperature"
+      },
+      "window_state": {
+        "name": "Window State",
+        "state": {
+          "closed": "Closed",
+          "open_within_timeout": "Open (Grace Period)",
+          "open_heating_stopped": "Open (Heating Stopped)",
+          "closed_cooldown": "Closed (Cooldown)"
+        }
+      },
+      "heating_rate": {
+        "name": "Heating Rate"
+      }
+    },
+    "climate": {
+      "room": {
+        "name": "{room_name}"
+      }
     }
   },
   "services": {
     "force_refresh": {
       "name": "Force Refresh",
-      "description": "Force an immediate data refresh for TaDIY coordinator",
+      "description": "Forces an immediate refresh of all room data and sensor readings."
+    },
+    "reset_learning": {
+      "name": "Reset Learning Data",
+      "description": "Resets the learned heating rate data for one or all rooms.",
       "fields": {
-        "entry_id": {
-          "name": "Entry ID",
-          "description": "Optional config entry ID to refresh (leave empty for all)"
+        "room": {
+          "name": "Room Name",
+          "description": "Name of the room to reset learning data for. Leave empty to reset all rooms."
+        }
+      }
+    },
+    "set_heating_curve": {
+      "name": "Set Heating Curve",
+      "description": "Manually set the heating rate for a room (overrides learned value).",
+      "fields": {
+        "room": {
+          "name": "Room Name",
+          "description": "Name of the room to configure."
+        },
+        "heating_rate": {
+          "name": "Heating Rate",
+          "description": "Heating rate in degrees Celsius per hour."
         }
       }
     }
