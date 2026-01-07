@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime
 import logging
 
 from homeassistant.util import dt as dt_util
 
 from ..const import (
     DEFAULT_FROST_PROTECTION_TEMP,
-    MODE_HOMEOFFICE,
     MODE_MANUAL,
     MODE_NORMAL,
     MODE_OFF,
@@ -17,7 +16,6 @@ from ..const import (
 from ..models.schedule import RoomSchedule
 
 _LOGGER = logging.getLogger(__name__)
-
 
 class ScheduleEngine:
     """Engine for calculating target temperatures based on schedules and mode."""
