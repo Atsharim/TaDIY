@@ -43,6 +43,7 @@ from .const import (
     TARGET_TEMP_STEP_OPTIONS,
     TOLERANCE_OPTIONS,
 )
+
 from .models.schedule import RoomSchedule
 from .ui.schedule_editor import ScheduleEditor
 
@@ -58,7 +59,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         self._config_entry_data = config_entry
         self.options = dict(config_entry.options)
         self.schedule_editor = ScheduleEditor()
-        
         # State for multi-step flows
         self.current_room_index: int | None = None
         self.current_room_data: dict[str, Any] = {}
@@ -85,7 +85,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         """Configure global default values."""
         if user_input is not None:
             self.options.update(user_input)
-            return await self.async_step_init()
+            return self.async_create_entry(title="", data=self.options)
 
         schema = vol.Schema(
             {
@@ -94,13 +94,17 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                     default=self.options.get(
                         CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
                     ),
-                ): cv.positive_int,
+                ): selector.DurationSelector(
+                    selector.DurationSelectorConfig(enable_day=False)
+                ),
                 vol.Optional(
                     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
                     default=self.options.get(
                         CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
                     ),
-                ): cv.positive_int,
+                ): selector.DurationSelector(
+                    selector.DurationSelectorConfig(enable_day=False)
+                ),
                 vol.Optional(
                     CONF_GLOBAL_DONT_HEAT_BELOW,
                     default=self.options.get(
@@ -125,7 +129,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="global_defaults",
             data_schema=schema,
-            last_step=False,
         )
 
     async def async_step_add_room(
@@ -133,7 +136,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Add a new room."""
         if user_input is not None:
-            self.current_room_data = user_input
+            self.current_room_data = {CONF_ROOM_NAME: user_input[CONF_ROOM_NAME]}
             return await self.async_step_room_details()
 
         schema = vol.Schema(
@@ -145,7 +148,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="add_room",
             data_schema=schema,
-            last_step=False,
         )
 
     async def async_step_edit_room(
@@ -153,20 +155,21 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Select room to edit."""
         rooms = self.options.get(CONF_ROOMS, [])
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
         if user_input is not None:
             room_name = user_input["room"]
             for idx, room in enumerate(rooms):
-                if room[CONF_ROOM_NAME] == room_name:
+                if room.get(CONF_ROOM_NAME) == room_name:
                     self.current_room_index = idx
                     self.current_room_data = dict(room)
                     break
             return await self.async_step_edit_room_menu()
 
-        room_names = [room[CONF_ROOM_NAME] for room in rooms]
+        room_names = [room.get(CONF_ROOM_NAME, f"Room {i}") for i, room in enumerate(rooms)]
+
         schema = vol.Schema(
             {
                 vol.Required("room"): vol.In(room_names),
@@ -176,7 +179,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="edit_room",
             data_schema=schema,
-            last_step=False,
         )
 
     async def async_step_edit_room_menu(
@@ -197,14 +199,45 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Configure room details."""
         if user_input is not None:
+            # Convert duration to seconds
+            if CONF_WINDOW_OPEN_TIMEOUT in user_input and isinstance(user_input[CONF_WINDOW_OPEN_TIMEOUT], dict):
+                timeout = user_input[CONF_WINDOW_OPEN_TIMEOUT]
+                user_input[CONF_WINDOW_OPEN_TIMEOUT] = (
+                    timeout.get("hours", 0) * 3600 +
+                    timeout.get("minutes", 0) * 60 +
+                    timeout.get("seconds", 0)
+                )
+            if CONF_WINDOW_CLOSE_TIMEOUT in user_input and isinstance(user_input[CONF_WINDOW_CLOSE_TIMEOUT], dict):
+                timeout = user_input[CONF_WINDOW_CLOSE_TIMEOUT]
+                user_input[CONF_WINDOW_CLOSE_TIMEOUT] = (
+                    timeout.get("hours", 0) * 3600 +
+                    timeout.get("minutes", 0) * 60 +
+                    timeout.get("seconds", 0)
+                )
+
             self.current_room_data.update(user_input)
-            
+
             # If adding new room, go directly to save
             if self.current_room_index is None:
                 return await self.async_step_save_room()
-            
+
             # If editing, return to edit menu
             return await self.async_step_edit_room_menu()
+
+        # Convert seconds to duration dict for display
+        window_open_seconds = self.current_room_data.get(CONF_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT)
+        window_close_seconds = self.current_room_data.get(CONF_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT)
+
+        window_open_duration = {
+            "hours": window_open_seconds // 3600,
+            "minutes": (window_open_seconds % 3600) // 60,
+            "seconds": window_open_seconds % 60
+        }
+        window_close_duration = {
+            "hours": window_close_seconds // 3600,
+            "minutes": (window_close_seconds % 3600) // 60,
+            "seconds": window_close_seconds % 60
+        }
 
         schema = vol.Schema(
             {
@@ -218,34 +251,42 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_MAIN_TEMP_SENSOR,
                     default=self.current_room_data.get(CONF_MAIN_TEMP_SENSOR),
                 ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor")
+                    selector.EntitySelectorConfig(
+                        domain="sensor",
+                        device_class="temperature"
+                    )
                 ),
                 vol.Optional(
                     CONF_WINDOW_SENSORS,
                     default=self.current_room_data.get(CONF_WINDOW_SENSORS, []),
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        domain="binary_sensor", multiple=True
+                        domain="binary_sensor",
+                        device_class=["opening", "window", "door"],
+                        multiple=True
                     )
                 ),
                 vol.Optional(
                     CONF_OUTDOOR_SENSOR,
                     default=self.current_room_data.get(CONF_OUTDOOR_SENSOR),
                 ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor")
+                    selector.EntitySelectorConfig(
+                        domain="sensor",
+                        device_class="temperature"
+                    )
                 ),
                 vol.Optional(
                     CONF_WINDOW_OPEN_TIMEOUT,
-                    default=self.current_room_data.get(
-                        CONF_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
-                    ),
-                ): cv.positive_int,
+                    default=window_open_duration,
+                ): selector.DurationSelector(
+                    selector.DurationSelectorConfig(enable_day=False)
+                ),
                 vol.Optional(
                     CONF_WINDOW_CLOSE_TIMEOUT,
-                    default=self.current_room_data.get(
-                        CONF_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
-                    ),
-                ): cv.positive_int,
+                    default=window_close_duration,
+                ): selector.DurationSelector(
+                    selector.DurationSelectorConfig(enable_day=False)
+                ),
                 vol.Optional(
                     CONF_DONT_HEAT_BELOW_OUTDOOR,
                     default=self.current_room_data.get(
@@ -280,7 +321,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="room_details",
             data_schema=schema,
-            last_step=False,
         )
 
     async def async_step_edit_schedule(
@@ -293,8 +333,15 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                 "schedule_normal_weekday",
                 "schedule_normal_weekend",
                 "schedule_homeoffice",
+                "back_to_room_menu",
             ],
         )
+
+    async def async_step_back_to_room_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Go back to room edit menu."""
+        return await self.async_step_edit_room_menu()
 
     async def async_step_schedule_normal_weekday(
         self, user_input: dict[str, Any] | None = None
@@ -319,50 +366,84 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def _show_schedule_editor(self, title: str) -> FlowResult:
         """Show schedule editor with current blocks."""
-        # Load existing schedule from storage
-        coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
-        room_name = self.current_room_data[CONF_ROOM_NAME]
-        
-        room_schedule = coordinator.schedule_engine._room_schedules.get(room_name)
-        
-        if room_schedule:
-            if self.current_schedule_type == SCHEDULE_TYPE_WEEKDAY:
-                day_schedule = room_schedule.normal_weekday
-            elif self.current_schedule_type == SCHEDULE_TYPE_WEEKEND:
-                day_schedule = room_schedule.normal_weekend
-            else:  # DAILY
-                day_schedule = room_schedule.homeoffice_daily
-        else:
-            day_schedule = None
+        try:
+            # Load existing schedule from storage
+            coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
+            room_name = self.current_room_data.get(CONF_ROOM_NAME)
 
-        self.schedule_blocks = self.schedule_editor.day_schedule_to_blocks(day_schedule)
+            if not room_name:
+                _LOGGER.error("No room name found in current_room_data")
+                return self.async_abort(reason="no_room_name")
+
+            room_schedule = coordinator.schedule_engine._room_schedules.get(room_name)
+
+            if room_schedule:
+                if self.current_schedule_type == SCHEDULE_TYPE_WEEKDAY:
+                    day_schedule = room_schedule.normal_weekday
+                elif self.current_schedule_type == SCHEDULE_TYPE_WEEKEND:
+                    day_schedule = room_schedule.normal_weekend
+                else:  # DAILY
+                    day_schedule = room_schedule.homeoffice_daily
+            else:
+                day_schedule = None
+
+            self.schedule_blocks = self.schedule_editor.day_schedule_to_blocks(day_schedule)
+        except Exception as err:
+            _LOGGER.error("Error loading schedule: %s", err, exc_info=True)
+            self.schedule_blocks = []
 
         return self.async_show_menu(
-            step_id=f"schedule_editor_{self.current_schedule_type}",
+            step_id=f"schedule_menu_{self.current_schedule_type}",
             menu_options=[
                 "schedule_add_block",
                 "schedule_view_blocks",
                 "schedule_save",
+                "back_to_schedule_list",
             ],
             description_placeholders={"title": title},
         )
+
+    async def async_step_back_to_schedule_list(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Go back to schedule selection."""
+        return await self.async_step_edit_schedule()
+
+    # Add the missing schedule menu steps
+    async def async_step_schedule_menu_weekday(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle weekday schedule menu."""
+        return await self._show_schedule_editor("Normal - Weekday (Mo-Fr)")
+
+    async def async_step_schedule_menu_weekend(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle weekend schedule menu."""
+        return await self._show_schedule_editor("Normal - Weekend (Sa-So)")
+
+    async def async_step_schedule_menu_daily(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle daily schedule menu."""
+        return await self._show_schedule_editor("Homeoffice (Mo-So)")
 
     async def async_step_schedule_add_block(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Add a new schedule block."""
         errors = {}
-        
+
         if user_input is not None:
             # Validate time inputs
             start_time = self.schedule_editor.parse_time_input(user_input["start_time"])
             end_time = self.schedule_editor.parse_time_input(user_input["end_time"])
-            
+
             if not start_time:
                 errors["start_time"] = "invalid_time"
             if not end_time:
                 errors["end_time"] = "invalid_time"
-            
+
             if not errors:
                 # Add block
                 new_block = {
@@ -370,18 +451,18 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                     "end": end_time,
                     "temp": user_input["temperature"],
                 }
+
                 self.schedule_blocks.append(new_block)
-                
                 # Sort blocks
                 self.schedule_blocks.sort(key=lambda b: b["start"])
-                
+
                 # Return to editor
                 return await self._show_schedule_editor(
                     f"Schedule {self.current_schedule_type}"
                 )
 
         schema = self.schedule_editor.get_add_block_schema(self.schedule_blocks)
-        
+
         # Render timeline
         timeline = self.schedule_editor.render_timeline(self.schedule_blocks)
 
@@ -390,7 +471,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
             data_schema=schema,
             errors=errors,
             description_placeholders={"timeline": timeline},
-            last_step=False,
         )
 
     async def async_step_schedule_view_blocks(
@@ -402,10 +482,10 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                 block_index = int(user_input["delete_block"])
                 if 0 <= block_index < len(self.schedule_blocks):
                     del self.schedule_blocks[block_index]
-                
-                return await self._show_schedule_editor(
-                    f"Schedule {self.current_schedule_type}"
-                )
+
+            return await self._show_schedule_editor(
+                f"Schedule {self.current_schedule_type}"
+            )
 
         # Build block list for selection
         block_options = {}
@@ -436,7 +516,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
             step_id="schedule_view_blocks",
             data_schema=schema,
             description_placeholders={"timeline": timeline},
-            last_step=False,
         )
 
     async def async_step_schedule_save(
@@ -445,7 +524,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         """Save schedule."""
         # Validate blocks
         errors_list = self.schedule_editor.validate_blocks(self.schedule_blocks)
-        
+
         if errors_list:
             # Show errors
             return self.async_show_form(
@@ -453,7 +532,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                 data_schema=vol.Schema({}),
                 errors={"base": "validation_failed"},
                 description_placeholders={"errors": "\n".join(errors_list)},
-                last_step=False,
             )
 
         # Convert blocks to DaySchedule
@@ -467,12 +545,14 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                 step_id="schedule_save",
                 data_schema=vol.Schema({}),
                 errors={"base": "schedule_creation_failed"},
-                last_step=False,
             )
 
         # Save to coordinator
         coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
-        room_name = self.current_room_data[CONF_ROOM_NAME]
+        room_name = self.current_room_data.get(CONF_ROOM_NAME)
+
+        if not room_name:
+            return self.async_abort(reason="no_room_name")
 
         # Get or create room schedule
         room_schedule = coordinator.schedule_engine._room_schedules.get(room_name)
@@ -522,26 +602,30 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Delete a room."""
         rooms = self.options.get(CONF_ROOMS, [])
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
         if user_input is not None:
             room_name = user_input["room"]
-            rooms = [r for r in rooms if r[CONF_ROOM_NAME] != room_name]
+            rooms = [r for r in rooms if r.get(CONF_ROOM_NAME) != room_name]
             self.options[CONF_ROOMS] = rooms
 
             # Remove schedule
-            coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id][
-                "coordinator"
-            ]
-            if hasattr(coordinator.schedule_engine, 'remove_room_schedule'):
-                coordinator.schedule_engine.remove_room_schedule(room_name)
-            await coordinator.async_save_schedules()
+            try:
+                coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id][
+                    "coordinator"
+                ]
+                if hasattr(coordinator.schedule_engine, 'remove_room_schedule'):
+                    coordinator.schedule_engine.remove_room_schedule(room_name)
+                await coordinator.async_save_schedules()
+            except Exception as err:
+                _LOGGER.error("Error removing room schedule: %s", err)
 
             return self.async_create_entry(title="", data=self.options)
 
-        room_names = [room[CONF_ROOM_NAME] for room in rooms]
+        room_names = [room.get(CONF_ROOM_NAME, f"Room {i}") for i, room in enumerate(rooms)]
+
         schema = vol.Schema(
             {
                 vol.Required("room"): vol.In(room_names),
