@@ -6,11 +6,20 @@ from typing import TYPE_CHECKING
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
+from homeassistant.loader import async_get_integration
 
-from .const import DOMAIN, CONF_ROOMS
-from .coordinator import TaDIYCoordinator
+from .const import (
+    ATTR_ROOM,
+    CONF_ROOMS,
+    DOMAIN,
+    MANUFACTURER,
+    MODEL_NAME,
+    SERVICE_FORCE_REFRESH,
+    SERVICE_RESET_LEARNING,
+)
+from .coordinator import TaDIYDataUpdateCoordinator
 
 if TYPE_CHECKING:
     from homeassistant.helpers.typing import ConfigType
@@ -30,41 +39,84 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Get rooms from options (or empty list if none)
+    integration = await async_get_integration(hass, DOMAIN)
+    version = integration.version
+
     rooms = entry.options.get(CONF_ROOMS, [])
 
-    # Create coordinator
-    coordinator = TaDIYCoordinator(hass, entry.entry_id, rooms)
+    coordinator = TaDIYDataUpdateCoordinator(
+        hass, entry.entry_id, entry.data, rooms
+    )
+    
+    await coordinator.async_load_learning_data()
     await coordinator.async_config_entry_first_refresh()
 
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    hass.data[DOMAIN][entry.entry_id] = {
+        "coordinator": coordinator,
+        "version": version,
+    }
 
-    # Register device
     device_registry = dr.async_get(hass)
     device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.entry_id)},
         name=entry.data.get(CONF_NAME, "TaDIY Hub"),
-        manufacturer="TaDIY",
-        model="Climate Orchestrator",
-        sw_version="1.0.0",
+        manufacturer=MANUFACTURER,
+        model=MODEL_NAME,
+        sw_version=version,
     )
 
-    # Setup platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    # Register update listener
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
+    async def handle_force_refresh(call: ServiceCall) -> None:
+        """Handle force refresh service."""
+        await coordinator.async_request_refresh()
+        _LOGGER.info("Force refresh triggered for %s", entry.data.get(CONF_NAME))
+
+    async def handle_reset_learning(call: ServiceCall) -> None:
+        """Handle reset learning service."""
+        room_name = call.data.get(ATTR_ROOM)
+        
+        if room_name:
+            if room_name in coordinator._heat_models:
+                from .core.early_start import HeatUpModel
+                coordinator._heat_models[room_name] = HeatUpModel(room_name=room_name)
+                await coordinator.async_save_learning_data()
+                _LOGGER.info("Learning data reset for room: %s", room_name)
+            else:
+                _LOGGER.warning("Room %s not found", room_name)
+        else:
+            from .core.early_start import HeatUpModel
+            for room_name in coordinator._heat_models:
+                coordinator._heat_models[room_name] = HeatUpModel(room_name=room_name)
+            await coordinator.async_save_learning_data()
+            _LOGGER.info("Learning data reset for all rooms")
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_FORCE_REFRESH, handle_force_refresh
+    )
+    hass.services.async_register(
+        DOMAIN, SERVICE_RESET_LEARNING, handle_reset_learning
+    )
 
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    await coordinator.async_save_learning_data()
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+        
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)
+            hass.services.async_remove(DOMAIN, SERVICE_RESET_LEARNING)
 
     return unload_ok
 
