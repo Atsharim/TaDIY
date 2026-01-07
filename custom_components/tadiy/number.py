@@ -31,8 +31,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TaDIY number entities."""
-    data = hass.data[DOMAIN][config_entry.entry_id]
-    
     entities = [
         TaDIYFrostProtectionNumber(
             config_entry.entry_id,

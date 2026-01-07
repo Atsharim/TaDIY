@@ -29,8 +29,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TaDIY select entities."""
-    data = hass.data[DOMAIN][config_entry.entry_id]
-    
     entities = [
         TaDIYHubModeSelect(
             config_entry.entry_id,
