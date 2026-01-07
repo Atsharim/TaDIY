@@ -1,0 +1,82 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TaDIY Setup",
+        "description": "Configure your TaDIY hub name",
+        "data": {
+          "name": "Hub Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Hub is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TaDIY Options",
+        "description": "Manage rooms ({room_count} configured)",
+        "menu_options": {
+          "add_room": "Add Room",
+          "edit_room": "Edit Room",
+          "delete_room": "Delete Room"
+        }
+      },
+      "add_room": {
+        "title": "Add Room",
+        "description": "Configure a new room",
+        "data": {
+          "room_name": "Room Name",
+          "trv_entities": "TRV Climate Entities",
+          "main_temp_sensor": "Main Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "weather_entity": "Weather Entity",
+          "outdoor_sensor": "Outdoor Temperature Sensor",
+          "window_open_timeout": "Window Open Timeout (seconds)",
+          "window_close_timeout": "Window Close Timeout (seconds)",
+          "dont_heat_below_outdoor": "Don't heat when outdoor temp above (°C)"
+        }
+      },
+      "edit_room": {
+        "title": "Edit Room",
+        "description": "Select room to edit",
+        "data": {
+          "room": "Room"
+        }
+      },
+      "edit_room_config": {
+        "title": "Edit Room: {room_name}",
+        "description": "Modify room configuration",
+        "data": {
+          "room_name": "Room Name",
+          "trv_entities": "TRV Climate Entities",
+          "main_temp_sensor": "Main Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "weather_entity": "Weather Entity",
+          "outdoor_sensor": "Outdoor Temperature Sensor",
+          "window_open_timeout": "Window Open Timeout (seconds)",
+          "window_close_timeout": "Window Close Timeout (seconds)",
+          "dont_heat_below_outdoor": "Don't heat when outdoor temp above (°C)"
+        }
+      },
+      "delete_room": {
+        "title": "Delete Room",
+        "description": "Select room to delete",
+        "data": {
+          "room": "Room"
+        }
+      }
+    },
+    "error": {
+      "no_rooms": "No rooms configured",
+      "invalid_room": "Invalid room selection"
+    }
+  }
+}
