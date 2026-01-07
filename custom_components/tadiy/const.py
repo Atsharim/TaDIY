@@ -3,6 +3,10 @@ from typing import Final
 
 DOMAIN: Final = "tadiy"
 
+# Storage
+STORAGE_KEY: Final = f"{DOMAIN}.storage"
+STORAGE_VERSION: Final = 1
+
 # Config entry keys
 CONF_NAME: Final = "name"
 CONF_ROOMS: Final = "rooms"
