@@ -55,7 +55,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
         super().__init__()
-        self.config_entry = config_entry
+        self._config_entry_data = config_entry
         self.options = dict(config_entry.options)
         self.schedule_editor = ScheduleEditor()
         
@@ -320,7 +320,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     async def _show_schedule_editor(self, title: str) -> FlowResult:
         """Show schedule editor with current blocks."""
         # Load existing schedule from storage
-        coordinator = self.hass.data[DOMAIN][self._config_entry.entry_id]["coordinator"]
+        coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
         room_name = self.current_room_data[CONF_ROOM_NAME]
         
         room_schedule = coordinator.schedule_engine._room_schedules.get(room_name)
@@ -471,7 +471,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
             )
 
         # Save to coordinator
-        coordinator = self.hass.data[DOMAIN][self._config_entry.entry_id]["coordinator"]
+        coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
         room_name = self.current_room_data[CONF_ROOM_NAME]
 
         # Get or create room schedule
@@ -532,7 +532,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
             self.options[CONF_ROOMS] = rooms
 
             # Remove schedule
-            coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id][
+            coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id][
                 "coordinator"
             ]
             if hasattr(coordinator.schedule_engine, 'remove_room_schedule'):
