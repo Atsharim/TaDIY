@@ -152,7 +152,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Select room to edit."""
         rooms = self.options.get(CONF_ROOMS, [])
-
+        
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
@@ -163,7 +163,6 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                     self.current_room_index = idx
                     self.current_room_data = dict(room)
                     break
-
             return await self.async_step_edit_room_menu()
 
         room_names = [room[CONF_ROOM_NAME] for room in rooms]
@@ -352,17 +351,17 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Add a new schedule block."""
         errors = {}
-
+        
         if user_input is not None:
             # Validate time inputs
             start_time = self.schedule_editor.parse_time_input(user_input["start_time"])
             end_time = self.schedule_editor.parse_time_input(user_input["end_time"])
-
+            
             if not start_time:
                 errors["start_time"] = "invalid_time"
             if not end_time:
                 errors["end_time"] = "invalid_time"
-
+            
             if not errors:
                 # Add block
                 new_block = {
@@ -381,7 +380,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                 )
 
         schema = self.schedule_editor.get_add_block_schema(self.schedule_blocks)
-
+        
         # Render timeline
         timeline = self.schedule_editor.render_timeline(self.schedule_blocks)
 
@@ -402,10 +401,10 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
                 block_index = int(user_input["delete_block"])
                 if 0 <= block_index < len(self.schedule_blocks):
                     del self.schedule_blocks[block_index]
-            
-            return await self._show_schedule_editor(
-                f"Schedule {self.current_schedule_type}"
-            )
+                
+                return await self._show_schedule_editor(
+                    f"Schedule {self.current_schedule_type}"
+                )
 
         # Build block list for selection
         block_options = {}
@@ -445,7 +444,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
         """Save schedule."""
         # Validate blocks
         errors_list = self.schedule_editor.validate_blocks(self.schedule_blocks)
-
+        
         if errors_list:
             # Show errors
             return self.async_show_form(
@@ -522,7 +521,7 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         """Delete a room."""
         rooms = self.options.get(CONF_ROOMS, [])
-
+        
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
@@ -535,7 +534,8 @@ class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
             coordinator = self.hass.data[DOMAIN][self.config_entry.entry_id][
                 "coordinator"
             ]
-            coordinator.schedule_engine.remove_room_schedule(room_name)
+            if hasattr(coordinator.schedule_engine, 'remove_room_schedule'):
+                coordinator.schedule_engine.remove_room_schedule(room_name)
             await coordinator.async_save_schedules()
 
             return self.async_create_entry(title="", data=self.options)

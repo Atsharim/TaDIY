@@ -161,7 +161,7 @@ class TaDIYDataUpdateCoordinator(DataUpdateCoordinator):
     def get_hub_mode(self) -> str:
         """Get current hub mode."""
         # Try to get from select entity if available
-        select_entity_id = f"select.tadiy_hub_mode"
+        select_entity_id = "select.tadiy_hub_mode"
         select_state = self.hass.states.get(select_entity_id)
         
         if select_state and select_state.state in ["normal", "homeoffice", "manual", "off"]:
@@ -172,7 +172,7 @@ class TaDIYDataUpdateCoordinator(DataUpdateCoordinator):
     def get_frost_protection_temp(self) -> float:
         """Get current frost protection temperature."""
         # Try to get from number entity if available
-        number_entity_id = f"number.tadiy_frost_protection"
+        number_entity_id = "number.tadiy_frost_protection"
         number_state = self.hass.states.get(number_entity_id)
         
         if number_state and number_state.state not in ("unknown", "unavailable"):
