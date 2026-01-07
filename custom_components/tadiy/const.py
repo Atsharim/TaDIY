@@ -1,39 +1,41 @@
-"""Constants for TaDIY - Adaptive Climate Orchestrator."""
+"""Constants for the TaDIY integration."""
+from typing import Final
 
-DOMAIN = "tadiy"
+DOMAIN: Final = "tadiy"
 
-# Configuration keys
-CONF_ROOMS = "rooms"
-CONF_ROOM_NAME = "room_name"
-CONF_TRV_ENTITIES = "trv_entities"
-CONF_MAIN_TEMP_SENSOR = "main_temp_sensor"
-CONF_WINDOW_SENSORS = "window_sensors"
-CONF_WEATHER_ENTITY = "weather_entity"
-CONF_OUTDOOR_SENSOR = "outdoor_sensor"
-CONF_WINDOW_OPEN_TIMEOUT = "window_open_timeout"
-CONF_WINDOW_CLOSE_TIMEOUT = "window_close_timeout"
-CONF_DONT_HEAT_BELOW_OUTDOOR = "dont_heat_below_outdoor"
-CONF_USE_HUMIDITY = "use_humidity"
-CONF_HUMIDITY_THRESHOLD = "humidity_threshold"
+# Config entry keys
+CONF_NAME: Final = "name"
+CONF_ROOMS: Final = "rooms"
+CONF_ROOM_NAME: Final = "room_name"
+CONF_TRV_ENTITIES: Final = "trv_entities"
+CONF_MAIN_TEMP_SENSOR: Final = "main_temp_sensor"
+CONF_WINDOW_SENSORS: Final = "window_sensors"
+CONF_WEATHER_ENTITY: Final = "weather_entity"
+CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
+CONF_WINDOW_OPEN_TIMEOUT: Final = "window_open_timeout"
+CONF_WINDOW_CLOSE_TIMEOUT: Final = "window_close_timeout"
+CONF_DONT_HEAT_BELOW_OUTDOOR: Final = "dont_heat_below_outdoor"
+CONF_TARGET_TEMP_STEP: Final = "target_temp_step"
+CONF_TOLERANCE: Final = "tolerance"
 
-# Defaults
-DEFAULT_WINDOW_OPEN_TIMEOUT = 300  # 5min
-DEFAULT_WINDOW_CLOSE_TIMEOUT = 900  # 15min
-DEFAULT_DONT_HEAT_BELOW = 10.0
+# New aliases for better UX
+CONF_WINDOW_OPEN_DELAY: Final = CONF_WINDOW_OPEN_TIMEOUT
+CONF_WINDOW_CLOSE_DELAY: Final = CONF_WINDOW_CLOSE_TIMEOUT
 
-# Entity categories
-ENTITY_CATEGORY_CONFIG = "config"
-ENTITY_CATEGORY_DIAGNOSTIC = "diagnostic"
+# Default values
+DEFAULT_NAME: Final = "TaDIY Hub"
+DEFAULT_WINDOW_OPEN_TIMEOUT: Final = 300  # 5 minutes
+DEFAULT_WINDOW_CLOSE_TIMEOUT: Final = 600  # 10 minutes
+DEFAULT_DONT_HEAT_BELOW: Final = 20.0
+DEFAULT_TOLERANCE: Final = "auto"
+DEFAULT_TARGET_TEMP_STEP: Final = "auto"
 
-# HVAC modes
-HVAC_MODES = ["off", "heat"]
+# Options for selectors
+TEMP_STEP_OPTIONS: Final = ["auto", "0.1", "0.2", "0.25", "0.5", "1.0"]
+TOLERANCE_OPTIONS: Final = ["auto", "0.1", "0.2", "0.25", "0.5", "1.0"]
 
-# Supported features
-SUPPORTED_FEATURES = 0b1111111111111111  # All features
+# Service names
+SERVICE_FORCE_REFRESH: Final = "force_refresh"
 
-# Storage
-STORAGE_VERSION = 1
-STORAGE_KEY = DOMAIN
-
-# Event topics
-MQTT_ROOM_UPDATE = f"{DOMAIN}/room_update"
+# Update interval
+UPDATE_INTERVAL: Final = 30  # seconds
