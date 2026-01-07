@@ -44,14 +44,14 @@ async def async_setup_entry(
     """Set up TaDIY climate entities."""
     data = hass.data[DOMAIN][entry.entry_id]
     coordinator: TaDIYDataUpdateCoordinator = data["coordinator"]
-    version: str = data["version"]
 
     entities = []
     for room in coordinator.rooms:
-        entities.append(TaDIYClimate(coordinator, entry.entry_id, room.name, version))
+        entities.append(TaDIYClimate(coordinator, entry.entry_id, room.name))
 
     async_add_entities(entities)
     _LOGGER.info("TaDIY climate platform setup complete (%d rooms)", len(entities))
+
 
 
 class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity):
@@ -74,23 +74,21 @@ class TaDIYClimate(CoordinatorEntity[TaDIYDataUpdateCoordinator], ClimateEntity)
         coordinator: TaDIYDataUpdateCoordinator,
         entry_id: str,
         room_name: str,
-        version: str,
     ) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._room_name = room_name
         self._attr_unique_id = f"{entry_id}_{room_name.lower().replace(' ', '_')}_climate"
         self._attr_name = room_name
-        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{entry_id}_{room_name}")},
             "name": f"TaDIY {room_name}",
             "manufacturer": MANUFACTURER,
             "model": MODEL_NAME,
-            "sw_version": version,
         }
-        
+
         _LOGGER.debug("TaDIY Climate created: %s", self._attr_name)
+
 
     @property
     def room_data(self) -> RoomData | None:

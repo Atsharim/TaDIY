@@ -1,4 +1,5 @@
 """Sensor platform for TaDIY."""
+
 from __future__ import annotations
 
 import logging
@@ -46,10 +47,9 @@ async def async_setup_entry(
     """Set up TaDIY sensor entities."""
     data = hass.data[DOMAIN][config_entry.entry_id]
     coordinator: TaDIYDataUpdateCoordinator = data["coordinator"]
-    version: str = data["version"]
 
     sensors: list[SensorEntity] = []
-    
+
     for room_name in coordinator.data.keys():
         sensors.extend([
             TaDIYTemperatureSensor(
@@ -58,7 +58,6 @@ async def async_setup_entry(
                 room_name,
                 SENSOR_TYPE_MAIN_TEMP,
                 "Main Temperature",
-                version,
             ),
             TaDIYTemperatureSensor(
                 coordinator,
@@ -66,7 +65,6 @@ async def async_setup_entry(
                 room_name,
                 SENSOR_TYPE_OUTDOOR_TEMP,
                 "Outdoor Temperature",
-                version,
                 entity_category=EntityCategory.DIAGNOSTIC,
             ),
             TaDIYTemperatureSensor(
@@ -75,20 +73,17 @@ async def async_setup_entry(
                 room_name,
                 "fused",
                 "Fused Temperature",
-                version,
                 entity_category=EntityCategory.DIAGNOSTIC,
             ),
             TaDIYWindowStateSensor(
                 coordinator,
                 config_entry.entry_id,
                 room_name,
-                version,
             ),
             TaDIYHeatingRateSensor(
                 coordinator,
                 config_entry.entry_id,
                 room_name,
-                version,
             ),
         ])
 
@@ -110,7 +105,6 @@ class TaDIYTemperatureSensor(CoordinatorEntity, SensorEntity):
         room_name: str,
         sensor_type: str,
         name: str,
-        version: str,
         entity_category: EntityCategory | None = None,
     ) -> None:
         """Initialize the sensor."""
@@ -120,13 +114,11 @@ class TaDIYTemperatureSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{room_name} {name}"
         self._attr_unique_id = f"{entry_id}_{room_name}_{sensor_type}_temp"
         self._attr_entity_category = entity_category
-        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{entry_id}_{room_name}")},
             "name": f"TaDIY {room_name}",
             "manufacturer": MANUFACTURER,
             "model": MODEL_NAME,
-            "sw_version": version,
         }
 
     @property
@@ -135,14 +127,14 @@ class TaDIYTemperatureSensor(CoordinatorEntity, SensorEntity):
         room_data = self.coordinator.data.get(self._room_name)
         if not room_data:
             return None
-        
+
         if self._sensor_type == SENSOR_TYPE_MAIN_TEMP:
             return room_data.main_sensor_temperature
         elif self._sensor_type == SENSOR_TYPE_OUTDOOR_TEMP:
             return room_data.outdoor_temperature
         elif self._sensor_type == "fused":
             return room_data.current_temperature
-        
+
         return None
 
 
@@ -156,20 +148,17 @@ class TaDIYWindowStateSensor(CoordinatorEntity, SensorEntity):
         coordinator: TaDIYDataUpdateCoordinator,
         entry_id: str,
         room_name: str,
-        version: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._room_name = room_name
         self._attr_name = f"{room_name} Window State"
         self._attr_unique_id = f"{entry_id}_{room_name}_{SENSOR_TYPE_WINDOW_STATE}"
-        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{entry_id}_{room_name}")},
             "name": f"TaDIY {room_name}",
             "manufacturer": MANUFACTURER,
             "model": MODEL_NAME,
-            "sw_version": version,
         }
 
     @property
@@ -178,7 +167,7 @@ class TaDIYWindowStateSensor(CoordinatorEntity, SensorEntity):
         room_data = self.coordinator.data.get(self._room_name)
         if not room_data:
             return None
-        
+
         if room_data.window_state.is_open:
             if room_data.window_state.timeout_active:
                 return WINDOW_STATE_OPEN_HEATING_STOPPED
@@ -194,7 +183,7 @@ class TaDIYWindowStateSensor(CoordinatorEntity, SensorEntity):
         room_data = self.coordinator.data.get(self._room_name)
         if not room_data:
             return {}
-        
+
         return {
             "is_open": room_data.window_state.is_open,
             "heating_should_stop": room_data.window_state.heating_should_stop,
@@ -219,7 +208,6 @@ class TaDIYHeatingRateSensor(CoordinatorEntity, SensorEntity):
         coordinator: TaDIYDataUpdateCoordinator,
         entry_id: str,
         room_name: str,
-        version: str,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
@@ -227,13 +215,11 @@ class TaDIYHeatingRateSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = f"{room_name} Heating Rate"
         self._attr_unique_id = f"{entry_id}_{room_name}_{SENSOR_TYPE_HEATING_RATE}"
         self._attr_native_unit_of_measurement = "°C/h"
-        
         self._attr_device_info = {
             "identifiers": {(DOMAIN, f"{entry_id}_{room_name}")},
             "name": f"TaDIY {room_name}",
             "manufacturer": MANUFACTURER,
             "model": MODEL_NAME,
-            "sw_version": version,
         }
 
     @property
@@ -250,7 +236,7 @@ class TaDIYHeatingRateSensor(CoordinatorEntity, SensorEntity):
         heat_model = self.coordinator._heat_models.get(self._room_name)
         if not heat_model:
             return {}
-        
+
         return {
             ATTR_LEARNING_SAMPLES: heat_model.sample_count,
             ATTR_LAST_LEARNING_UPDATE: (

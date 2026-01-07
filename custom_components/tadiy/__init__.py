@@ -1,4 +1,5 @@
 """The TaDIY integration."""
+
 from __future__ import annotations
 
 import logging
@@ -7,8 +8,8 @@ from typing import TYPE_CHECKING
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
-from homeassistant.loader import async_get_integration
 
 from .const import (
     ATTR_ROOM,
@@ -28,6 +29,8 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.CLIMATE, Platform.SENSOR]
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the TaDIY component."""
@@ -39,21 +42,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    integration = await async_get_integration(hass, DOMAIN)
-    version = integration.version
-
     rooms = entry.options.get(CONF_ROOMS, [])
-
     coordinator = TaDIYDataUpdateCoordinator(
         hass, entry.entry_id, entry.data, rooms
     )
-    
+
     await coordinator.async_load_learning_data()
     await coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
-        "version": version,
     }
 
     device_registry = dr.async_get(hass)
@@ -63,11 +61,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.data.get(CONF_NAME, "TaDIY Hub"),
         manufacturer=MANUFACTURER,
         model=MODEL_NAME,
-        sw_version=version,
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     async def handle_force_refresh(call: ServiceCall) -> None:
@@ -78,10 +74,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def handle_reset_learning(call: ServiceCall) -> None:
         """Handle reset learning service."""
         room_name = call.data.get(ATTR_ROOM)
-        
+
         if room_name:
             if room_name in coordinator._heat_models:
                 from .core.early_start import HeatUpModel
+
                 coordinator._heat_models[room_name] = HeatUpModel(room_name=room_name)
                 await coordinator.async_save_learning_data()
                 _LOGGER.info("Learning data reset for room: %s", room_name)
@@ -89,6 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning("Room %s not found", room_name)
         else:
             from .core.early_start import HeatUpModel
+
             for room_name in coordinator._heat_models:
                 coordinator._heat_models[room_name] = HeatUpModel(room_name=room_name)
             await coordinator.async_save_learning_data()
@@ -97,6 +95,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(
         DOMAIN, SERVICE_FORCE_REFRESH, handle_force_refresh
     )
+
     hass.services.async_register(
         DOMAIN, SERVICE_RESET_LEARNING, handle_reset_learning
     )
@@ -113,7 +112,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-        
+
         if not hass.data[DOMAIN]:
             hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)
             hass.services.async_remove(DOMAIN, SERVICE_RESET_LEARNING)
