@@ -1,40 +1,65 @@
 force_refresh:
   name: Force Refresh
-  description: Forces an immediate refresh of all room data and sensor readings.
+  description: Force an immediate refresh of all TaDIY data
   fields: {}
 
 reset_learning:
   name: Reset Learning Data
-  description: Resets the learned heating rate data for one or all rooms.
+  description: Reset heating rate learning data for a room or all rooms
   fields:
     room:
       name: Room Name
-      description: Name of the room to reset learning data for. Leave empty to reset all rooms.
+      description: Name of the room to reset (leave empty for all rooms)
       required: false
-      example: "Living Room"
+      example: "TA_Wohnbereich"
       selector:
         text:
 
-set_heating_curve:
-  name: Set Heating Curve
-  description: Manually set the heating rate for a room (overrides learned value).
+boost_all_rooms:
+  name: Boost All Rooms
+  description: Boost heating in all rooms to maximum temperature for specified duration
   fields:
-    room:
-      name: Room Name
-      description: Name of the room to configure.
-      required: true
-      example: "Living Room"
-      selector:
-        text:
-    heating_rate:
-      name: Heating Rate
-      description: Heating rate in degrees Celsius per hour.
-      required: true
-      example: 1.5
+    temperature:
+      name: Boost Temperature
+      description: Target temperature during boost (°C)
+      required: false
+      default: 30
       selector:
         number:
-          min: 0.1
-          max: 10.0
-          step: 0.1
-          unit_of_measurement: "°C/h"
+          min: 20
+          max: 35
+          step: 0.5
+          unit_of_measurement: "°C"
           mode: slider
+    duration_minutes:
+      name: Duration
+      description: Duration of boost in minutes
+      required: false
+      default: 60
+      selector:
+        number:
+          min: 15
+          max: 180
+          step: 5
+          unit_of_measurement: "min"
+          mode: slider
+
+set_hub_mode:
+  name: Set Hub Mode
+  description: Change the TaDIY hub operating mode
+  fields:
+    mode:
+      name: Mode
+      description: Target operating mode
+      required: true
+      selector:
+        select:
+          options:
+            - label: "Normal"
+              value: "normal"
+            - label: "Home Office"
+              value: "homeoffice"
+            - label: "Manual"
+              value: "manual"
+            - label: "Off"
+              value: "off"
