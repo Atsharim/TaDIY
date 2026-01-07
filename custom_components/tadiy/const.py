@@ -72,7 +72,7 @@ DEFAULT_FROST_PROTECTION_TEMP: Final = 15.0
 DEFAULT_BOOST_TEMPERATURE: Final = 30.0
 DEFAULT_BOOST_DURATION: Final = 60
 
-TEMP_STEP_OPTIONS: Final = ["auto", "0.1", "0.2", "0.25", "0.5", "1.0"]
+TARGET_TEMP_STEP_OPTIONS: Final = ["auto", "0.1", "0.2", "0.25", "0.5", "1.0"]
 TOLERANCE_OPTIONS: Final = ["auto", "0.1", "0.2", "0.25", "0.5", "1.0"]
 
 SERVICE_FORCE_REFRESH: Final = "force_refresh"

@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util import dt as dt_util
 
 from .const import (
-    CONF_FROST_PROTECTION_TEMP,
-    CONF_HUB_MODE,
     DEFAULT_FROST_PROTECTION_TEMP,
     DEFAULT_HUB_MODE,
     DOMAIN,
@@ -64,10 +60,10 @@ class TaDIYDataUpdateCoordinator(DataUpdateCoordinator):
         
         # Storage
         self._learning_store = Store(
-            hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry_id}"
+            hass, STORAGE_VERSION, STORAGE_KEY + "_" + entry_id
         )
         self._schedule_store = Store(
-            hass, STORAGE_VERSION_SCHEDULES, f"{STORAGE_KEY_SCHEDULES}_{entry_id}"
+            hass, STORAGE_VERSION_SCHEDULES, STORAGE_KEY_SCHEDULES + "_" + entry_id
         )
 
         # Override tracking
