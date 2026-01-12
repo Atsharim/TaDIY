@@ -3,10 +3,7 @@
     "step": {
       "hub": {
         "title": "Setup TaDIY Hub",
-        "description": "Configure your TaDIY Climate Orchestrator.",
-        "data": {
-          "name": "Name"
-        }
+        "description": "TaDIY Hub will be created automatically with default settings. You can configure global settings through the Hub device entities."
       },
       "global_defaults": {
         "title": "Global Default Settings",
@@ -57,11 +54,30 @@
     "abort": {
       "already_configured": "This TaDIY Hub is already configured.",
       "single_instance_allowed": "Only one hub can be configured.",
-      "no_hub_found": "No hub found. Please create a hub first."
+      "no_hub_found": "No TaDIY Hub found. Please add the integration first to create the Hub.",
+      "unknown": "An unexpected error occurred."
     }
   },
   "options": {
     "step": {
+      "room_config": {
+        "title": "Room Configuration",
+        "description": "Configure basic room settings. Advanced settings are available through device entities.",
+        "data": {
+          "room_name": "Room Name",
+          "trv_entities": "TRV Entities",
+          "main_temp_sensor": "Main Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "outdoor_sensor": "Outdoor Temperature Sensor"
+        },
+        "data_description": {
+          "room_name": "Unique name for this room.",
+          "trv_entities": "One or more climate entities (TRVs) to control.",
+          "main_temp_sensor": "Primary temperature sensor for this room (optional).",
+          "window_sensors": "Binary sensors to detect open windows/doors (optional).",
+          "outdoor_sensor": "Outdoor temperature sensor (optional)."
+        }
+      },
       "init_hub": {
         "title": "Configure TaDIY Hub",
         "description": "Manage global settings and services. You have {room_count} room(s) configured.",
@@ -175,6 +191,9 @@
     "error": {
       "unknown": "An unexpected error occurred.",
       "invalid_schedule_format": "Invalid schedule format. Use HH:MM - Temperature"
+    },
+    "abort": {
+      "hub_not_configurable": "Hub settings are managed through device entities. Use the Hub device controls to configure global settings."
     }
   },
   "entity": {

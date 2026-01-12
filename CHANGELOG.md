@@ -1,39 +1,54 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to TaDIY will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.2.0] - 2026-01-12
 
-## [0.2.0] - 2024
+### Changed - Major Restructuring
 
-### Added
-- HACS support with proper configuration files
-- README.md with comprehensive documentation
-- LICENSE file (MIT)
-- `.gitignore` for better version control
-- `set_heating_curve` service for manual heating rate configuration
-- Proper service schemas and validation
+**Breaking Changes:**
+- Users will need to delete and re-add the integration due to device structure changes
+- Existing configurations will not be automatically migrated
 
-### Fixed
-- Type hint error in `device_helpers.py` (`any` -> `Any`)
-- Hub coordinator access in `switch.py` (incorrect data structure references)
-- Mode inconsistency between `services.yaml`, `const.py`, and `strings.json`
-- Service registration and unloading for all services
-- `CONF_HUB` constant usage throughout the codebase
+**Code Structure:**
+- Merged coordinator_hub.py and coordinator_room.py into single coordinator.py
+- Moved models/ content to core/ directory
+  - models/room.py → core/room.py
+  - models/schedule.py → core/schedule_model.py
+- Moved device_helpers.py to core/device_helpers.py
+- Removed empty ui/ directory
+- Entity platforms remain in root (Home Assistant convention)
 
-### Changed
-- Unified hub modes: `normal`, `homeoffice`, `vacation`, `party`
-- Improved service definitions with proper parameter validation
-- Enhanced error handling in service implementations
+**Device Hierarchy:**
+- Hub now creates automatically without user input
+- Rooms are linked to Hub via via_device (Battery Notes style)
+- Rooms appear as sub-entries under Hub in device list
+- Hub configuration moved to device entities (no config menu)
 
-## [0.1.0] - Initial Release
+**Configuration Flow:**
+- Hub creates automatically with default global settings
+- Room configuration simplified to 5 basic fields only:
+  - Room Name
+  - TRV Entities
+  - Main Temperature Sensor
+  - Window Sensors
+  - Outdoor Sensor
+- Advanced settings now managed via device entities
 
-### Added
-- Initial TaDIY integration
-- Multi-room climate control
-- Adaptive learning for heating patterns
+**Options Flow:**
+- Hub options menu removed (settings via entities)
+- Room options simplified to basic configuration only
+- Schedule and learning settings moved to future phases
+
+**Fixes:**
+- Fixed bug causing 2 devices to be created per entry
+- Fixed "undefined" device creation
+- Fixed room labels showing variable names instead of readable text
+- Improved unique ID generation for rooms (timestamp-based)
+
+## [0.1.9] - 2026-01-11
+
+### Previous Release
+- Initial HACS release with multi-room support
 - Schedule management
-- Window detection
-- Multiple operating modes
-- Hub and Room coordinator architecture
+- Learning capabilities

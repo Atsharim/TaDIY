@@ -14,7 +14,7 @@ from ..const import (
     MAX_TARGET_TEMP,
     MIN_TARGET_TEMP,
 )
-from ..core.window import WindowState
+from .window import WindowState
 
 
 @dataclass
@@ -39,13 +39,19 @@ class RoomConfig:
         if not self.name:
             raise ValueError("Room name cannot be empty")
         if not self.trv_entity_ids:
-            raise ValueError(f"Room {self.name} must have at least one TRV")
+            raise ValueError("Room {} must have at least one TRV".format(self.name))
         if not self.main_temp_sensor_id:
-            raise ValueError(f"Room {self.name} must have a main temperature sensor")
+            raise ValueError(
+                "Room {} must have a main temperature sensor".format(self.name)
+            )
         if self.window_open_timeout < 0:
-            raise ValueError(f"Room {self.name} window_open_timeout must be >= 0")
+            raise ValueError(
+                "Room {} window_open_timeout must be >= 0".format(self.name)
+            )
         if self.window_close_timeout < 0:
-            raise ValueError(f"Room {self.name} window_close_timeout must be >= 0")
+            raise ValueError(
+                "Room {} window_close_timeout must be >= 0".format(self.name)
+            )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -74,8 +80,12 @@ class RoomConfig:
             window_sensor_ids=data.get("window_sensor_ids", []),
             outdoor_sensor_id=data.get("outdoor_sensor_id", ""),
             weather_entity_id=data.get("weather_entity_id", ""),
-            window_open_timeout=data.get("window_open_timeout", DEFAULT_WINDOW_OPEN_TIMEOUT),
-            window_close_timeout=data.get("window_close_timeout", DEFAULT_WINDOW_CLOSE_TIMEOUT),
+            window_open_timeout=data.get(
+                "window_open_timeout", DEFAULT_WINDOW_OPEN_TIMEOUT
+            ),
+            window_close_timeout=data.get(
+                "window_close_timeout", DEFAULT_WINDOW_CLOSE_TIMEOUT
+            ),
             dont_heat_below_outdoor=data.get("dont_heat_below_outdoor", 20.0),
             use_early_start=data.get("use_early_start", True),
             learn_heating_rate=data.get("learn_heating_rate", True),
@@ -104,11 +114,14 @@ class RoomData:
         if self.target_temperature is not None:
             if not MIN_TARGET_TEMP <= self.target_temperature <= MAX_TARGET_TEMP:
                 raise ValueError(
-                    f"Target temperature {self.target_temperature} out of range "
-                    f"({MIN_TARGET_TEMP}-{MAX_TARGET_TEMP})"
+                    "Target temperature {} out of range ({}-{})".format(
+                        self.target_temperature, MIN_TARGET_TEMP, MAX_TARGET_TEMP
+                    )
                 )
         if self.heating_rate < 0:
-            raise ValueError(f"Heating rate {self.heating_rate} must be >= 0")
+            raise ValueError(
+                "Heating rate {} must be >= 0".format(self.heating_rate)
+            )
 
     @property
     def is_heating_blocked(self) -> bool:

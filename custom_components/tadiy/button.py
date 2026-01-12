@@ -9,7 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, ICON_BOOST
-from .device_helpers import get_device_info
+from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class TaDIYHubButton(CoordinatorEntity, ButtonEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = get_device_info(entry)
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     async def async_press(self) -> None:
         """Handle the button press."""
@@ -89,7 +89,7 @@ class TaDIYRoomButton(CoordinatorEntity, ButtonEntity):
         self.entity_description = description
         self._room_name = room_name
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = get_device_info(entry)
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     async def async_press(self) -> None:
         """Handle the button press."""

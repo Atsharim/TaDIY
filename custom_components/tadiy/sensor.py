@@ -18,7 +18,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, ICON_TEMPERATURE, ICON_WINDOW, ICON_LEARNING, ICON_MODE
-from .device_helpers import get_device_info
+from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class TaDIYRoomSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = get_device_info(entry)
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     @property
     def native_value(self) -> Any:
@@ -143,7 +143,7 @@ class TaDIYHubSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        self._attr_device_info = get_device_info(entry)
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     @property
     def native_value(self) -> Any:
