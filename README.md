@@ -41,21 +41,26 @@
 1. Go to **Settings** → **Devices & Services**
 2. Click **+ Add Integration**
 3. Search for **TaDIY**
-4. Follow the setup wizard:
-   - First, create a **Hub** (central coordinator)
-   - Then, add **Rooms** linked to the hub
+4. The **Hub** will be created automatically with default settings
+5. Click **+ Add Integration** again to add **Rooms**
+6. Configure each room with:
+   - Room Name
+   - TRV Entities (Climate devices)
+   - Temperature Sensor (optional)
+   - Window Sensors (optional)
+   - Outdoor Sensor (optional)
 
 ### Hub Configuration
 
 The Hub is the central coordinator that manages:
-- Global heating modes
+- Global heating modes (via Select entity)
 - Learning data across all rooms
 - Hub-wide schedules
 - Cross-room coordination
+- Frost protection temperature (via Number entity)
 
-Required settings:
-- **Name**: A friendly name for your hub
-- **Scan Interval**: How often to update (default: 60 seconds)
+**Hub configuration** is done through the Hub device entities, not through the integration settings.
+Rooms appear as sub-devices under the Hub.
 
 ### Room Configuration
 

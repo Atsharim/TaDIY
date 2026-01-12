@@ -34,8 +34,7 @@ from .const import (
     SERVICE_SET_HEATING_CURVE,
     SERVICE_SET_HUB_MODE,
 )
-from .coordinator_hub import TaDIYHubCoordinator
-from .coordinator_room import TaDIYRoomCoordinator
+from .coordinator import TaDIYHubCoordinator, TaDIYRoomCoordinator
 
 if TYPE_CHECKING:
     from homeassistant.helpers.typing import ConfigType

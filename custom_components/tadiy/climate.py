@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .device_helpers import get_device_info
+from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,9 +60,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         super().__init__(coordinator)
         self._room_name = room_name
         self._trv_entity_id = trv_entity_id
-        self._attr_unique_id = f"{entry.entry_id}_climate_{trv_entity_id.split('.')[-1]}"
-        self._attr_name = f"{room_name} - {trv_entity_id.split('.')[-1]}"
-        self._attr_device_info = get_device_info(entry)
+        self._attr_unique_id = "{}_climate_{}".format(entry.entry_id, trv_entity_id.split('.')[-1])
+        self._attr_name = "{} - {}".format(room_name, trv_entity_id.split('.')[-1])
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     @property
     def current_temperature(self) -> float | None:
