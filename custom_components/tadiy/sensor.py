@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ICON_TEMPERATURE, ICON_WINDOW, ICON_LEARNING, ICON_MODE
+from .const import DOMAIN, ICON_TEMPERATURE, ICON_LEARNING, ICON_MODE
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
