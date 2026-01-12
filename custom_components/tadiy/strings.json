@@ -1,150 +1,195 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "Set up TaDIY",
+      "hub": {
+        "title": "Setup TaDIY Hub",
         "description": "Configure your TaDIY Climate Orchestrator.",
         "data": {
           "name": "Name"
         }
       },
       "global_defaults": {
-        "title": "Global Defaults",
-        "description": "Configure default settings for all rooms. Individual rooms can override these settings.",
-        "data": {
-          "global_window_open_timeout": "Window Open Timeout",
-          "global_window_close_timeout": "Window Close Timeout",
-          "global_dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
-          "global_use_early_start": "Use Early Start",
-          "global_learn_heating_rate": "Learn Heating Rate"
-        },
-        "data_description": {
-          "global_window_open_timeout": "How long a window can be open before heating is stopped.",
-          "global_window_close_timeout": "How long to wait after closing a window before resuming heating.",
-          "global_dont_heat_below_outdoor": "Stop heating if outdoor temperature is above this value.",
-          "global_use_early_start": "Enable intelligent pre-heating to reach target temperature on time.",
-          "global_learn_heating_rate": "Automatically learn how fast your rooms heat up."
-        }
-      }
-    },
-    "error": {
-      "unknown": "An unexpected error occurred."
-    },
-    "abort": {
-      "already_configured": "This TaDIY instance is already configured."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Configure TaDIY",
-        "description": "Manage your rooms and global settings. You have {room_count} room(s) configured.",
-        "menu_options": {
-          "global_defaults": "Edit Global Defaults",
-          "add_room": "Add New Room",
-          "edit_room_select": "Edit Existing Room",
-          "delete_room_select": "Delete Room"
-        }
-      },
-      "global_defaults": {
-        "title": "Global Defaults",
+        "title": "Global Default Settings",
         "description": "These settings apply to all rooms unless overridden individually.",
         "data": {
           "global_window_open_timeout": "Window Open Timeout",
-          "global_window_close_timeout": "Window Close Timeout",
-          "global_dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
-          "global_use_early_start": "Use Early Start",
-          "global_learn_heating_rate": "Learn Heating Rate"
+          "global_window_close_timeout": "Window Close Cooldown",
+          "global_dont_heat_below": "Don't Heat When Outdoor Temperature Above",
+          "global_use_early_start": "Enable Early Start",
+          "global_learn_heating_rate": "Learn Heating Rate",
+          "global_early_start_offset": "Early Start Buffer",
+          "global_early_start_max": "Maximum Pre-heating Time"
+        },
+        "data_description": {
+          "global_window_open_timeout": "How long a window can be open before heating stops.",
+          "global_window_close_timeout": "Wait time after window closes before resuming heating.",
+          "global_dont_heat_below": "Stop heating when outdoor temperature exceeds this value.",
+          "global_use_early_start": "Enable intelligent pre-heating to reach target temperature on time.",
+          "global_learn_heating_rate": "Automatically learn how fast your rooms heat up.",
+          "global_early_start_offset": "Safety buffer for early start calculations.",
+          "global_early_start_max": "Maximum time for pre-heating (prevents starting too early)."
         }
       },
-      "add_room": {
-        "title": "Add New Room",
+      "room": {
+        "title": "Add Room",
         "description": "Configure a new room for climate control.",
         "data": {
           "room_name": "Room Name",
           "trv_entities": "TRV Entities (Climate)",
           "main_temp_sensor": "Main Temperature Sensor",
           "window_sensors": "Window Sensors (Optional)",
-          "weather_entity": "Weather Entity (Optional)",
-          "outdoor_sensor": "Outdoor Temperature Sensor (Optional)",
-          "window_open_timeout": "Window Open Timeout",
-          "window_close_timeout": "Window Close Timeout",
-          "dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
-          "use_early_start": "Use Early Start",
-          "learn_heating_rate": "Learn Heating Rate",
-          "target_temp_step": "Target Temperature Step",
-          "tolerance": "Temperature Tolerance"
+          "outdoor_sensor": "Outdoor Temperature Sensor (Optional)"
         },
         "data_description": {
           "room_name": "Unique name for this room.",
           "trv_entities": "One or more climate entities (TRVs) to control.",
           "main_temp_sensor": "Primary temperature sensor for this room.",
-          "window_sensors": "Binary sensors that detect open windows/doors.",
-          "weather_entity": "Weather entity for outdoor temperature (if no outdoor sensor).",
-          "outdoor_sensor": "Outdoor temperature sensor.",
-          "window_open_timeout": "Override global: How long window can be open before stopping heating.",
-          "window_close_timeout": "Override global: Cooldown period after closing window.",
-          "dont_heat_below_outdoor": "Override global: Stop heating if outdoor temp is above this.",
-          "use_early_start": "Override global: Enable pre-heating for scheduled temperatures.",
-          "learn_heating_rate": "Override global: Learn how fast this room heats up.",
-          "target_temp_step": "Temperature adjustment step size.",
-          "tolerance": "Temperature tolerance for control logic."
-        }
-      },
-      "edit_room_select": {
-        "title": "Select Room to Edit",
-        "description": "Choose which room you want to edit.",
-        "data": {
-          "room": "Room"
-        }
-      },
-      "edit_room": {
-        "title": "Edit Room: {room_name}",
-        "description": "Modify settings for {room_name}.",
-        "data": {
-          "room_name": "Room Name",
-          "trv_entities": "TRV Entities",
-          "main_temp_sensor": "Main Temperature Sensor",
-          "window_sensors": "Window Sensors",
-          "weather_entity": "Weather Entity",
-          "outdoor_sensor": "Outdoor Temperature Sensor",
-          "window_open_timeout": "Window Open Timeout",
-          "window_close_timeout": "Window Close Timeout",
-          "dont_heat_below_outdoor": "Don't Heat Below Outdoor Temperature",
-          "use_early_start": "Use Early Start",
-          "learn_heating_rate": "Learn Heating Rate",
-          "target_temp_step": "Target Temperature Step",
-          "tolerance": "Temperature Tolerance"
-        }
-      },
-      "delete_room_select": {
-        "title": "Select Room to Delete",
-        "description": "Choose which room you want to delete.",
-        "data": {
-          "room": "Room"
+          "window_sensors": "Binary sensors to detect open windows/doors.",
+          "outdoor_sensor": "Outdoor temperature sensor."
         }
       }
     },
     "error": {
-      "name_exists": "A room with this name already exists.",
-      "no_rooms": "No rooms configured yet.",
-      "invalid_room": "Invalid room selected."
+      "unknown": "An unexpected error occurred.",
+      "room_already_exists": "A room with this name already exists.",
+      "no_hub_found": "No hub found. Please create a hub first."
     },
     "abort": {
-      "no_rooms": "No rooms configured. Add a room first.",
-      "invalid_room": "The selected room no longer exists."
+      "already_configured": "This TaDIY Hub is already configured.",
+      "single_instance_allowed": "Only one hub can be configured.",
+      "no_hub_found": "No hub found. Please create a hub first."
+    }
+  },
+  "options": {
+    "step": {
+      "init_hub": {
+        "title": "Configure TaDIY Hub",
+        "description": "Manage global settings and services. You have {room_count} room(s) configured.",
+        "menu_options": {
+          "global_defaults": "Edit Global Default Settings",
+          "hub_mode": "Change Hub Mode"
+        }
+      },
+      "init_room": {
+        "title": "Configure Room: {room_name}",
+        "description": "Manage settings for this room.",
+        "menu_options": {
+          "room_details": "Room Settings",
+          "schedules": "Edit Schedules",
+          "learning": "Learning Settings"
+        }
+      },
+      "global_defaults": {
+        "title": "Global Default Settings",
+        "description": "These settings apply to all rooms unless overridden individually.",
+        "data": {
+          "global_window_open_timeout": "Window Open Timeout",
+          "global_window_close_timeout": "Window Close Cooldown",
+          "global_dont_heat_below": "Don't Heat When Outdoor Above",
+          "global_use_early_start": "Enable Early Start",
+          "global_learn_heating_rate": "Learn Heating Rate",
+          "global_early_start_offset": "Early Start Buffer",
+          "global_early_start_max": "Maximum Pre-heating Time"
+        }
+      },
+      "hub_mode": {
+        "title": "Hub Mode",
+        "description": "Select the current operating mode for all rooms.",
+        "data": {
+          "hub_mode": "Mode"
+        },
+        "data_description": {
+          "hub_mode": "Normal: Standard schedules | Home Office: All day heating | Vacation: Lowered | Party: Extra warm"
+        }
+      },
+      "room_details": {
+        "title": "Room Configuration",
+        "description": "Configure settings for {room_name}.",
+        "data": {
+          "trv_entities": "TRV Entities (Climate)",
+          "main_temp_sensor": "Main Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "outdoor_sensor": "Outdoor Temperature Sensor",
+          "window_open_timeout": "Window Open Timeout (Override)",
+          "window_close_timeout": "Window Close Cooldown (Override)",
+          "dont_heat_below_outdoor": "Don't Heat When Outdoor Above (Override)",
+          "target_temp_step": "Temperature Step",
+          "tolerance": "Temperature Tolerance",
+          "use_early_start": "Early Start (Override)",
+          "learn_heating_rate": "Learn Heating Rate (Override)",
+          "early_start_offset": "Early Start Buffer (Override)",
+          "early_start_max": "Maximum Pre-heating Time (Override)"
+        },
+        "data_description": {
+          "trv_entities": "One or more climate entities (TRVs) to control.",
+          "main_temp_sensor": "Primary temperature sensor for this room.",
+          "window_sensors": "Binary sensors to detect open windows/doors.",
+          "outdoor_sensor": "Outdoor temperature sensor.",
+          "window_open_timeout": "Leave empty for global value.",
+          "window_close_timeout": "Leave empty for global value.",
+          "dont_heat_below_outdoor": "Leave empty for global value.",
+          "use_early_start": "Leave empty for global value.",
+          "learn_heating_rate": "Leave empty for global value.",
+          "target_temp_step": "Step size for temperature adjustments.",
+          "tolerance": "Temperature tolerance for control logic."
+        }
+      },
+      "schedules": {
+        "title": "Schedules",
+        "description": "Select a schedule to edit.",
+        "menu_options": {
+          "schedule_normal_weekday": "Normal - Weekday (Mon-Fri)",
+          "schedule_normal_weekend": "Normal - Weekend (Sat-Sun)",
+          "schedule_homeoffice": "Home Office (Mon-Sun)",
+          "schedule_vacation": "Vacation",
+          "schedule_party": "Party"
+        }
+      },
+      "edit_schedule": {
+        "title": "Edit {schedule_name}",
+        "description": "Configure time points and target temperatures. Format: HH:MM - Temperature (e.g. 06:00 - 21.0)",
+        "data": {
+          "schedule_entry_1": "Time Point 1",
+          "schedule_entry_2": "Time Point 2",
+          "schedule_entry_3": "Time Point 3",
+          "schedule_entry_4": "Time Point 4",
+          "schedule_entry_5": "Time Point 5",
+          "schedule_entry_6": "Time Point 6"
+        }
+      },
+      "learning": {
+        "title": "Learning Settings",
+        "description": "Manage automatic learning for {room_name}.",
+        "data": {
+          "min_heating_rate": "Minimum Heating Rate",
+          "max_heating_rate": "Maximum Heating Rate",
+          "current_heating_rate": "Current Heating Rate (Info Only)"
+        },
+        "data_description": {
+          "min_heating_rate": "Lower limit for learned heating rate (°C/h).",
+          "max_heating_rate": "Upper limit for learned heating rate (°C/h).",
+          "current_heating_rate": "Currently learned heating rate (read-only)."
+        }
+      }
+    },
+    "error": {
+      "unknown": "An unexpected error occurred.",
+      "invalid_schedule_format": "Invalid schedule format. Use HH:MM - Temperature"
     }
   },
   "entity": {
     "sensor": {
-      "main_temperature": {
-        "name": "Main Temperature"
+      "current_temperature": {
+        "name": "Current Temperature"
+      },
+      "target_temperature": {
+        "name": "Target Temperature"
       },
       "outdoor_temperature": {
         "name": "Outdoor Temperature"
       },
-      "fused_temperature": {
-        "name": "Fused Temperature"
+      "main_sensor_temperature": {
+        "name": "Main Sensor Temperature"
       },
       "window_state": {
         "name": "Window State",
@@ -157,11 +202,68 @@
       },
       "heating_rate": {
         "name": "Heating Rate"
+      },
+      "heating_active": {
+        "name": "Heating Active"
+      },
+      "hub_mode": {
+        "name": "Hub Mode"
+      },
+      "frost_protection_temp": {
+        "name": "Frost Protection Temperature"
       }
     },
     "climate": {
       "room": {
         "name": "{room_name}"
+      }
+    },
+    "button": {
+      "force_refresh": {
+        "name": "Force Refresh"
+      },
+      "reset_learning": {
+        "name": "Reset Learning Data"
+      },
+      "boost_room": {
+        "name": "Room Boost"
+      },
+      "force_refresh_all": {
+        "name": "Force Refresh All"
+      },
+      "reset_all_learning": {
+        "name": "Reset All Learning Data"
+      },
+      "boost_all_rooms": {
+        "name": "Boost All Rooms"
+      },
+      "clear_schedule": {
+        "name": "Clear Schedule"
+      }
+    },
+    "select": {
+      "hub_mode": {
+        "name": "Hub Mode",
+        "state": {
+          "normal": "Normal",
+          "homeoffice": "Home Office",
+          "vacation": "Vacation",
+          "party": "Party"
+        }
+      },
+      "active_schedule": {
+        "name": "Active Schedule"
+      }
+    },
+    "number": {
+      "frost_protection_temp": {
+        "name": "Frost Protection Temperature"
+      },
+      "boost_temperature": {
+        "name": "Boost Temperature"
+      },
+      "boost_duration": {
+        "name": "Boost Duration"
       }
     }
   },
@@ -176,13 +278,37 @@
       "fields": {
         "room": {
           "name": "Room Name",
-          "description": "Name of the room to reset learning data for. Leave empty to reset all rooms."
+          "description": "Name of the room to reset learning data for. Leave empty for all rooms."
+        }
+      }
+    },
+    "set_hub_mode": {
+      "name": "Set Hub Mode",
+      "description": "Sets the operating mode for the hub and all rooms.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "The desired hub mode (normal, homeoffice, vacation, party)."
+        }
+      }
+    },
+    "boost_all_rooms": {
+      "name": "Boost All Rooms",
+      "description": "Activates boost mode for all rooms simultaneously.",
+      "fields": {
+        "temperature": {
+          "name": "Target Temperature",
+          "description": "Boost target temperature in °C."
+        },
+        "duration_minutes": {
+          "name": "Duration",
+          "description": "Boost duration in minutes."
         }
       }
     },
     "set_heating_curve": {
       "name": "Set Heating Curve",
-      "description": "Manually set the heating rate for a room (overrides learned value).",
+      "description": "Manually sets the heating rate for a room (overrides learned value).",
       "fields": {
         "room": {
           "name": "Room Name",
