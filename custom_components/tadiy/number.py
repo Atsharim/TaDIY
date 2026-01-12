@@ -1,103 +1,117 @@
-"""Number platform for TaDIY."""
-
+"""Number platform for TaDIY integration."""
 from __future__ import annotations
-
 import logging
 
-from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_FROST_PROTECTION_TEMP,
-    DEFAULT_FROST_PROTECTION_TEMP,
     DOMAIN,
-    ICON_FROST,
-    MANUFACTURER,
-    MAX_FROST_PROTECTION,
     MIN_FROST_PROTECTION,
-    MODEL_NAME,
+    MAX_FROST_PROTECTION,
+    MIN_BOOST_TEMP,
+    MAX_BOOST_TEMP,
+    MIN_BOOST_DURATION,
+    MAX_BOOST_DURATION,
+    ICON_FROST,
+    ICON_BOOST,
 )
+from .device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
+
+HUB_NUMBER_TYPES: tuple[NumberEntityDescription, ...] = (
+    NumberEntityDescription(
+        key="frost_protection_temp",
+        name="Frost Protection Temperature",
+        native_min_value=MIN_FROST_PROTECTION,
+        native_max_value=MAX_FROST_PROTECTION,
+        native_step=0.5,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon=ICON_FROST,
+        mode=NumberMode.SLIDER,
+    ),
+    NumberEntityDescription(
+        key="boost_temperature",
+        name="Boost Temperature",
+        native_min_value=MIN_BOOST_TEMP,
+        native_max_value=MAX_BOOST_TEMP,
+        native_step=0.5,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        icon=ICON_BOOST,
+        mode=NumberMode.SLIDER,
+    ),
+    NumberEntityDescription(
+        key="boost_duration",
+        name="Boost Duration",
+        native_min_value=MIN_BOOST_DURATION,
+        native_max_value=MAX_BOOST_DURATION,
+        native_step=5,
+        native_unit_of_measurement="min",
+        icon="mdi:timer",
+        mode=NumberMode.BOX,
+    ),
+)
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TaDIY number entities."""
-    entities = [
-        TaDIYFrostProtectionNumber(
-            config_entry.entry_id,
-            config_entry.data.get(
-                CONF_FROST_PROTECTION_TEMP, DEFAULT_FROST_PROTECTION_TEMP
-            ),
-        )
-    ]
-    
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry_data["coordinator"]
+    entry_type = entry_data.get("type")
+
+    entities: list[NumberEntity] = []
+
+    if entry_type == "hub":
+        for description in HUB_NUMBER_TYPES:
+            entities.append(TaDIYHubNumber(coordinator, description, entry))
+        _LOGGER.info("Added %d hub number entities", len(entities))
+    elif entry_type == "room":
+        _LOGGER.debug("Room entry - no number entities")
+        return
+
     async_add_entities(entities)
-    _LOGGER.info("TaDIY number platform setup complete")
 
 
-class TaDIYFrostProtectionNumber(NumberEntity, RestoreEntity):
-    """Number entity for frost protection temperature."""
+class TaDIYHubNumber(CoordinatorEntity, NumberEntity):
+    """Representation of a TaDIY Hub Number."""
 
-    _attr_icon = ICON_FROST
-    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
-    _attr_native_min_value = MIN_FROST_PROTECTION
-    _attr_native_max_value = MAX_FROST_PROTECTION
-    _attr_native_step = 0.5
-    _attr_mode = NumberMode.BOX
+    _attr_has_entity_name = True
 
-    def __init__(self, entry_id: str, initial_temp: float) -> None:
-        """Initialize the number entity."""
-        self._entry_id = entry_id
-        self._attr_name = "TaDIY Frost Protection"
-        self._attr_unique_id = f"{entry_id}_frost_protection"
-        self._attr_native_value = initial_temp
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": "TaDIY Hub",
-            "manufacturer": MANUFACTURER,
-            "model": MODEL_NAME,
-        }
-
-    async def async_set_native_value(self, value: float) -> None:
-        """Update the frost protection temperature."""
-        self._attr_native_value = value
-        self.async_write_ha_state()
-        
-        _LOGGER.info("Frost protection temperature set to: %.1f°C", value)
-        
-        # Update schedule engine
-        coordinator = self.hass.data[DOMAIN][self._entry_id]["coordinator"]
-        if hasattr(coordinator, "schedule_engine"):
-            coordinator.schedule_engine.set_frost_protection_temp(value)
-        
-        # Trigger update to apply new temp
-        await coordinator.async_request_refresh()
-
-    async def async_added_to_hass(self) -> None:
-        """Restore last value when added to hass."""
-        await super().async_added_to_hass()
-        
-        last_state = await self.async_get_last_state()
-        if last_state and last_state.state not in ("unknown", "unavailable"):
-            try:
-                self._attr_native_value = float(last_state.state)
-                _LOGGER.debug(
-                    "Restored frost protection temp: %.1f°C",
-                    self._attr_native_value,
-                )
-            except (ValueError, TypeError):
-                _LOGGER.warning("Could not restore frost protection temp")
+    def __init__(self, coordinator, description: NumberEntityDescription, entry: ConfigEntry) -> None:
+        """Initialize the number."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        self._attr_device_info = get_device_info(entry)
 
     @property
-    def native_value(self) -> float:
+    def native_value(self) -> float | None:
         """Return the current value."""
-        return self._attr_native_value
+        if self.entity_description.key == "frost_protection_temp":
+            return self.coordinator.frost_protection_temp
+        elif self.entity_description.key == "boost_temperature":
+            return self.coordinator.config_data.get("boost_temperature", 30.0)
+        elif self.entity_description.key == "boost_duration":
+            return self.coordinator.config_data.get("boost_duration_minutes", 60)
+        return None
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update the current value."""
+        if self.entity_description.key == "frost_protection_temp":
+            self.coordinator.set_frost_protection_temp(value)
+            await self.coordinator.async_save_schedules()
+        elif self.entity_description.key == "boost_temperature":
+            self.coordinator.config_data["boost_temperature"] = value
+        elif self.entity_description.key == "boost_duration":
+            self.coordinator.config_data["boost_duration_minutes"] = int(value)
+        
+        self.async_write_ha_state()

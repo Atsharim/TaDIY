@@ -59,7 +59,30 @@ set_hub_mode:
               value: "normal"
             - label: "Home Office"
               value: "homeoffice"
-            - label: "Manual"
-              value: "manual"
-            - label: "Off"
-              value: "off"
+            - label: "Vacation"
+              value: "vacation"
+            - label: "Party"
+              value: "party"
+
+set_heating_curve:
+  name: Set Heating Curve
+  description: Manually sets the heating rate for a room (overrides learned value)
+  fields:
+    room:
+      name: Room Name
+      description: Name of the room to configure
+      required: true
+      example: "Living Room"
+      selector:
+        text:
+    heating_rate:
+      name: Heating Rate
+      description: Heating rate in degrees Celsius per hour
+      required: true
+      selector:
+        number:
+          min: 0.05
+          max: 10.0
+          step: 0.1
+          unit_of_measurement: "°C/h"
+          mode: slider
