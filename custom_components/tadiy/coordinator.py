@@ -26,7 +26,6 @@ from .const import (
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_FROST_PROTECTION_TEMP,
-    DEFAULT_HEATING_RATE,
     DEFAULT_HUB_MODE,
     DEFAULT_LEARN_HEATING_RATE,
     DEFAULT_USE_EARLY_START,
@@ -412,8 +411,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
     async def async_save_schedules(self) -> None:
         """Save room schedules to storage."""
         try:
-            from .core.schedule_model import RoomSchedule
-
             if self.room_config.name in self.schedule_engine._room_schedules:
                 room_schedule = self.schedule_engine._room_schedules[
                     self.room_config.name
@@ -444,9 +441,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     def check_window_override(self, current_target: float) -> bool:
         """Check if window open overrides heating."""
-        hub_settings = self.get_hub_settings()
-        window_timeout = hub_settings.get("global_window_open_timeout", 30)
-
         if (
             self.current_room_data
             and self.current_room_data.window_state.heating_should_stop
@@ -467,7 +461,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 trv_state = self.hass.states.get(trv_id)
                 if trv_state:
                     trv_current = trv_state.attributes.get("current_temperature")
-                    trv_target = trv_state.attributes.get("temperature")
                     if trv_current:
                         try:
                             trv_temp = float(trv_current)
@@ -498,8 +491,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 if trv_state and "temperature" in trv_state.attributes:
                     current_target = float(trv_state.attributes["temperature"])
                     break
-
-            scheduled_target = self.get_scheduled_target()
 
             # Get HVAC mode
             hvac_mode = "heat"
@@ -563,9 +554,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 heating_should_stop=False,
                 reason="window_closed",
             )
-
-        hub_settings = self.get_hub_settings()
-        window_timeout = hub_settings.get("global_window_open_timeout", 30)
 
         return WindowState(
             is_open=True,

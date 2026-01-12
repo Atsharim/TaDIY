@@ -161,8 +161,7 @@ async def async_register_services(
 
     async def handle_boost_all_rooms(call: ServiceCall) -> None:
         temperature = call.data.get(ATTR_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE)
-        duration = call.data.get(ATTR_DURATION_MINUTES, DEFAULT_BOOST_DURATION)
-        
+
         for entry_id, data in hass.data[DOMAIN].items():
             if data.get("type") == "room":
                 room_coord = data["coordinator"]
