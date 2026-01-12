@@ -194,7 +194,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Credits
 
 Developed by [@Atsharim](https://github.com/Atsharim)
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and updates.
