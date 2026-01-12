@@ -1,89 +1,102 @@
-"""Select platform for TaDIY."""
-
+"""Select platform for TaDIY integration."""
 from __future__ import annotations
-
 import logging
 
-from homeassistant.components.select import SelectEntity
+from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
-    CONF_HUB_MODE,
-    DEFAULT_HUB_MODE,
     DOMAIN,
     HUB_MODES,
     ICON_MODE,
-    MANUFACTURER,
-    MODEL_NAME,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
+HUB_SELECT_TYPES: tuple[SelectEntityDescription, ...] = (
+    SelectEntityDescription(
+        key="hub_mode",
+        name="Hub Mode",
+        icon=ICON_MODE,
+    ),
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up TaDIY select entities."""
-    entities = [
-        TaDIYHubModeSelect(
-            config_entry.entry_id,
-            config_entry.data.get(CONF_HUB_MODE, DEFAULT_HUB_MODE),
-        )
-    ]
-    
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry_data["coordinator"]
+    entry_type = entry_data.get("type")
+
+    entities: list[SelectEntity] = []
+
+    if entry_type == "hub":
+        # Hub selects
+        for description in HUB_SELECT_TYPES:
+            entities.append(
+                TaDIYHubSelect(
+                    coordinator=coordinator,
+                    description=description,
+                    entry_id=entry.entry_id,
+                )
+            )
+        _LOGGER.info("Added %d hub select entities", len(entities))
+
+    elif entry_type == "room":
+        # Room doesn't have select entities currently
+        _LOGGER.debug("Room entry - no select entities")
+        return
+
     async_add_entities(entities)
-    _LOGGER.info("TaDIY select platform setup complete")
 
 
-class TaDIYHubModeSelect(SelectEntity, RestoreEntity):
-    """Select entity for TaDIY Hub mode."""
+class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
+    """Representation of a TaDIY Hub Select."""
 
-    _attr_icon = ICON_MODE
+    _attr_has_entity_name = True
     _attr_options = HUB_MODES
 
-    def __init__(self, entry_id: str, initial_mode: str) -> None:
-        """Initialize the select entity."""
-        self._entry_id = entry_id
-        self._attr_name = "TaDIY Hub Mode"
-        self._attr_unique_id = f"{entry_id}_hub_mode"
-        self._attr_current_option = initial_mode
+    def __init__(
+        self,
+        coordinator,
+        description: SelectEntityDescription,
+        entry_id: str,
+    ) -> None:
+        """Initialize the select."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{DOMAIN}_hub_{description.key}"
+        self._attr_name = description.name
+
+        # Device info 
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, entry_id)},
-            "name": "TaDIY Hub",
-            "manufacturer": MANUFACTURER,
-            "model": MODEL_NAME,
+            "identifiers": {(DOMAIN, "hub")}, 
         }
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the selected option."""
+        if self.entity_description.key == "hub_mode":
+            return self.coordinator.get_hub_mode()
+        return None
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
-        if option not in HUB_MODES:
-            _LOGGER.error("Invalid mode selected: %s", option)
-            return
-
-        self._attr_current_option = option
+        if self.entity_description.key == "hub_mode":
+            if option in HUB_MODES:
+                self.coordinator.set_hub_mode(option)
+                await self.coordinator.async_save_schedules()
+                await self.coordinator.async_request_refresh()
+                _LOGGER.info("Hub mode changed to: %s", option)
+            else:
+                _LOGGER.error("Invalid hub mode: %s", option)
+        
         self.async_write_ha_state()
-        
-        _LOGGER.info("Hub mode changed to: %s", option)
-        
-        # Trigger coordinator update to apply new mode
-        coordinator = self.hass.data[DOMAIN][self._entry_id]["coordinator"]
-        await coordinator.async_request_refresh()
-
-    async def async_added_to_hass(self) -> None:
-        """Restore last state when added to hass."""
-        await super().async_added_to_hass()
-        
-        last_state = await self.async_get_last_state()
-        if last_state and last_state.state in HUB_MODES:
-            self._attr_current_option = last_state.state
-            _LOGGER.debug("Restored hub mode: %s", last_state.state)
-
-    @property
-    def current_option(self) -> str:
-        """Return the selected option."""
-        return self._attr_current_option
