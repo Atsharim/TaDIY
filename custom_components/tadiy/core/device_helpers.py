@@ -25,6 +25,7 @@ def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> di
 
     if is_hub:
         device_info["model"] = "Adaptive Climate Orchestrator"
+        device_info["sw_version"] = "0.2.0"  # Hub sorts first with SW version
     else:
         device_info["model"] = "Room Controller"
 
