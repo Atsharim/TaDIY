@@ -10,7 +10,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
-    HUB_MODES,
     ICON_MODE,
 )
 
@@ -62,7 +61,6 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
     """Representation of a TaDIY Hub Select."""
 
     _attr_has_entity_name = True
-    _attr_options = HUB_MODES
 
     def __init__(
         self,
@@ -76,10 +74,17 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
         self._attr_unique_id = f"{DOMAIN}_hub_{description.key}"
         self._attr_name = description.name
 
-        # Device info 
+        # Device info
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, "hub")}, 
+            "identifiers": {(DOMAIN, "hub")},
         }
+
+    @property
+    def options(self) -> list[str]:
+        """Return available options dynamically from coordinator."""
+        if self.entity_description.key == "hub_mode":
+            return self.coordinator.get_custom_modes()
+        return []
 
     @property
     def current_option(self) -> str | None:
@@ -91,12 +96,13 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
         if self.entity_description.key == "hub_mode":
-            if option in HUB_MODES:
+            available_modes = self.coordinator.get_custom_modes()
+            if option in available_modes:
                 self.coordinator.set_hub_mode(option)
                 await self.coordinator.async_save_schedules()
                 await self.coordinator.async_request_refresh()
                 _LOGGER.info("Hub mode changed to: %s", option)
             else:
-                _LOGGER.error("Invalid hub mode: %s", option)
-        
+                _LOGGER.error("Invalid hub mode: %s (available: %s)", option, available_modes)
+
         self.async_write_ha_state()

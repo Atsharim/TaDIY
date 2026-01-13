@@ -17,6 +17,9 @@ from .const import (
     CONF_ROOM_NAME,
     CONF_TRV_ENTITIES,
     CONF_WINDOW_SENSORS,
+    DEFAULT_HUB_MODES,
+    DOMAIN,
+    MAX_CUSTOM_MODES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,11 +44,141 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
         is_hub = self.config_entry.data.get(CONF_HUB, False)
 
         if is_hub:
-            # Hub: No configuration via options (managed via entities)
-            return self.async_abort(reason="hub_not_configurable")
+            # Hub: Show menu for mode management
+            return await self.async_step_hub_menu(user_input)
 
         # Room: Show basic configuration form
         return await self.async_step_room_config(user_input)
+
+    async def async_step_hub_menu(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Hub options menu."""
+        return self.async_show_menu(
+            step_id="hub_menu",
+            menu_options=["add_mode", "remove_mode", "view_modes"],
+        )
+
+    async def async_step_add_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Add a custom mode."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            mode_name = user_input.get("mode_name", "").strip().lower()
+
+            # Get coordinator
+            entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            if not entry_data:
+                return self.async_abort(reason="coordinator_not_found")
+
+            coordinator = entry_data.get("coordinator")
+            if not coordinator:
+                return self.async_abort(reason="coordinator_not_found")
+
+            # Try to add mode
+            if not mode_name:
+                errors["mode_name"] = "empty_name"
+            elif mode_name in DEFAULT_HUB_MODES:
+                errors["mode_name"] = "is_default_mode"
+            elif mode_name in coordinator.get_custom_modes():
+                errors["mode_name"] = "already_exists"
+            elif len(coordinator.get_custom_modes()) >= MAX_CUSTOM_MODES:
+                errors["mode_name"] = "mode_limit_reached"
+            else:
+                # Add the mode
+                if coordinator.add_custom_mode(mode_name):
+                    await coordinator.async_save_schedules()
+                    return self.async_create_entry(title="", data={})
+                else:
+                    errors["base"] = "add_failed"
+
+        return self.async_show_form(
+            step_id="add_mode",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("mode_name"): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_remove_mode(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Remove a custom mode."""
+        # Get coordinator
+        entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+        if not entry_data:
+            return self.async_abort(reason="coordinator_not_found")
+
+        coordinator = entry_data.get("coordinator")
+        if not coordinator:
+            return self.async_abort(reason="coordinator_not_found")
+
+        # Get custom modes (exclude defaults)
+        all_modes = coordinator.get_custom_modes()
+        custom_only = [m for m in all_modes if m not in DEFAULT_HUB_MODES]
+
+        if not custom_only:
+            return self.async_abort(reason="no_custom_modes")
+
+        if user_input is not None:
+            mode_to_remove = user_input.get("mode_to_remove")
+            if mode_to_remove:
+                coordinator.remove_custom_mode(mode_to_remove)
+                await coordinator.async_save_schedules()
+            return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="remove_mode",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("mode_to_remove"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=custom_only,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_view_modes(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """View all modes."""
+        # Get coordinator
+        entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+        if not entry_data:
+            return self.async_abort(reason="coordinator_not_found")
+
+        coordinator = entry_data.get("coordinator")
+        if not coordinator:
+            return self.async_abort(reason="coordinator_not_found")
+
+        all_modes = coordinator.get_custom_modes()
+        default_modes = [m for m in all_modes if m in DEFAULT_HUB_MODES]
+        custom_modes = [m for m in all_modes if m not in DEFAULT_HUB_MODES]
+
+        description = f"**Default Modes (cannot be removed):**\n"
+        description += ", ".join(default_modes) + "\n\n"
+        description += f"**Custom Modes ({len(custom_modes)}/{MAX_CUSTOM_MODES - len(DEFAULT_HUB_MODES)}):**\n"
+        if custom_modes:
+            description += ", ".join(custom_modes)
+        else:
+            description += "None"
+
+        return self.async_show_form(
+            step_id="view_modes",
+            data_schema=vol.Schema({}),
+            description_placeholders={"modes_info": description},
+        )
 
     async def async_step_room_config(
         self, user_input: dict[str, Any] | None = None
@@ -70,7 +203,10 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
                         CONF_ROOM_NAME,
                         default=current_data.get(CONF_ROOM_NAME, ""),
                     ): selector.TextSelector(
-                        selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.TEXT,
+                            autocomplete=None,
+                        )
                     ),
                     vol.Required(
                         CONF_TRV_ENTITIES,

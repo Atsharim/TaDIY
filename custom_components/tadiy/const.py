@@ -10,6 +10,7 @@ CONF_TRV_ENTITIES: Final = "trv_entities"
 CONF_MAIN_TEMP_SENSOR: Final = "main_temp_sensor"
 CONF_WINDOW_SENSORS: Final = "window_sensors"
 CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
+CONF_CUSTOM_MODES: Final = "custom_modes"  # Additional custom modes for hub
 
 # Global defaults (Hub-level)
 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: Final = "global_window_open_timeout"
@@ -105,16 +106,24 @@ ATTR_HEATING_RATE: Final = "heating_rate"
 # Hub modes
 HUB_MODE_NORMAL: Final = "normal"
 HUB_MODE_HOMEOFFICE: Final = "homeoffice"
-HUB_MODE_VACATION: Final = "vacation"
-HUB_MODE_PARTY: Final = "party"
 MODE_MANUAL: Final = "manual"
 MODE_OFF: Final = "off"
-HUB_MODES: Final = [
+
+# Default modes (cannot be deleted)
+DEFAULT_HUB_MODES: Final = [
     HUB_MODE_NORMAL,
     HUB_MODE_HOMEOFFICE,
-    HUB_MODE_VACATION,
-    HUB_MODE_PARTY,
+    MODE_MANUAL,
+    MODE_OFF,
 ]
+
+# Mode limits
+MAX_CUSTOM_MODES: Final = 10  # Maximum total number of modes (including defaults)
+
+# Legacy mode names (kept for reference, user can create these if needed)
+HUB_MODE_VACATION: Final = "vacation"
+HUB_MODE_PARTY: Final = "party"
+
 DEFAULT_HUB_MODE: Final = HUB_MODE_NORMAL
 
 # Boost defaults
