@@ -185,11 +185,18 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Configure room basic settings."""
         if user_input is not None:
-            # Update entry data (not options)
+            # We need to update data in config entry, but properly
+            new_data = dict(self.config_entry.data)
+            new_data.update(user_input)
+
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
-                data={**self.config_entry.data, **user_input},
+                data=new_data,
             )
+
+            # Reload the entry to apply changes
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
             return self.async_create_entry(title="", data={})
 
         current_data = self.config_entry.data
