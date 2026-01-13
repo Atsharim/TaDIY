@@ -573,7 +573,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 trv_temperatures=trv_temps,
                 window_state=window_state,
                 outdoor_temperature=outdoor_temp,
-                target_temperature=current_target,
+                target_temperature=current_target or 20.0,
                 hvac_mode=hvac_mode,
                 heating_active=current_target is not None
                 and fused_temp is not None
