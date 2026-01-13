@@ -553,8 +553,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             for trv_id in self.room_config.trv_entity_ids:
                 trv_state = self.hass.states.get(trv_id)
                 if trv_state and "temperature" in trv_state.attributes:
-                    current_target = float(trv_state.attributes["temperature"])
-                    break
+                    temp_attr = trv_state.attributes.get("temperature")
+                    if temp_attr is not None:
+                        try:
+                            current_target = float(temp_attr)
+                            break
+                        except (ValueError, TypeError):
+                            continue
 
             # Get HVAC mode
             hvac_mode = "heat"
