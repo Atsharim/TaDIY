@@ -166,19 +166,19 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                             multiple=True,
                         )
                     ),
-                    vol.Optional(CONF_MAIN_TEMP_SENSOR): selector.EntitySelector(
+                    vol.Optional(CONF_MAIN_TEMP_SENSOR, default=""): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="sensor",
                             device_class="temperature",
                         )
                     ),
-                    vol.Optional(CONF_WINDOW_SENSORS): selector.EntitySelector(
+                    vol.Optional(CONF_WINDOW_SENSORS, default=[]): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="binary_sensor",
                             multiple=True,
                         )
                     ),
-                    vol.Optional(CONF_OUTDOOR_SENSOR): selector.EntitySelector(
+                    vol.Optional(CONF_OUTDOOR_SENSOR, default=""): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="sensor",
                             device_class="temperature",
