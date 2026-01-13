@@ -10,6 +10,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CONF_CUSTOM_MODES,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_EARLY_START_MAX,
     CONF_GLOBAL_EARLY_START_OFFSET,
@@ -27,11 +28,13 @@ from .const import (
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_FROST_PROTECTION_TEMP,
     DEFAULT_HUB_MODE,
+    DEFAULT_HUB_MODES,
     DEFAULT_LEARN_HEATING_RATE,
     DEFAULT_USE_EARLY_START,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
+    MAX_CUSTOM_MODES,
     STORAGE_KEY,
     STORAGE_KEY_SCHEDULES,
     STORAGE_VERSION,
@@ -73,6 +76,13 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         # Hub state
         self.hub_mode = DEFAULT_HUB_MODE
         self.frost_protection_temp = DEFAULT_FROST_PROTECTION_TEMP
+
+        # Custom modes: Start with defaults, load additional from config
+        self.custom_modes = list(DEFAULT_HUB_MODES)
+        additional_modes = config_data.get(CONF_CUSTOM_MODES, [])
+        for mode in additional_modes:
+            if mode not in self.custom_modes:
+                self.custom_modes.append(mode)
 
         # Global settings for room coordinators
         self.global_settings: dict[str, Any] = {
@@ -221,6 +231,16 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 DEFAULT_FROST_PROTECTION_TEMP,
             )
 
+            # Load custom modes
+            saved_modes = hub_data.get("custom_modes", [])
+            if saved_modes:
+                # Merge with defaults (ensure defaults are always present)
+                self.custom_modes = list(DEFAULT_HUB_MODES)
+                for mode in saved_modes:
+                    if mode not in self.custom_modes:
+                        self.custom_modes.append(mode)
+                _LOGGER.debug("Loaded custom modes: %s", self.custom_modes)
+
             if self.schedule_engine:
                 self.schedule_engine.set_frost_protection_temp(
                     self.frost_protection_temp
@@ -239,6 +259,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 "hub": {
                     "current_mode": self.hub_mode,
                     "frost_protection_temp": self.frost_protection_temp,
+                    "custom_modes": self.custom_modes,
                 },
                 "rooms": {},
             }
@@ -283,11 +304,54 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
     def set_hub_mode(self, mode: str) -> None:
         """Set hub mode."""
-        if mode in ("normal", "homeoffice", "vacation", "party"):
+        if mode in self.custom_modes:
             self.hub_mode = mode
             _LOGGER.debug("Hub mode set to: %s", mode)
         else:
-            _LOGGER.warning("Invalid hub mode: %s", mode)
+            _LOGGER.warning("Invalid hub mode: %s (available: %s)", mode, self.custom_modes)
+
+    def get_custom_modes(self) -> list[str]:
+        """Get list of available custom modes."""
+        return self.custom_modes
+
+    def add_custom_mode(self, mode: str) -> bool:
+        """Add a custom mode. Returns True if added, False if already exists or invalid."""
+        # Check if mode name is valid
+        if not mode or not mode.strip():
+            _LOGGER.warning("Cannot add mode: empty name")
+            return False
+
+        mode = mode.strip().lower()
+
+        # Check if it's a default mode
+        if mode in DEFAULT_HUB_MODES:
+            _LOGGER.warning("Cannot add mode: %s (is default mode)", mode)
+            return False
+
+        # Check if mode already exists
+        if mode in self.custom_modes:
+            _LOGGER.warning("Cannot add mode: %s (already exists)", mode)
+            return False
+
+        # Check limit
+        if len(self.custom_modes) >= MAX_CUSTOM_MODES:
+            _LOGGER.warning("Cannot add mode: %s (limit of %d modes reached)", mode, MAX_CUSTOM_MODES)
+            return False
+
+        self.custom_modes.append(mode)
+        _LOGGER.info("Added custom mode: %s", mode)
+        return True
+
+    def remove_custom_mode(self, mode: str) -> bool:
+        """Remove a custom mode. Returns True if removed, False if not found or is default."""
+        if mode in DEFAULT_HUB_MODES:
+            _LOGGER.warning("Cannot remove default mode: %s", mode)
+            return False
+        if mode in self.custom_modes:
+            self.custom_modes.remove(mode)
+            _LOGGER.info("Removed custom mode: %s", mode)
+            return True
+        return False
 
     def get_frost_protection_temp(self) -> float:
         """Get current frost protection temperature."""
