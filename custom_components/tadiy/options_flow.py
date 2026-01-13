@@ -198,9 +198,14 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Configure room basic settings."""
         if user_input is not None:
-            # We need to update data in config entry, but properly
             new_data = dict(self.config_entry.data)
-            new_data.update(user_input)
+
+            # Remove empty optional fields instead of storing "" or []
+            for key, value in user_input.items():
+                if value in ("", [], None):
+                    new_data.pop(key, None)
+                else:
+                    new_data[key] = value
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
