@@ -76,7 +76,7 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
 
         # Device info
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, "hub")},
+            "identifiers": {(DOMAIN, entry_id)},
         }
 
     @property
