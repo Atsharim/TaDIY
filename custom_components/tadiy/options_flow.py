@@ -166,7 +166,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
         default_modes = [m for m in all_modes if m in DEFAULT_HUB_MODES]
         custom_modes = [m for m in all_modes if m not in DEFAULT_HUB_MODES]
 
-        description = f"**Default Modes (cannot be removed):**\n"
+        description = "**Default Modes (cannot be removed):**\n"
         description += ", ".join(default_modes) + "\n\n"
         description += f"**Custom Modes ({len(custom_modes)}/{MAX_CUSTOM_MODES - len(DEFAULT_HUB_MODES)}):**\n"
         if custom_modes:
