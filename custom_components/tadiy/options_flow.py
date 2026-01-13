@@ -224,9 +224,6 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
                 data=new_data,
             )
 
-            # Reload the entry to apply changes
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
-
             return self.async_create_entry(title="", data={})
 
         current_data = self.config_entry.data
@@ -357,9 +354,6 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
                 self.config_entry,
                 data=new_data,
             )
-
-            # Reload the entry to apply changes
-            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
 
             return self.async_create_entry(title="", data={})
 
