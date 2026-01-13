@@ -49,8 +49,8 @@ def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> di
     if is_hub:
         device_info["model"] = "Adaptive Climate Orchestrator"
         device_info["sw_version"] = get_version()
-        device_info["name"] = f"! {entry.title}"  # ! sorts to top
-        device_info["suggested_area"] = "Hub"  # Helps sorting
+        device_info["name"] = entry.title
+        device_info["suggested_area"] = "!Hub"  # ! prefix in area name sorts to top
     else:
         device_info["model"] = "Room Controller"
 

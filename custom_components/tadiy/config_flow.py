@@ -174,7 +174,7 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Optional(CONF_WINDOW_SENSORS): selector.EntitySelector(
                         selector.EntitySelectorConfig(
-                            domain=["binary_sensor"],
+                            domain="binary_sensor",
                             multiple=True,
                         )
                     ),
