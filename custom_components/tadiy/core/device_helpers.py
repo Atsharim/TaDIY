@@ -10,16 +10,26 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CONF_HUB, DOMAIN
 
+# Cache version to avoid repeated file I/O
+_VERSION_CACHE: str | None = None
+
 
 def get_version() -> str:
-    """Get version from manifest.json."""
+    """Get version from manifest.json (cached after first read)."""
+    global _VERSION_CACHE
+
+    if _VERSION_CACHE is not None:
+        return _VERSION_CACHE
+
     try:
         manifest_path = Path(__file__).parent.parent / "manifest.json"
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
-            return manifest.get("version", "unknown")
+            _VERSION_CACHE = manifest.get("version", "unknown")
+            return _VERSION_CACHE
     except Exception:
-        return "unknown"
+        _VERSION_CACHE = "unknown"
+        return _VERSION_CACHE
 
 
 def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> dict[str, Any]:

@@ -31,11 +31,11 @@
         "title": "Add Room",
         "description": "Configure a new room for climate control.",
         "data": {
-          "room_name": "Enter the room name",
-          "trv_entities": "Select TRV entities to control",
-          "main_temp_sensor": "Select main temperature sensor",
-          "window_sensors": "Select window sensors",
-          "outdoor_sensor": "Select outdoor temperature sensor"
+          "room_name": "Room Name",
+          "trv_entities": "TRV Entities",
+          "main_temp_sensor": "Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "outdoor_sensor": "Outdoor Sensor"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
@@ -64,11 +64,11 @@
         "title": "Room Options",
         "description": "Configure basic room settings. Advanced settings are available through device entities.",
         "data": {
-          "room_name": "Enter the room name",
-          "trv_entities": "Select TRV entities to control",
-          "main_temp_sensor": "Select main temperature sensor",
-          "window_sensors": "Select window sensors",
-          "outdoor_sensor": "Select outdoor temperature sensor"
+          "room_name": "Room Name",
+          "trv_entities": "TRV Entities",
+          "main_temp_sensor": "Temperature Sensor",
+          "window_sensors": "Window Sensors",
+          "outdoor_sensor": "Outdoor Sensor"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
@@ -91,7 +91,7 @@
         "title": "Add Custom Mode",
         "description": "Create a new custom mode. Mode names will be converted to lowercase. Maximum 10 modes total.",
         "data": {
-          "mode_name": "Enter mode name"
+          "mode_name": "Mode Name"
         },
         "data_description": {
           "mode_name": "Choose a name for the new mode (e.g., vacation, party, guests)"
