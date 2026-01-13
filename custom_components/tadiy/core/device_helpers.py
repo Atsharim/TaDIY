@@ -1,8 +1,6 @@
 """Device info helpers for TaDIY integration."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -10,26 +8,14 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CONF_HUB, DOMAIN
 
-# Cache version to avoid repeated file I/O
-_VERSION_CACHE: str | None = None
-
-
-def get_version() -> str:
-    """Get version from manifest.json (cached after first read)."""
-    global _VERSION_CACHE
-
-    if _VERSION_CACHE is not None:
-        return _VERSION_CACHE
-
-    try:
-        manifest_path = Path(__file__).parent.parent / "manifest.json"
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            manifest = json.load(f)
-            _VERSION_CACHE = manifest.get("version", "unknown")
-            return _VERSION_CACHE
-    except Exception:
-        _VERSION_CACHE = "unknown"
-        return _VERSION_CACHE
+# Version is imported at module load time (not in event loop)
+# This avoids blocking I/O warnings
+try:
+    import importlib.metadata
+    VERSION = importlib.metadata.version("tadiy")
+except Exception:
+    # Fallback: hardcoded version (updated by release script)
+    VERSION = "0.2.1.5"
 
 
 def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> dict[str, Any]:
@@ -48,7 +34,7 @@ def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> di
 
     if is_hub:
         device_info["model"] = "Adaptive Climate Orchestrator"
-        device_info["sw_version"] = get_version()
+        device_info["sw_version"] = VERSION
         device_info["name"] = entry.title
         device_info["suggested_area"] = "!Hub"  # ! prefix in area name sorts to top
     else:
