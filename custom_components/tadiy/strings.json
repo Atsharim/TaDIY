@@ -31,18 +31,18 @@
         "title": "Add Room",
         "description": "Configure a new room for climate control.",
         "data": {
-          "room_name": "Room Name",
-          "trv_entities": "TRV Entities (Climate)",
-          "main_temp_sensor": "Main Temperature Sensor",
-          "window_sensors": "Window Sensors (Optional)",
-          "outdoor_sensor": "Outdoor Temperature Sensor (Optional)"
+          "room_name": "Enter the room name",
+          "trv_entities": "Select TRV entities to control",
+          "main_temp_sensor": "Select main temperature sensor",
+          "window_sensors": "Select window sensors",
+          "outdoor_sensor": "Select outdoor temperature sensor"
         },
         "data_description": {
-          "room_name": "Unique name for this room.",
-          "trv_entities": "One or more climate entities (TRVs) to control.",
-          "main_temp_sensor": "Primary temperature sensor for this room.",
-          "window_sensors": "Binary sensors to detect open windows/doors.",
-          "outdoor_sensor": "Outdoor temperature sensor."
+          "room_name": "Choose a unique name for this room.",
+          "trv_entities": "Select one or more climate entities (TRVs) to control in this room.",
+          "main_temp_sensor": "Select the primary temperature sensor for this room (optional).",
+          "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
+          "outdoor_sensor": "Select an outdoor temperature sensor for weather-aware control (optional)."
         }
       }
     },
@@ -64,23 +64,23 @@
         "title": "Room Options",
         "description": "Configure basic room settings. Advanced settings are available through device entities.",
         "data": {
-          "room_name": "Room Name",
-          "trv_entities": "Choose TRV Entities",
-          "main_temp_sensor": "Choose Main Temperature Sensor",
-          "window_sensors": "Choose Window Sensors",
-          "outdoor_sensor": "Choose Outdoor Temperature Sensor"
+          "room_name": "Enter the room name",
+          "trv_entities": "Select TRV entities to control",
+          "main_temp_sensor": "Select main temperature sensor",
+          "window_sensors": "Select window sensors",
+          "outdoor_sensor": "Select outdoor temperature sensor"
         },
         "data_description": {
-          "room_name": "Unique name for this room.",
-          "trv_entities": "One or more climate entities (TRVs) to control.",
-          "main_temp_sensor": "Primary temperature sensor for this room (optional).",
-          "window_sensors": "Binary sensors to detect open windows/doors (optional).",
-          "outdoor_sensor": "Outdoor temperature sensor (optional)."
+          "room_name": "Choose a unique name for this room.",
+          "trv_entities": "Select one or more climate entities (TRVs) to control in this room.",
+          "main_temp_sensor": "Select the primary temperature sensor for this room (optional).",
+          "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
+          "outdoor_sensor": "Select an outdoor temperature sensor (optional)."
         }
       },
       "hub_menu": {
         "title": "Hub Options",
-        "description": "Manage custom modes for the TaDIY Hub.",
+        "description": "Manage custom modes for the TaDIY Hub. Select an option below.",
         "menu_options": {
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
@@ -89,12 +89,12 @@
       },
       "add_mode": {
         "title": "Add Custom Mode",
-        "description": "Create a new custom mode. Mode names will be converted to lowercase. Maximum {max_modes} modes total.",
+        "description": "Create a new custom mode. Mode names will be converted to lowercase. Maximum 10 modes total.",
         "data": {
-          "mode_name": "Mode Name"
+          "mode_name": "Enter mode name"
         },
         "data_description": {
-          "mode_name": "Name of the new mode (e.g., vacation, party, guests)"
+          "mode_name": "Choose a name for the new mode (e.g., vacation, party, guests)"
         }
       },
       "remove_mode": {
@@ -231,7 +231,7 @@
     "abort": {
       "hub_not_configurable": "Hub settings are managed through device entities. Use the Hub device controls to configure global settings.",
       "coordinator_not_found": "Hub coordinator not found. Please reload the integration.",
-      "no_custom_modes": "No custom modes to remove. Only default modes exist."
+      "no_custom_modes": "There are no custom modes configured. Only default modes (Normal, Homeoffice, Manual, Off) exist. You can add custom modes from the Hub Options menu."
     }
   },
   "entity": {
