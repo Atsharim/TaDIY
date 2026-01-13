@@ -144,9 +144,12 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     # Add hub_entry_id to room data for via_device
                     user_input["hub_entry_id"] = hub_entry.entry_id
 
+                    # Remove empty optional fields
+                    cleaned_data = {k: v for k, v in user_input.items() if v not in ("", [], None)}
+
                     return self.async_create_entry(
                         title=room_name,
-                        data=user_input,
+                        data=cleaned_data,
                     )
             except Exception:
                 _LOGGER.exception("Unexpected exception during room setup")
