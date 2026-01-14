@@ -155,39 +155,42 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception during room setup")
                 errors["base"] = "unknown"
 
-        # Show form (labels come from strings.json)
+        # Build schema step-by-step to avoid validation errors
+        # Same fix as in options_flow.py - complex dict literals cause issues
+        schema_dict = {
+            vol.Required(CONF_ROOM_NAME): selector.TextSelector()
+        }
+
+        schema_dict[vol.Required(CONF_TRV_ENTITIES)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="climate",
+                multiple=True,
+            )
+        )
+
+        schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR, default="")] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
+            )
+        )
+
+        schema_dict[vol.Optional(CONF_WINDOW_SENSORS, default=[])] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="binary_sensor",
+                multiple=True,
+            )
+        )
+
+        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
+            )
+        )
+
         return self.async_show_form(
             step_id="room",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_ROOM_NAME): selector.TextSelector(
-                        selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
-                    ),
-                    vol.Required(CONF_TRV_ENTITIES): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="climate",
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(CONF_MAIN_TEMP_SENSOR, default=""): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="sensor",
-                            device_class="temperature",
-                        )
-                    ),
-                    vol.Optional(CONF_WINDOW_SENSORS, default=[]): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="binary_sensor",
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(CONF_OUTDOOR_SENSOR, default=""): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="sensor",
-                            device_class="temperature",
-                        )
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
             errors=errors,
         )
