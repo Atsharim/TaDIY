@@ -15,7 +15,7 @@ try:
     VERSION = importlib.metadata.version("tadiy")
 except Exception:
     # Fallback: hardcoded version (updated by release script)
-    VERSION = "0.2.1.5"
+    VERSION = "0.2.2.1"
 
 
 def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> dict[str, Any]:
