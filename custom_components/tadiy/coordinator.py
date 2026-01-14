@@ -425,6 +425,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         )
         self._boosts: dict[str, Any] = {}
         self._overrides: dict[str, Any] = {}
+        self._update_count = 0  # Track updates to suppress initial warnings
 
         super().__init__(
             hass,
@@ -545,7 +546,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             elif trv_readings:
                 fused_temp = calculate_fused_temperature(trv_readings)
             else:
-                _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
+                # Only warn after initial updates (sensors need time to initialize)
+                if self._update_count >= 3:
+                    _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
                 fused_temp = None
 
             # Get current target from TRVs
@@ -585,6 +588,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 and fused_temp < current_target,
                 heating_rate=self._heat_model.get_heating_rate(),
             )
+
+            # Increment update counter (used to suppress boot warnings)
+            self._update_count += 1
 
             return self.current_room_data
         except Exception as err:
