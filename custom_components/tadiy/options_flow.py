@@ -21,16 +21,22 @@ from .const import (
     DOMAIN,
     MAX_CUSTOM_MODES,
 )
+from .schedule_editor_flow import ScheduleEditorMixin
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class TaDIYOptionsFlowHandler(OptionsFlow):
+class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
     """Handle options flow for TaDIY."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         self._entry = config_entry
+        # Schedule editor state
+        self._selected_mode: str | None = None
+        self._selected_schedule_type: str | None = None
+        self._editing_blocks: list[dict[str, Any]] = []
+        self._use_normal_default: bool = False
 
     @property
     def config_entry(self) -> ConfigEntry:
@@ -47,8 +53,23 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             # Hub: Show init menu
             return await self.async_step_init_hub(user_input)
 
-        # Room: Show basic configuration form
-        return await self.async_step_room_config(user_input)
+        # Room: Show menu with config and schedule options
+        return await self.async_step_init_room(user_input)
+
+    async def async_step_init_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Room initial menu."""
+        room_name = self.config_entry.data.get(CONF_ROOM_NAME, "Unknown")
+
+        return self.async_show_menu(
+            step_id="init_room",
+            menu_options={
+                "room_config": "Room Configuration",
+                "manage_schedules": "Manage Schedules",
+            },
+            description_placeholders={"room_name": room_name},
+        )
 
     async def async_step_init_hub(
         self, user_input: dict[str, Any] | None = None

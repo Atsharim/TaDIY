@@ -1,0 +1,193 @@
+"""Timeline visualization for schedule editor."""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def get_temperature_color(temperature: float | str) -> str:
+    """Get color for temperature value."""
+    if isinstance(temperature, str):
+        if temperature.lower() == "off":
+            return "#6c757d"  # Gray for OFF
+        return "#6c757d"
+
+    # Color gradient from blue (cold) to red (warm)
+    if temperature <= 15:
+        return "#0d6efd"  # Blue
+    elif temperature <= 18:
+        return "#0dcaf0"  # Cyan
+    elif temperature <= 20:
+        return "#20c997"  # Teal
+    elif temperature <= 22:
+        return "#fd7e14"  # Orange
+    else:
+        return "#dc3545"  # Red
+
+
+def format_temperature(temperature: float | str) -> str:
+    """Format temperature for display."""
+    if isinstance(temperature, str):
+        if temperature.lower() == "off":
+            return "OFF"
+        return temperature
+    return f"{temperature:.1f}°C"
+
+
+def generate_timeline_html(blocks: list[dict[str, Any]]) -> str:
+    """
+    Generate HTML timeline visualization with colored blocks.
+
+    Args:
+        blocks: List of block dicts with start_time, end_time, temperature
+
+    Returns:
+        HTML string for timeline
+    """
+    if not blocks:
+        return "<div style='padding: 10px; color: #999;'>Keine Blöcke definiert</div>"
+
+    # Sort blocks by start time
+    sorted_blocks = sorted(blocks, key=lambda b: b["start_time"])
+
+    # Calculate total duration (24 hours = 1440 minutes)
+    total_minutes = 24 * 60
+
+    # Build timeline HTML
+    html = '<div style="margin: 20px 0;">'
+    html += '<div style="display: flex; width: 100%; height: 60px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">'
+
+    for block in sorted_blocks:
+        # Parse times
+        start_h, start_m = map(int, block["start_time"].split(":"))
+        end_parts = block["end_time"].split(":")
+        end_h = int(end_parts[0])
+        end_m = int(end_parts[1]) if len(end_parts) > 1 else 0
+
+        # Handle 23:59 as end-of-day (treat as 24:00 for calculation)
+        # Handle 24:00 (legacy)
+        if (end_h == 23 and end_m == 59) or end_h == 24:
+            end_total = 24 * 60
+            display_end = "24:00"  # Display as 24:00 for clarity
+        else:
+            end_total = end_h * 60 + end_m
+            display_end = block["end_time"]
+
+        start_total = start_h * 60 + start_m
+
+        # Calculate duration and percentage
+        if end_total < start_total:
+            # Wraps around midnight
+            duration = (24 * 60) - start_total + end_total
+        else:
+            duration = end_total - start_total
+
+        percentage = (duration / total_minutes) * 100
+
+        # Get color
+        color = get_temperature_color(block["temperature"])
+        temp_display = format_temperature(block["temperature"])
+
+        # Create block
+        html += f'<div style="flex: 0 0 {percentage:.2f}%; background: {color}; '
+        html += 'display: flex; align-items: center; justify-content: center; '
+        html += 'color: white; font-weight: bold; font-size: 12px; '
+        html += 'border-right: 1px solid rgba(255,255,255,0.3);">'
+        html += f'<div style="text-align: center; padding: 5px;">'
+        html += f'<div style="font-size: 14px;">{temp_display}</div>'
+        html += f'<div style="font-size: 10px; opacity: 0.9;">{block["start_time"]}-{display_end}</div>'
+        html += '</div>'
+        html += '</div>'
+
+    html += '</div>'
+
+    # Add time labels below
+    html += '<div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: #666;">'
+    html += '<span>00:00</span>'
+    html += '<span>06:00</span>'
+    html += '<span>12:00</span>'
+    html += '<span>18:00</span>'
+    html += '<span>24:00</span>'
+    html += '</div>'
+
+    html += '</div>'
+
+    return html
+
+
+def generate_blocks_list_html(blocks: list[dict[str, Any]]) -> str:
+    """
+    Generate HTML list of blocks for editing.
+
+    Args:
+        blocks: List of block dicts with start_time, end_time, temperature
+
+    Returns:
+        HTML string for blocks list
+    """
+    if not blocks:
+        return "<div style='padding: 10px; color: #999;'>Keine Blöcke definiert</div>"
+
+    sorted_blocks = sorted(blocks, key=lambda b: b["start_time"])
+
+    html = '<div style="margin: 10px 0;">'
+
+    for i, block in enumerate(sorted_blocks):
+        color = get_temperature_color(block["temperature"])
+        temp_display = format_temperature(block["temperature"])
+
+        # Display end time (convert 23:59 to 24:00 for clarity)
+        end_time = block["end_time"]
+        if end_time in ("23:59", "24:00"):
+            display_end = "24:00"
+        else:
+            display_end = end_time
+
+        html += '<div style="'
+        html += 'display: flex; align-items: center; '
+        html += 'padding: 12px; margin: 8px 0; '
+        html += 'background: #f8f9fa; border-radius: 6px; '
+        html += 'border-left: 4px solid ' + color + ';'
+        html += '">'
+
+        # Block number indicator
+        html += f'<div style="min-width: 30px; font-weight: bold; color: {color};">#{i+1}</div>'
+
+        # Block details
+        html += '<div style="flex: 1;">'
+        html += f'<span style="font-weight: 500;">{block["start_time"]} - {display_end}</span>'
+        html += f'<span style="margin-left: 15px; color: {color}; font-weight: bold;">{temp_display}</span>'
+        html += '</div>'
+
+        html += '</div>'
+
+    html += '</div>'
+
+    return html
+
+
+def generate_color_legend() -> str:
+    """Generate color legend for temperature ranges."""
+    html = '<div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 6px;">'
+    html += '<div style="font-weight: bold; margin-bottom: 8px; font-size: 12px;">Farbcodierung:</div>'
+    html += '<div style="display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px;">'
+
+    legend_items = [
+        ("≤15°C", "#0d6efd"),
+        ("16-18°C", "#0dcaf0"),
+        ("19-20°C", "#20c997"),
+        ("21-22°C", "#fd7e14"),
+        (">22°C", "#dc3545"),
+        ("OFF", "#6c757d"),
+    ]
+
+    for label, color in legend_items:
+        html += '<div style="display: flex; align-items: center;">'
+        html += f'<div style="width: 16px; height: 16px; background: {color}; border-radius: 3px; margin-right: 5px;"></div>'
+        html += f'<span>{label}</span>'
+        html += '</div>'
+
+    html += '</div>'
+    html += '</div>'
+
+    return html
