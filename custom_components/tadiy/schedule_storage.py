@@ -7,7 +7,6 @@ import logging
 from typing import Any
 
 from .const import (
-    DEFAULT_HUB_MODES,
     HUB_MODE_NORMAL,
     MODE_MANUAL,
     MODE_OFF,
@@ -15,7 +14,7 @@ from .const import (
     SCHEDULE_TYPE_WEEKDAY,
     SCHEDULE_TYPE_WEEKEND,
 )
-from .core.schedule_model import DaySchedule, RoomSchedule, ScheduleBlock
+from .core.schedule_model import ScheduleBlock
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ class ScheduleUIBlock:
     def __init__(
         self,
         start_time: str,  # HH:MM format
-        end_time: str,  # HH:MM format
+        end_time: str,  # HH:MM format (23:59 for end of day)
         temperature: float | str,  # float or "off"
     ):
         """Initialize UI block."""
@@ -87,7 +86,7 @@ class ScheduleStorageManager:
 
             except (ValueError, IndexError) as e:
                 _LOGGER.error("Invalid time in UI block %s: %s", ui_block.start_time, e)
-                raise ValueError(f"Ungültiges Zeitformat: {ui_block.start_time}") from e
+                raise ValueError(f"Invalid time format: {ui_block.start_time}") from e
 
             schedule_blocks.append(
                 ScheduleBlock(
@@ -106,7 +105,7 @@ class ScheduleStorageManager:
         Convert ScheduleBlocks to UI blocks by calculating end times.
 
         End time is derived from the start of the next block,
-        or 23:59 for the last block (TimeSelector doesn't support 24:00).
+        or 23:59 for the last block (end of day).
         """
         if not blocks:
             return []
@@ -120,8 +119,7 @@ class ScheduleStorageManager:
                 # End is start of next block
                 end_time = blocks[i + 1].start_time.strftime("%H:%M")
             else:
-                # Last block ends at 23:59 (UI representation of end-of-day)
-                # TimeSelector doesn't support 24:00
+                # Last block ends at 23:59 (end of day)
                 end_time = "23:59"
 
             ui_blocks.append(
@@ -145,25 +143,42 @@ class ScheduleStorageManager:
             (is_valid, error_message)
         """
         if not ui_blocks:
-            return False, "Mindestens ein Block ist erforderlich"
+            return False, "At least one block is required"
 
         # Sort by start time
         sorted_blocks = sorted(ui_blocks, key=lambda b: b.start_time)
 
         # Validate each individual block
         for block in sorted_blocks:
-            # Allow 24:00 as valid end time
-            end_time_normalized = "23:59" if block.end_time == "24:00" else block.end_time
-            if block.start_time >= end_time_normalized:
-                return False, f"Block {block.start_time}-{block.end_time} hat ungültigen Zeitbereich"
+            # Parse times for comparison
+            try:
+                start_parts = block.start_time.split(":")
+                end_parts = block.end_time.split(":")
+
+                start_h, start_m = int(start_parts[0]), int(start_parts[1])
+                end_h, end_m = int(end_parts[0]), int(end_parts[1])
+
+                # Convert to minutes for comparison
+                start_minutes = start_h * 60 + start_m
+                end_minutes = end_h * 60 + end_m
+
+                # Special case: 23:59 is treated as end of day (1440 minutes)
+                if end_h == 23 and end_m == 59:
+                    end_minutes = 24 * 60
+
+                if start_minutes >= end_minutes:
+                    return False, f"Block {block.start_time}-{block.end_time} has invalid time range"
+
+            except (ValueError, IndexError):
+                return False, f"Invalid time format in block {block.start_time}-{block.end_time}"
 
         # First block must start at 00:00
         if sorted_blocks[0].start_time != "00:00":
-            return False, "Erster Block muss um 00:00 starten"
+            return False, "First block must start at 00:00"
 
-        # Last block must end at 23:59 or 24:00 (both represent end-of-day)
-        if sorted_blocks[-1].end_time not in ("23:59", "24:00"):
-            return False, "Letzter Block muss um 23:59 enden"
+        # Last block must end at 23:59 (end of day)
+        if sorted_blocks[-1].end_time != "23:59":
+            return False, "Last block must end at 23:59"
 
         # Check for gaps and overlaps
         for i in range(len(sorted_blocks) - 1):
@@ -174,51 +189,15 @@ class ScheduleStorageManager:
                 if current_end < next_start:
                     return (
                         False,
-                        f"Lücke zwischen {current_end} und {next_start}",
+                        f"Gap between {current_end} and {next_start}",
                     )
                 else:
                     return (
                         False,
-                        f"Überlappung zwischen {sorted_blocks[i].start_time} und {next_start}",
+                        f"Overlap between {sorted_blocks[i].start_time} and {next_start}",
                     )
 
         return True, None
-
-    @staticmethod
-    def auto_fix_ui_blocks(
-        ui_blocks: list[ScheduleUIBlock],
-    ) -> list[ScheduleUIBlock]:
-        """
-        Auto-fix common issues in UI blocks.
-
-        - Sorts by start time
-        - Adjusts end times to match next block's start
-        - Ensures first block starts at 00:00
-        - Ensures last block ends at 23:59 (end-of-day)
-        """
-        if not ui_blocks:
-            return []
-
-        # Sort by start time
-        sorted_blocks = sorted(ui_blocks, key=lambda b: b.start_time)
-
-        # Fix first block
-        if sorted_blocks[0].start_time != "00:00":
-            sorted_blocks[0].start_time = "00:00"
-
-        # Fix end times and gaps
-        fixed_blocks = []
-        for i, block in enumerate(sorted_blocks):
-            if i < len(sorted_blocks) - 1:
-                # End time should match next block's start
-                block.end_time = sorted_blocks[i + 1].start_time
-            else:
-                # Last block ends at 23:59 (UI representation of end-of-day)
-                block.end_time = "23:59"
-
-            fixed_blocks.append(block)
-
-        return fixed_blocks
 
     @staticmethod
     def create_default_schedule(
@@ -274,17 +253,17 @@ class ScheduleStorageManager:
         mode_names = {
             "normal": "Normal",
             "homeoffice": "Homeoffice",
-            "manual": "Manuell",
-            "off": "Aus",
+            "manual": "Manual",
+            "off": "Off",
         }
 
         base_name = mode_names.get(mode, mode.capitalize())
 
         if schedule_type == SCHEDULE_TYPE_WEEKDAY:
-            return f"{base_name} - Werktag (Mo-Fr)"
+            return f"{base_name} - Weekday (Mon-Fri)"
         elif schedule_type == SCHEDULE_TYPE_WEEKEND:
-            return f"{base_name} - Wochenende (Sa-So)"
+            return f"{base_name} - Weekend (Sat-Sun)"
         elif schedule_type == SCHEDULE_TYPE_DAILY:
-            return f"{base_name} (täglich)"
+            return f"{base_name} (daily)"
 
         return base_name
