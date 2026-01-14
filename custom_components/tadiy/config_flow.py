@@ -144,9 +144,12 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     # Add hub_entry_id to room data for via_device
                     user_input["hub_entry_id"] = hub_entry.entry_id
 
+                    # Remove empty optional fields
+                    cleaned_data = {k: v for k, v in user_input.items() if v not in ("", [], None)}
+
                     return self.async_create_entry(
                         title=room_name,
-                        data=user_input,
+                        data=cleaned_data,
                     )
             except Exception:
                 _LOGGER.exception("Unexpected exception during room setup")
@@ -166,19 +169,19 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                             multiple=True,
                         )
                     ),
-                    vol.Optional(CONF_MAIN_TEMP_SENSOR): selector.EntitySelector(
+                    vol.Optional(CONF_MAIN_TEMP_SENSOR, default=""): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="sensor",
                             device_class="temperature",
                         )
                     ),
-                    vol.Optional(CONF_WINDOW_SENSORS): selector.EntitySelector(
+                    vol.Optional(CONF_WINDOW_SENSORS, default=[]): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="binary_sensor",
                             multiple=True,
                         )
                     ),
-                    vol.Optional(CONF_OUTDOOR_SENSOR): selector.EntitySelector(
+                    vol.Optional(CONF_OUTDOOR_SENSOR, default=""): selector.EntitySelector(
                         selector.EntitySelectorConfig(
                             domain="sensor",
                             device_class="temperature",
