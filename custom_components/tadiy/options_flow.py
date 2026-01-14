@@ -216,64 +216,52 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
 
         current_data = self.config_entry.data
 
-        # Build schema dynamically to avoid default=None for EntitySelectors
+        # Build schema step-by-step to avoid 400 Bad Request
+        # CRITICAL: Complex dict literals with TextSelectorConfig cause validation errors
+        # Solution: Start with simple dict, then add fields one by one
         schema_dict = {
             vol.Required(
                 CONF_ROOM_NAME,
                 default=current_data.get(CONF_ROOM_NAME, ""),
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(
-                    type=selector.TextSelectorType.TEXT,
-                    autocomplete=None,
-                )
-            ),
-            vol.Required(
-                CONF_TRV_ENTITIES,
-                default=current_data.get(CONF_TRV_ENTITIES, []),
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="climate",
-                    multiple=True,
-                )
-            ),
+            ): selector.TextSelector()  # Simplified - no config needed
         }
 
-        # Add optional fields - ALWAYS provide explicit default to avoid 400 Bad Request
-        # EntitySelectors need a valid default value, never None or undefined
-        # CRITICAL: Use `or ""` to handle None values in stored config
-        main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR) or ""
-        schema_dict[
-            vol.Optional(
-                CONF_MAIN_TEMP_SENSOR,
-                default=main_temp,
+        # Add TRV entities (required field)
+        schema_dict[vol.Required(
+            CONF_TRV_ENTITIES,
+            default=current_data.get(CONF_TRV_ENTITIES, []),
+        )] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="climate",
+                multiple=True,
             )
-        ] = selector.EntitySelector(
+        )
+
+        # Add optional fields with explicit defaults
+        schema_dict[vol.Optional(
+            CONF_MAIN_TEMP_SENSOR,
+            default=current_data.get(CONF_MAIN_TEMP_SENSOR, ""),
+        )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
             )
         )
 
-        window_sensors = current_data.get(CONF_WINDOW_SENSORS) or []
-        schema_dict[
-            vol.Optional(
-                CONF_WINDOW_SENSORS,
-                default=window_sensors,
-            )
-        ] = selector.EntitySelector(
+        schema_dict[vol.Optional(
+            CONF_WINDOW_SENSORS,
+            default=current_data.get(CONF_WINDOW_SENSORS, []),
+        )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="binary_sensor",
                 multiple=True,
             )
         )
 
-        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR) or ""
-        schema_dict[
-            vol.Optional(
-                CONF_OUTDOOR_SENSOR,
-                default=outdoor_sensor,
-            )
-        ] = selector.EntitySelector(
+        schema_dict[vol.Optional(
+            CONF_OUTDOOR_SENSOR,
+            default=current_data.get(CONF_OUTDOOR_SENSOR, ""),
+        )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
