@@ -192,149 +192,75 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             description_placeholders={"modes_info": description},
         )
 
-#_______________________________________________________________________________________________________________________________#
-
     async def async_step_room_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Configure room basic settings."""
-        
-        try:
-            _LOGGER.error(f"DEBUG - Entering room_config")
-            
-            if user_input is not None:
-                new_data = dict(self.config_entry.data)
-                for key, value in user_input.items():
-                    if value in ("", [], None):
-                        new_data.pop(key, None)
-                    else:
-                        new_data[key] = value
-                
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data=new_data,
-                )
-                return self.async_create_entry(title="", data={})
-            
-            current_data = self.config_entry.data
-            
-            schema_dict = {
-                vol.Required(
-                    CONF_ROOM_NAME,
-                    default=current_data.get(CONF_ROOM_NAME, ""),
-                ): selector.TextSelector()
-            }
-            
-            # TEST 1: Füge TRV_ENTITIES hinzu
-            _LOGGER.error("DEBUG - Adding TRV_ENTITIES")
-            schema_dict[vol.Required(
-                CONF_TRV_ENTITIES,
-                default=current_data.get(CONF_TRV_ENTITIES, []),
-            )] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="climate",
-                    multiple=True,
-                )
-            )
-            _LOGGER.error("DEBUG - TRV_ENTITIES added")
-            
-            # TEST 2: Füge MAIN_TEMP_SENSOR hinzu
-            _LOGGER.error("DEBUG - Adding MAIN_TEMP_SENSOR")
-            main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR, "")
-            _LOGGER.error(f"DEBUG - main_temp value: '{main_temp}' (type: {type(main_temp)})")
-            schema_dict[vol.Optional(
-                CONF_MAIN_TEMP_SENSOR,
-                default=main_temp,
-            )] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor",
-                    device_class="temperature",
-                )
-            )
-            _LOGGER.error("DEBUG - MAIN_TEMP_SENSOR added")
-            
-            # TEST 3: Füge WINDOW_SENSORS hinzu
-            _LOGGER.error("DEBUG - Adding WINDOW_SENSORS")
-            window_sensors = current_data.get(CONF_WINDOW_SENSORS, [])
-            _LOGGER.error(f"DEBUG - window_sensors value: {window_sensors} (type: {type(window_sensors)})")
-            schema_dict[vol.Optional(
-                CONF_WINDOW_SENSORS,
-                default=window_sensors,
-            )] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="binary_sensor",
-                    multiple=True,
-                )
-            )
-            _LOGGER.error("DEBUG - WINDOW_SENSORS added")
-            
-            # TEST 4: Füge OUTDOOR_SENSOR hinzu
-            _LOGGER.error("DEBUG - Adding OUTDOOR_SENSOR")
-            outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR, "")
-            _LOGGER.error(f"DEBUG - outdoor_sensor value: '{outdoor_sensor}' (type: {type(outdoor_sensor)})")
-            schema_dict[vol.Optional(
-                CONF_OUTDOOR_SENSOR,
-                default=outdoor_sensor,
-            )] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor",
-                    device_class="temperature",
-                )
-            )
-            _LOGGER.error("DEBUG - OUTDOOR_SENSOR added")
-            
-            _LOGGER.error("DEBUG - All fields added, showing form")
-            
-            return self.async_show_form(
-                step_id="room_config",
-                data_schema=vol.Schema(schema_dict),
-            )
-            
-        except Exception as e:
-            _LOGGER.error(f"DEBUG - EXCEPTION: {type(e).__name__}: {e}", exc_info=True)
-            raise
+        if user_input is not None:
+            new_data = dict(self.config_entry.data)
 
+            # Remove empty optional fields instead of storing "" or []
+            for key, value in user_input.items():
+                if value in ("", [], None):
+                    new_data.pop(key, None)
+                else:
+                    new_data[key] = value
 
-
-#_______________________________________________________________________________________________________________________________#
-
-
-        # Add optional fields - ALWAYS provide explicit default to avoid 400 Bad Request
-        # EntitySelectors need a valid default value, never None or undefined
-        # CRITICAL: Use `or ""` to handle None values in stored config
-        main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR) or ""
-        schema_dict[
-            vol.Optional(
-                CONF_MAIN_TEMP_SENSOR,
-                default=main_temp,
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data=new_data,
             )
-        ] = selector.EntitySelector(
+
+            return self.async_create_entry(title="", data={})
+
+        current_data = self.config_entry.data
+
+        # Build schema step-by-step to avoid 400 Bad Request
+        # CRITICAL: Complex dict literals with TextSelectorConfig cause validation errors
+        # Solution: Start with simple dict, then add fields one by one
+        schema_dict = {
+            vol.Required(
+                CONF_ROOM_NAME,
+                default=current_data.get(CONF_ROOM_NAME, ""),
+            ): selector.TextSelector()  # Simplified - no config needed
+        }
+
+        # Add TRV entities (required field)
+        schema_dict[vol.Required(
+            CONF_TRV_ENTITIES,
+            default=current_data.get(CONF_TRV_ENTITIES, []),
+        )] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="climate",
+                multiple=True,
+            )
+        )
+
+        # Add optional fields with explicit defaults
+        schema_dict[vol.Optional(
+            CONF_MAIN_TEMP_SENSOR,
+            default=current_data.get(CONF_MAIN_TEMP_SENSOR, ""),
+        )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
             )
         )
 
-        window_sensors = current_data.get(CONF_WINDOW_SENSORS) or []
-        schema_dict[
-            vol.Optional(
-                CONF_WINDOW_SENSORS,
-                default=window_sensors,
-            )
-        ] = selector.EntitySelector(
+        schema_dict[vol.Optional(
+            CONF_WINDOW_SENSORS,
+            default=current_data.get(CONF_WINDOW_SENSORS, []),
+        )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="binary_sensor",
                 multiple=True,
             )
         )
 
-        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR) or ""
-        schema_dict[
-            vol.Optional(
-                CONF_OUTDOOR_SENSOR,
-                default=outdoor_sensor,
-            )
-        ] = selector.EntitySelector(
+        schema_dict[vol.Optional(
+            CONF_OUTDOOR_SENSOR,
+            default=current_data.get(CONF_OUTDOOR_SENSOR, ""),
+        )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
