@@ -1,12 +1,14 @@
 """Device info helpers for TaDIY integration."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from ..const import CONF_HUB, DOMAIN, VERSION
+from ..const import CONF_HUB, DOMAIN
 
 
 def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> dict[str, Any]:
@@ -25,7 +27,14 @@ def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> di
 
     if is_hub:
         device_info["model"] = "Adaptive Climate Orchestrator"
-        device_info["sw_version"] = VERSION
+        # Read version dynamically from manifest.json
+        try:
+            manifest_path = Path(__file__).parent.parent / "manifest.json"
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+                device_info["sw_version"] = manifest.get("version", "unknown")
+        except Exception:
+            device_info["sw_version"] = "unknown"
         device_info["name"] = entry.title
         device_info["suggested_area"] = "!Hub"  # ! prefix in area name sorts to top
     else:
