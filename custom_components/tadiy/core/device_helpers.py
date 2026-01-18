@@ -6,16 +6,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from ..const import CONF_HUB, DOMAIN
-
-# Version is imported at module load time (not in event loop)
-# This avoids blocking I/O warnings
-try:
-    import importlib.metadata
-    VERSION = importlib.metadata.version("tadiy")
-except Exception:
-    # Fallback: hardcoded version (updated by release script)
-    VERSION = "0.2.2.2"
+from ..const import CONF_HUB, DOMAIN, VERSION
 
 
 def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> dict[str, Any]:

@@ -15,6 +15,7 @@ from .const import (
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
     CONF_ROOM_NAME,
+    CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
     CONF_WINDOW_SENSORS,
     DEFAULT_HUB_MODES,
@@ -88,6 +89,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 "add_mode": "Add Custom Mode",
                 "remove_mode": "Remove Custom Mode",
                 "view_modes": "View All Modes",
+                "panel_settings": "Panel Settings",
             },
             description_placeholders={"room_count": str(room_count)},
         )
@@ -213,6 +215,40 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             description_placeholders={"modes_info": description},
         )
 
+    async def async_step_panel_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure panel visibility settings."""
+        if user_input is not None:
+            # Update config entry with new panel setting
+            new_data = dict(self.config_entry.data)
+            new_data[CONF_SHOW_PANEL] = user_input.get(CONF_SHOW_PANEL, True)
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+
+            # Trigger panel update by reloading entry
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
+            return self.async_create_entry(title="", data={})
+
+        # Get current setting
+        current_show_panel = self.config_entry.data.get(CONF_SHOW_PANEL, True)
+
+        return self.async_show_form(
+            step_id="panel_settings",
+            data_schema=vol.Schema({
+                vol.Required(CONF_SHOW_PANEL, default=current_show_panel): bool,
+            }),
+            description_placeholders={
+                "info": (
+                    "Control whether the TaDIY Schedules panel appears in the sidebar.\n\n"
+                    "When enabled, you can access all room schedules from the sidebar.\n"
+                    "When disabled, schedules can only be accessed via room configuration."
+                )
+            },
+        )
 
     async def async_step_room_config(
         self, user_input: dict[str, Any] | None = None

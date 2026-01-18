@@ -1,7 +1,24 @@
 """Constants for the TaDIY integration."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
 from typing import Final
 
 DOMAIN: Final = "tadiy"
+
+# Version from manifest.json
+def _get_version() -> str:
+    """Get version from manifest.json."""
+    try:
+        manifest_path = Path(__file__).parent / "manifest.json"
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+            return manifest.get("version", "unknown")
+    except Exception:
+        return "unknown"
+
+VERSION: Final = _get_version()
 
 # Configuration
 CONF_HUB: Final = "is_hub"
@@ -11,6 +28,7 @@ CONF_MAIN_TEMP_SENSOR: Final = "main_temp_sensor"
 CONF_WINDOW_SENSORS: Final = "window_sensors"
 CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
 CONF_CUSTOM_MODES: Final = "custom_modes"  # Additional custom modes for hub
+CONF_SHOW_PANEL: Final = "show_panel"  # Show schedules panel in sidebar
 
 # Global defaults (Hub-level)
 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: Final = "global_window_open_timeout"

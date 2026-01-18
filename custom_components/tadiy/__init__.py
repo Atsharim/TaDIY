@@ -23,6 +23,7 @@ from .const import (
     ATTR_TEMPERATURE,
     CONF_HUB,
     CONF_ROOM_NAME,
+    CONF_SHOW_PANEL,
     DEFAULT_BOOST_DURATION,
     DEFAULT_BOOST_TEMPERATURE,
     DOMAIN,
@@ -131,20 +132,22 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await async_register_services(hass, hub_coordinator, entry)
 
-    # Register custom panel in sidebar
-    from homeassistant.components import frontend
-    await frontend.async_register_built_in_panel(
-        hass,
-        component_name="custom",
-        frontend_url_path="tadiy-schedules",
-        sidebar_title="TaDIY Schedules",
-        sidebar_icon="mdi:calendar-clock",
-        config={
-            "js_url": "/tadiy/panel.js",
-        },
-        require_admin=False,
-    )
-    _LOGGER.info("TaDIY: Registered custom panel in sidebar")
+    # Register custom panel in sidebar if enabled
+    show_panel = entry.data.get(CONF_SHOW_PANEL, True)
+    if show_panel:
+        from homeassistant.components import frontend
+        await frontend.async_register_built_in_panel(
+            hass,
+            component_name="custom",
+            frontend_url_path="tadiy-schedules",
+            sidebar_title="TaDIY Schedules",
+            sidebar_icon="mdi:calendar-clock",
+            config={
+                "js_url": "/tadiy/panel.js",
+            },
+            require_admin=False,
+        )
+        _LOGGER.info("TaDIY: Registered custom panel in sidebar")
 
     return True
 
