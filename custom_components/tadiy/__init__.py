@@ -132,7 +132,9 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_register_services(hass, hub_coordinator, entry)
 
     # Register custom panel in sidebar
-    await hass.components.frontend.async_register_built_in_panel(
+    from homeassistant.components import frontend
+    await frontend.async_register_built_in_panel(
+        hass,
         component_name="custom",
         frontend_url_path="tadiy-schedules",
         sidebar_title="TaDIY Schedules",
@@ -388,7 +390,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.data[DOMAIN].pop("hub_coordinator", None)
             # Remove custom panel from sidebar
             try:
-                await hass.components.frontend.async_remove_panel("tadiy-schedules")
+                from homeassistant.components import frontend
+                await frontend.async_remove_panel(hass, "tadiy-schedules")
                 _LOGGER.info("TaDIY: Removed custom panel from sidebar")
             except Exception as err:
                 _LOGGER.warning("Failed to remove TaDIY panel: %s", err)
