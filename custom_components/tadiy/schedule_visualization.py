@@ -101,7 +101,7 @@ def generate_timeline_html(blocks: list[dict[str, Any]]) -> str:
             'color: white; font-weight: bold; font-size: 12px; '
             'border-right: 1px solid rgba(255,255,255,0.3);">'
         )
-        html += f'<div style="text-align: center; padding: 5px;">'
+        html += '<div style="text-align: center; padding: 5px;">'
         html += f'<div style="font-size: 14px;">{temp_display}</div>'
         html += f'<div style="font-size: 10px; opacity: 0.9;">{start_time_str}-{display_end}</div>'
         html += '</div>'
