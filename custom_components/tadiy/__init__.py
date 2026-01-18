@@ -135,18 +135,21 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register custom panel in sidebar if enabled
     show_panel = entry.data.get(CONF_SHOW_PANEL, True)
     if show_panel:
-        from homeassistant.components import frontend
-        await frontend.async_register_built_in_panel(
-            hass,
-            component_name="custom",
-            frontend_url_path="tadiy-schedules",
-            sidebar_title="TaDIY Schedules",
-            sidebar_icon="mdi:calendar-clock",
-            config={
-                "js_url": "/tadiy/panel.js",
+        hass.data.setdefault("frontend_panels", {})
+        hass.data["frontend_panels"]["tadiy-schedules"] = {
+            "component_name": "custom",
+            "icon": "mdi:calendar-clock",
+            "title": "TaDIY Schedules",
+            "url_path": "tadiy-schedules",
+            "config": {
+                "_panel_custom": {
+                    "name": "tadiy-schedules-panel",
+                    "js_url": "/tadiy/panel.js",
+                }
             },
-            require_admin=False,
-        )
+            "require_admin": False,
+        }
+        hass.bus.async_fire("panels_updated")
         _LOGGER.info("TaDIY: Registered custom panel in sidebar")
 
     return True
@@ -392,12 +395,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_SET_SCHEDULE)
             hass.data[DOMAIN].pop("hub_coordinator", None)
             # Remove custom panel from sidebar
-            try:
-                from homeassistant.components import frontend
-                await frontend.async_remove_panel(hass, "tadiy-schedules")
+            if "frontend_panels" in hass.data and "tadiy-schedules" in hass.data["frontend_panels"]:
+                hass.data["frontend_panels"].pop("tadiy-schedules")
+                hass.bus.async_fire("panels_updated")
                 _LOGGER.info("TaDIY: Removed custom panel from sidebar")
-            except Exception as err:
-                _LOGGER.warning("Failed to remove TaDIY panel: %s", err)
 
     return unload_ok
 
