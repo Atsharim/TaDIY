@@ -17,14 +17,11 @@ class ScheduleEditorMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Show information about using the Lovelace card for schedule editing."""
-        if user_input is not None:
-            # Return to main menu
-            return self.async_abort(reason="use_lovelace_card")
-
-        return self.async_show_form(
-            step_id="manage_schedules",
+        # Just show an abort message with instructions
+        return self.async_abort(
+            reason="use_lovelace_card",
             description_placeholders={
-                "instructions": (
+                "message": (
                     "Schedule editing is now done via a custom Lovelace card.\n\n"
                     "═══════════════════════════════════\n"
                     "AUTOMATIC SETUP (Recommended):\n"
@@ -52,8 +49,7 @@ class ScheduleEditorMixin:
                     "  resources:\n"
                     "    - url: /tadiy/tadiy-schedule-card.js\n"
                     "      type: module\n\n"
-                    "Then restart Home Assistant.\n\n"
-                    "Press 'Submit' to return to the main menu."
+                    "Then restart Home Assistant."
                 )
-            },
+            }
         )
