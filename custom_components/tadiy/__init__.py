@@ -130,6 +130,20 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await async_register_services(hass, hub_coordinator, entry)
+
+    # Register custom panel in sidebar
+    await hass.components.frontend.async_register_built_in_panel(
+        component_name="custom",
+        frontend_url_path="tadiy-schedules",
+        sidebar_title="TaDIY Schedules",
+        sidebar_icon="mdi:calendar-clock",
+        config={
+            "js_url": "/tadiy/panel.js",
+        },
+        require_admin=False,
+    )
+    _LOGGER.info("TaDIY: Registered custom panel in sidebar")
+
     return True
 
 
@@ -372,6 +386,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_GET_SCHEDULE)
             hass.services.async_remove(DOMAIN, SERVICE_SET_SCHEDULE)
             hass.data[DOMAIN].pop("hub_coordinator", None)
+            # Remove custom panel from sidebar
+            try:
+                await hass.components.frontend.async_remove_panel("tadiy-schedules")
+                _LOGGER.info("TaDIY: Removed custom panel from sidebar")
+            except Exception as err:
+                _LOGGER.warning("Failed to remove TaDIY panel: %s", err)
 
     return unload_ok
 

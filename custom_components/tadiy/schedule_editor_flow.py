@@ -17,39 +17,41 @@ class ScheduleEditorMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Show information about using the Lovelace card for schedule editing."""
-        # Just show an abort message with instructions
+        from homeassistant.const import CONF_ENTITY_ID
+
+        # Get room entity_id
+        room_name = self.config_entry.data.get("room_name", "unknown")
+        entity_id = f"climate.{room_name.lower().replace(' ', '_')}"
+
+        # Create card config YAML
+        card_yaml = f"""type: custom:tadiy-schedule-card
+entity: {entity_id}"""
+
+        # Show abort message with card config
         return self.async_abort(
             reason="use_lovelace_card",
             description_placeholders={
                 "message": (
-                    "Schedule editing is now done via a custom Lovelace card.\n\n"
-                    "═══════════════════════════════════\n"
-                    "AUTOMATIC SETUP (Recommended):\n"
-                    "═══════════════════════════════════\n\n"
-                    "1. Go to your dashboard\n"
-                    "2. Click '+ Add Card'\n"
-                    "3. Search for 'TaDIY Schedule Card'\n"
-                    "4. Configure the card:\n"
-                    "   entity: climate.YOUR_ROOM_NAME\n\n"
-                    "The card is automatically available at:\n"
-                    "  /tadiy/tadiy-schedule-card.js\n\n"
-                    "═══════════════════════════════════\n"
+                    "Schedule editing uses a visual card interface.\n\n"
+                    "═══════════════════════════════════════════════\n"
+                    "QUICK SETUP:\n"
+                    "═══════════════════════════════════════════════\n\n"
+                    "1. Go to any Dashboard\n"
+                    "2. Click '+ Add Card' → Manual Card\n"
+                    "3. Paste this YAML:\n\n"
+                    f"{card_yaml}\n\n"
+                    "4. Click Save\n\n"
+                    "The card will appear with a visual schedule editor!\n\n"
+                    "═══════════════════════════════════════════════\n"
                     "FEATURES:\n"
-                    "═══════════════════════════════════\n"
-                    "✓ Interactive visual timeline\n"
-                    "✓ Add/Edit/Delete blocks with real buttons\n"
-                    "✓ Live validation and updates\n"
-                    "✓ Color-coded temperature display\n"
-                    "✓ Multiple mode support\n\n"
-                    "═══════════════════════════════════\n"
-                    "MANUAL REGISTRATION (Optional):\n"
-                    "═══════════════════════════════════\n\n"
-                    "If the card doesn't appear, add to configuration.yaml:\n\n"
-                    "lovelace:\n"
-                    "  resources:\n"
-                    "    - url: /tadiy/tadiy-schedule-card.js\n"
-                    "      type: module\n\n"
-                    "Then restart Home Assistant."
+                    "═══════════════════════════════════════════════\n"
+                    "✓ Visual timeline with color-coded temperatures\n"
+                    "✓ Real buttons for editing (not checkboxes!)\n"
+                    "✓ Live validation with error messages\n"
+                    "✓ Add/Edit/Delete schedule blocks\n"
+                    "✓ Switch between modes (Normal, Homeoffice, etc.)\n\n"
+                    "The card is automatically available at:\n"
+                    "/tadiy/tadiy-schedule-card.js"
                 )
             }
         )
