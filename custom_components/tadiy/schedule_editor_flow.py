@@ -7,6 +7,8 @@ from typing import Any
 
 from homeassistant.data_entry_flow import FlowResult
 
+from .const import VERSION
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -49,7 +51,7 @@ entity: {entity_id}"""
                     "✓ Add/Edit/Delete schedule blocks\n"
                     "✓ Switch between modes (Normal, Homeoffice, etc.)\n\n"
                     "The card is automatically available at:\n"
-                    "/tadiy/tadiy-schedule-card.js"
+                    f"/tadiy/tadiy-schedule-card.js?v={VERSION}"
                 )
             }
         )
