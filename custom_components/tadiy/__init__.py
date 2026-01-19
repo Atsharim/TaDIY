@@ -245,10 +245,14 @@ async def async_register_services(
 
         # Find room coordinator by entity_id
         room_coord = None
-        for entry_id, data in hass.data[DOMAIN].items():
+        for data_entry_id, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and data.get("type") == "room":
-                # Check if this room has the entity
-                if f"climate.{data['entry'].data.get(CONF_ROOM_NAME, '').lower().replace(' ', '_')}" == entity_id:
+                # Check if this room has the entity - match by unique_id pattern
+                expected_unique_id = f"{data_entry_id}_climate"
+                entity_registry = hass.helpers.entity_registry.async_get(hass)
+                entity_entry = entity_registry.async_get(entity_id)
+
+                if entity_entry and entity_entry.unique_id == expected_unique_id:
                     room_coord = data["coordinator"]
                     break
 
@@ -294,9 +298,14 @@ async def async_register_services(
 
         # Find room coordinator
         room_coord = None
-        for entry_id, data in hass.data[DOMAIN].items():
+        for data_entry_id, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and data.get("type") == "room":
-                if f"climate.{data['entry'].data.get(CONF_ROOM_NAME, '').lower().replace(' ', '_')}" == entity_id:
+                # Check if this room has the entity - match by unique_id pattern
+                expected_unique_id = f"{data_entry_id}_climate"
+                entity_registry = hass.helpers.entity_registry.async_get(hass)
+                entity_entry = entity_registry.async_get(entity_id)
+
+                if entity_entry and entity_entry.unique_id == expected_unique_id:
                     room_coord = data["coordinator"]
                     break
 
