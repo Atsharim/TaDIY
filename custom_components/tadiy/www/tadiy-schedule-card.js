@@ -38,18 +38,21 @@ class TaDiyScheduleCard extends HTMLElement {
   async loadAvailableModes() {
     if (!this._hass) return;
 
-    // Get hub entity to find custom modes
+    // Get hub entity to find custom modes - check all select entities
     const hubEntity = Object.values(this._hass.states).find(
-      entity => entity.entity_id.includes('select') &&
-                entity.entity_id.includes('hub_mode') &&
-                entity.attributes.integration === 'tadiy'
+      entity => entity.entity_id.startsWith('select.') &&
+                entity.entity_id.includes('hub_mode')
     );
+
+    console.log('TaDIY: Found hub entity:', hubEntity);
 
     if (hubEntity && hubEntity.attributes.options) {
       this._availableModes = hubEntity.attributes.options;
+      console.log('TaDIY: Loaded modes:', this._availableModes);
     } else {
       // Fallback to default modes
       this._availableModes = ['normal', 'homeoffice', 'manual', 'off'];
+      console.warn('TaDIY: Using default modes, hub entity not found');
     }
 
     this.render();
@@ -59,17 +62,18 @@ class TaDiyScheduleCard extends HTMLElement {
     if (!this._hass || !this._config) return;
 
     try {
-      // FIXED: Correct service call format for Home Assistant
-      const result = await this._hass.callService(
-        'tadiy',
-        'get_schedule',
-        {
+      // FIXED: Use callWS for services with return_response
+      const result = await this._hass.callWS({
+        type: 'call_service',
+        domain: 'tadiy',
+        service: 'get_schedule',
+        service_data: {
           entity_id: this._config.entity,
           mode: this._selectedMode,
           schedule_type: this._selectedScheduleType,
         },
-        { return_response: true }  // FIXED: Correct format
-      );
+        return_response: true,
+      });
 
       if (result && result.response && result.response.blocks) {
         this._editingBlocks = result.response.blocks;
@@ -370,17 +374,17 @@ class TaDiyScheduleCard extends HTMLElement {
           </div>
 
           <div class="actions">
-            <button class="btn btn-success" data-action="add">
-              ➕ Add Block
-            </button>
-            <button class="btn btn-primary" data-action="save">
-              💾 Save
+            <button class="btn btn-warning" data-action="back">
+              ◀ Back
             </button>
             <button class="btn btn-secondary" data-action="reset">
               🔄 Reset
             </button>
-            <button class="btn btn-warning" data-action="back">
-              ◀ Back
+            <button class="btn btn-primary" data-action="save">
+              💾 Save
+            </button>
+            <button class="btn btn-success" data-action="add">
+              ➕ Add Block
             </button>
           </div>
 
