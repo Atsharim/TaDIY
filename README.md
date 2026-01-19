@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 [![GitHub Release](https://img.shields.io/github/release/Atsharim/TaDIY.svg)](https://github.com/Atsharim/TaDIY/releases)
-[![License](https://img.shields.io/github/license/Atsharim/TaDIY.svg)](LICENSE)
+[![License](https://img.shields.io/github/license/Atsharim/TaDIY.svg)](https://github.com/Atsharim/TaDIY/blob/main/LICENSE)
 
 **TaDIY** (Take a DIY) is an advanced, adaptive climate control integration for Home Assistant. It provides intelligent heating orchestration with learning capabilities, schedule management, and multi-room coordination.
 
