@@ -132,25 +132,10 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await async_register_services(hass, hub_coordinator, entry)
 
-    # Register custom panel in sidebar if enabled
-    show_panel = entry.data.get(CONF_SHOW_PANEL, True)
-    if show_panel:
-        hass.data.setdefault("frontend_panels", {})
-        hass.data["frontend_panels"]["tadiy-schedules"] = {
-            "component_name": "custom",
-            "icon": "mdi:calendar-clock",
-            "title": "TaDIY Schedules",
-            "url_path": "tadiy-schedules",
-            "config": {
-                "_panel_custom": {
-                    "name": "tadiy-schedules-panel",
-                    "js_url": "/tadiy/panel.js",
-                }
-            },
-            "require_admin": False,
-        }
-        hass.bus.async_fire("panels_updated")
-        _LOGGER.info("TaDIY: Registered custom panel in sidebar")
+    # TODO: Implement custom panel registration
+    # Note: Direct writing to hass.data["frontend_panels"] does not work
+    # Need to use proper panel registration API
+    _LOGGER.info("TaDIY Hub setup complete")
 
     return True
 
@@ -394,11 +379,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_GET_SCHEDULE)
             hass.services.async_remove(DOMAIN, SERVICE_SET_SCHEDULE)
             hass.data[DOMAIN].pop("hub_coordinator", None)
-            # Remove custom panel from sidebar
-            if "frontend_panels" in hass.data and "tadiy-schedules" in hass.data["frontend_panels"]:
-                hass.data["frontend_panels"].pop("tadiy-schedules")
-                hass.bus.async_fire("panels_updated")
-                _LOGGER.info("TaDIY: Removed custom panel from sidebar")
 
     return unload_ok
 
