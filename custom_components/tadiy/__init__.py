@@ -23,7 +23,6 @@ from .const import (
     ATTR_TEMPERATURE,
     CONF_HUB,
     CONF_ROOM_NAME,
-    CONF_SHOW_PANEL,
     DEFAULT_BOOST_DURATION,
     DEFAULT_BOOST_TEMPERATURE,
     DOMAIN,
@@ -195,7 +194,7 @@ async def async_register_services(
         temperature = call.data.get(ATTR_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE)
 
         for entry_id, data in hass.data[DOMAIN].items():
-            if data.get("type") == "room":
+            if isinstance(data, dict) and data.get("type") == "room":
                 room_coord = data["coordinator"]
                 for trv_entity_id in room_coord.room_config.trv_entity_ids:
                     try:
@@ -221,7 +220,7 @@ async def async_register_services(
         await hub_coordinator.async_request_refresh()
 
         for entry_id, data in hass.data[DOMAIN].items():
-            if data.get("type") == "room":
+            if isinstance(data, dict) and data.get("type") == "room":
                 await data["coordinator"].async_request_refresh()
 
     async def handle_set_heating_curve(call: ServiceCall) -> None:
@@ -247,7 +246,7 @@ async def async_register_services(
         # Find room coordinator by entity_id
         room_coord = None
         for entry_id, data in hass.data[DOMAIN].items():
-            if data.get("type") == "room":
+            if isinstance(data, dict) and data.get("type") == "room":
                 # Check if this room has the entity
                 if f"climate.{data['entry'].data.get(CONF_ROOM_NAME, '').lower().replace(' ', '_')}" == entity_id:
                     room_coord = data["coordinator"]
@@ -296,7 +295,7 @@ async def async_register_services(
         # Find room coordinator
         room_coord = None
         for entry_id, data in hass.data[DOMAIN].items():
-            if data.get("type") == "room":
+            if isinstance(data, dict) and data.get("type") == "room":
                 if f"climate.{data['entry'].data.get(CONF_ROOM_NAME, '').lower().replace(' ', '_')}" == entity_id:
                     room_coord = data["coordinator"]
                     break

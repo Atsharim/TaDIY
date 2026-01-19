@@ -271,7 +271,7 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .block-editor {
           display: grid;
-          grid-template-columns: 80px 80px 100px 60px;
+          grid-template-columns: 95px 95px 100px 60px;
           gap: 8px;
           align-items: center;
           margin-bottom: 12px;
