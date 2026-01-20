@@ -169,8 +169,7 @@ class TaDiyScheduleCard extends HTMLElement {
 
   // FIXED: Ensure minutes are always two digits
   formatTime(time) {
-    // Handle 24:00 display as 00:00 but keep internal value
-    if (time === '24:00') return '00:00';
+    // Keep 24:00 as-is for display in timeline
     const [hours, minutes] = time.split(':');
     return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
   }
@@ -192,33 +191,17 @@ class TaDiyScheduleCard extends HTMLElement {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
-  generateTimeOptions(startHour = 0, endHour = 24, step = 5) {
-    // Generate time options in 5-minute increments, no wrap-around
-    const options = [];
-    for (let h = startHour; h <= endHour; h++) {
-      for (let m = 0; m < 60; m += step) {
-        if (h === 24 && m > 0) break; // Stop at 24:00
-        const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-        options.push(time);
-      }
-    }
-    return options;
-  }
-
-  renderTimePicker(value, className, index, isEndTime = false) {
-    // Custom time picker with 5-min increments and no wrap-around
-    const options = this.generateTimeOptions(0, 24, 5);
-    const displayValue = value;
-
+  renderTimeInput(value, className, index, isEndTime = false) {
+    // Simple HH:MM text input with pattern validation
     return `
-      <select class="${className}" data-index="${index}" data-is-end="${isEndTime}">
-        ${options.map(opt => {
-          const isEndOfDay = opt === '24:00';
-          const displayOpt = isEndOfDay && isEndTime ? '00:00 (End of Day)' : opt;
-          const selected = opt === displayValue ? 'selected' : '';
-          return `<option value="${opt}" ${selected}>${displayOpt}</option>`;
-        }).join('')}
-      </select>
+      <input type="text"
+             class="${className}"
+             value="${value}"
+             pattern="([01]?[0-9]|2[0-4]):[0-5][0-9]"
+             placeholder="HH:MM"
+             maxlength="5"
+             data-index="${index}"
+             data-is-end="${isEndTime}">
     `;
   }
 
@@ -516,13 +499,20 @@ class TaDiyScheduleCard extends HTMLElement {
           color: #666;
         }
         input[type="time"],
-        input[type="number"] {
+        input[type="number"],
+        input[type="text"].start-time,
+        input[type="text"].end-time {
           padding: 8px;
           border: 1px solid var(--divider-color);
           border-radius: 4px;
           background: var(--card-background-color);
           color: var(--primary-text-color);
           font-size: 14px;
+          font-family: monospace;
+        }
+        input[type="text"].start-time:invalid,
+        input[type="text"].end-time:invalid {
+          border-color: #dc3545;
         }
         .delete-btn {
           padding: 8px;
@@ -664,12 +654,12 @@ class TaDiyScheduleCard extends HTMLElement {
 
         <div class="input-group">
           <span class="input-label">Start</span>
-          ${this.renderTimePicker(block.start_time, 'start-time', index, false)}
+          ${this.renderTimeInput(block.start_time, 'start-time', index, false)}
         </div>
 
         <div class="input-group">
           <span class="input-label">End</span>
-          ${this.renderTimePicker(block.end_time, 'end-time', index, true)}
+          ${this.renderTimeInput(block.end_time, 'end-time', index, true)}
         </div>
 
         <div class="input-group">
@@ -738,26 +728,47 @@ class TaDiyScheduleCard extends HTMLElement {
       });
     });
 
-    // Input changes - handles select dropdowns for time with debouncing
+    // Input changes - handles text inputs for time and temperature
     this.shadowRoot.querySelectorAll('.start-time, .end-time, .temperature').forEach(input => {
-      input.addEventListener('change', (e) => {
+      input.addEventListener('blur', (e) => {
         const index = parseInt(e.target.dataset.index);
         const field = e.target.classList.contains('start-time') ? 'start_time' :
                       e.target.classList.contains('end-time') ? 'end_time' : 'temperature';
 
         if (field === 'temperature') {
-          this._editingBlocks[index][field] = parseFloat(e.target.value);
+          let temp = parseFloat(e.target.value);
+          if (isNaN(temp) || temp < 5) temp = 5;
+          if (temp > 30) temp = 30;
+          this._editingBlocks[index][field] = temp;
         } else {
-          let value = e.target.value;
-          // Handle end time - if user selects 00:00, convert to 24:00 for end of day
+          // Validate time format HH:MM
+          let value = e.target.value.trim();
+          const timeRegex = /^([01]?[0-9]|2[0-4]):([0-5][0-9])$/;
+
+          if (!timeRegex.test(value)) {
+            // Invalid format - revert to previous value
+            e.target.value = this._editingBlocks[index][field];
+            this.showError(`Invalid time format. Use HH:MM (e.g., 08:30)`);
+            return;
+          }
+
+          // Handle 00:00 at end -> 24:00
           if (field === 'end_time' && value === '00:00') {
             value = '24:00';
           }
+
           this._editingBlocks[index][field] = value;
         }
 
-        // Debounce rendering to prevent dropdown from closing
-        this.debouncedRender();
+        // Re-render immediately after input validation
+        this.render();
+      });
+
+      // Also handle Enter key
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.target.blur(); // Trigger blur event
+        }
       });
     });
 
@@ -852,39 +863,77 @@ class TaDiyScheduleCard extends HTMLElement {
             const deltaMinutes = Math.round((deltaX / timelineWidth) * (24 * 60));
             const snappedDelta = this.snapToGrid(deltaMinutes);
 
+            // Sort blocks by start time to find neighbors
+            const sortedBlocks = [...this._editingBlocks].sort((a, b) => {
+              return this.timeToMinutes(a.start_time) - this.timeToMinutes(b.start_time);
+            });
+            const sortedIndex = sortedBlocks.findIndex(b => b === blockData);
+
             if (handleType === 'left') {
-              // Resize from left - change start time
+              // Resize from left - change start time AND previous block's end time
               let newStart = startMinutes + snappedDelta;
-              newStart = Math.max(0, Math.min(newStart, endMinutes - 15)); // Min 15min block
+
+              // Don't allow first block to move start time (must stay at 00:00)
+              if (sortedIndex === 0) {
+                newStart = 0;
+              } else {
+                // Limit based on previous block's start + 15min
+                const prevBlock = sortedBlocks[sortedIndex - 1];
+                const prevStart = this.timeToMinutes(prevBlock.start_time);
+                newStart = Math.max(prevStart + 15, Math.min(newStart, endMinutes - 15));
+              }
+
               const newTime = this.minutesToTime(newStart);
 
-              // Only update if changed to reduce renders
               if (this._editingBlocks[index].start_time !== newTime) {
                 this._editingBlocks[index].start_time = newTime;
-                // Update block position directly without full render
+
+                // Update previous block's end time to match
+                if (sortedIndex > 0) {
+                  const prevBlock = sortedBlocks[sortedIndex - 1];
+                  const prevIndex = this._editingBlocks.indexOf(prevBlock);
+                  this._editingBlocks[prevIndex].end_time = newTime;
+                }
+
+                // Update this block's display
                 const leftPercent = (newStart / 1440) * 100;
                 const widthPercent = ((endMinutes - newStart) / 1440) * 100;
                 block.style.left = `${leftPercent.toFixed(2)}%`;
                 block.style.width = `${widthPercent.toFixed(2)}%`;
-                // Update displayed time
                 const timeDisplay = block.querySelector('.timeline-time');
                 if (timeDisplay) {
                   timeDisplay.textContent = `${this.formatTime(newTime)}-${this.formatTime(blockData.end_time)}`;
                 }
               }
             } else {
-              // Resize from right - change end time
+              // Resize from right - change end time AND next block's start time
               let newEnd = endMinutes + snappedDelta;
-              newEnd = Math.max(startMinutes + 15, Math.min(newEnd, 1440)); // Max 24:00
+
+              // Don't allow last block to move end time (must stay at 24:00)
+              if (sortedIndex === sortedBlocks.length - 1) {
+                newEnd = 1440;
+              } else {
+                // Limit based on next block's end - 15min
+                const nextBlock = sortedBlocks[sortedIndex + 1];
+                const nextEnd = this.timeToMinutes(nextBlock.end_time);
+                newEnd = Math.max(startMinutes + 15, Math.min(newEnd, nextEnd - 15));
+              }
+
               const newTime = this.minutesToTime(newEnd);
 
-              // Only update if changed to reduce renders
               if (this._editingBlocks[index].end_time !== newTime) {
                 this._editingBlocks[index].end_time = newTime;
-                // Update block width directly without full render
+
+                // Update next block's start time to match
+                if (sortedIndex < sortedBlocks.length - 1) {
+                  const nextBlock = sortedBlocks[sortedIndex + 1];
+                  const nextIndex = this._editingBlocks.indexOf(nextBlock);
+                  this._editingBlocks[nextIndex].start_time = newTime;
+                }
+
+                // Update this block's display
                 const widthPercent = ((newEnd - startMinutes) / 1440) * 100;
                 block.style.width = `${widthPercent.toFixed(2)}%`;
-                // Update displayed time
                 const timeDisplay = block.querySelector('.timeline-time');
                 if (timeDisplay) {
                   timeDisplay.textContent = `${this.formatTime(blockData.start_time)}-${this.formatTime(newTime)}`;
