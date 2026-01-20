@@ -96,11 +96,7 @@
       },
       "init_room": {
         "title": "Configure Room",
-        "description": "Manage room settings and schedules.",
-        "menu_options": {
-          "room_config": "Room Configuration",
-          "manage_schedules": "Manage Schedules"
-        }
+        "description": "Manage room settings and schedules."
       },
       "room_details": {
         "title": "Room Configuration",
