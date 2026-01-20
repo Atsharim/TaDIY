@@ -333,7 +333,7 @@ async def async_register_services(
 
         # Convert to schedule blocks
         schedule_blocks = ScheduleStorageManager.ui_blocks_to_schedule_blocks(ui_blocks)
-        day_schedule = DaySchedule(blocks=schedule_blocks)
+        day_schedule = DaySchedule(schedule_type=schedule_type, blocks=schedule_blocks)
 
         # Update room schedule
         room_name = room_coord.room_config.room_name
