@@ -15,6 +15,7 @@ class TaDiyScheduleCard extends HTMLElement {
     this._isEditing = false;
     this._availableModes = [];
     this._selectedBlockIndex = null; // Track selected block for keyboard operations
+    this._renderDebounce = null; // Debounce timer for rendering
   }
 
   setConfig(config) {
@@ -229,9 +230,68 @@ class TaDiyScheduleCard extends HTMLElement {
   generateTimeline() {
     const totalMinutes = 24 * 60;
     const isEditing = this._isEditing;
-    let html = `<div class="timeline ${isEditing ? 'interactive' : ''}" data-timeline>`;
 
-    this._editingBlocks.forEach((block, index) => {
+    // Use absolute positioning for interactive timeline
+    if (isEditing) {
+      let html = `<div class="timeline interactive" data-timeline>`;
+
+      this._editingBlocks.forEach((block, index) => {
+        const [startH, startM] = block.start_time.split(':').map(Number);
+        const [endH, endM] = block.end_time.split(':').map(Number);
+
+        const startTotal = startH * 60 + startM;
+        let endTotal = endH * 60 + endM;
+
+        if (endH === 23 && endM === 59) {
+          endTotal = 24 * 60;
+        }
+        if (endTotal === 0) {
+          endTotal = 24 * 60;
+        }
+
+        const duration = endTotal > startTotal
+          ? endTotal - startTotal
+          : (24 * 60) - startTotal + endTotal;
+
+        const leftPercent = (startTotal / totalMinutes) * 100;
+        const widthPercent = (duration / totalMinutes) * 100;
+        const color = this.getTemperatureColor(block.temperature);
+        const tempDisplay = this.formatTemperature(block.temperature);
+
+        html += `
+          <div class="timeline-block draggable"
+               style="position: absolute; left: ${leftPercent.toFixed(2)}%; width: ${widthPercent.toFixed(2)}%; background: ${color};"
+               data-block-index="${index}"
+               data-start-minutes="${startTotal}"
+               data-end-minutes="${endTotal}"
+               draggable="true">
+            <div class="resize-handle resize-left" data-handle="left"></div>
+            <div class="timeline-content">
+              <div class="timeline-temp">${tempDisplay}</div>
+              <div class="timeline-time">${this.formatTime(block.start_time)}-${this.formatTime(block.end_time)}</div>
+            </div>
+            <div class="resize-handle resize-right" data-handle="right"></div>
+          </div>
+        `;
+      });
+
+      html += '</div>';
+      html += `
+        <div class="timeline-labels">
+          <span>00:00</span>
+          <span>06:00</span>
+          <span>12:00</span>
+          <span>18:00</span>
+          <span>24:00</span>
+        </div>
+      `;
+      return html;
+    }
+
+    // Original flex-based timeline for non-editing mode
+    let html = `<div class="timeline" data-timeline>`;
+
+    this._editingBlocks.forEach((block) => {
       const [startH, startM] = block.start_time.split(':').map(Number);
       const [endH, endM] = block.end_time.split(':').map(Number);
 
@@ -239,6 +299,10 @@ class TaDiyScheduleCard extends HTMLElement {
       let endTotal = endH * 60 + endM;
 
       if (endH === 23 && endM === 59) {
+        endTotal = 24 * 60;
+      }
+
+      if (endTotal === 0) {
         endTotal = 24 * 60;
       }
 
@@ -250,23 +314,13 @@ class TaDiyScheduleCard extends HTMLElement {
       const color = this.getTemperatureColor(block.temperature);
       const tempDisplay = this.formatTemperature(block.temperature);
 
-      const interactiveAttrs = isEditing ? `
-        data-block-index="${index}"
-        data-start-minutes="${startTotal}"
-        data-end-minutes="${endTotal}"
-        draggable="true"
-      ` : '';
-
       html += `
-        <div class="timeline-block ${isEditing ? 'draggable' : ''}"
-             style="flex: 0 0 ${percentage.toFixed(2)}%; background: ${color};"
-             ${interactiveAttrs}>
-          ${isEditing ? '<div class="resize-handle resize-left" data-handle="left"></div>' : ''}
+        <div class="timeline-block"
+             style="flex: 0 0 ${percentage.toFixed(2)}%; background: ${color};">
           <div class="timeline-content">
             <div class="timeline-temp">${tempDisplay}</div>
             <div class="timeline-time">${this.formatTime(block.start_time)}-${this.formatTime(block.end_time)}</div>
           </div>
-          ${isEditing ? '<div class="resize-handle resize-right" data-handle="right"></div>' : ''}
         </div>
       `;
     });
@@ -278,11 +332,23 @@ class TaDiyScheduleCard extends HTMLElement {
         <span>06:00</span>
         <span>12:00</span>
         <span>18:00</span>
-        <span>23:59</span>
+        <span>24:00</span>
       </div>
     `;
 
     return html;
+  }
+
+  debouncedRender() {
+    // Clear existing timeout
+    if (this._renderDebounce) {
+      clearTimeout(this._renderDebounce);
+    }
+
+    // Set new timeout - wait 300ms after last change
+    this._renderDebounce = setTimeout(() => {
+      this.render();
+    }, 300);
   }
 
   render() {
@@ -339,6 +405,7 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .timeline.interactive {
           height: 80px;
+          display: block;
         }
         .timeline-block {
           display: flex;
@@ -348,10 +415,15 @@ class TaDiyScheduleCard extends HTMLElement {
           font-weight: bold;
           border-right: 1px solid rgba(255,255,255,0.3);
           position: relative;
+          height: 100%;
         }
         .timeline-block.draggable {
           cursor: move;
           transition: opacity 0.2s;
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          border-right: 2px solid rgba(0,0,0,0.3);
         }
         .timeline-block.draggable:hover {
           opacity: 0.9;
@@ -666,7 +738,7 @@ class TaDiyScheduleCard extends HTMLElement {
       });
     });
 
-    // Input changes - handles select dropdowns for time
+    // Input changes - handles select dropdowns for time with debouncing
     this.shadowRoot.querySelectorAll('.start-time, .end-time, .temperature').forEach(input => {
       input.addEventListener('change', (e) => {
         const index = parseInt(e.target.dataset.index);
@@ -684,7 +756,8 @@ class TaDiyScheduleCard extends HTMLElement {
           this._editingBlocks[index][field] = value;
         }
 
-        this.render();
+        // Debounce rendering to prevent dropdown from closing
+        this.debouncedRender();
       });
     });
 
@@ -783,20 +856,48 @@ class TaDiyScheduleCard extends HTMLElement {
               // Resize from left - change start time
               let newStart = startMinutes + snappedDelta;
               newStart = Math.max(0, Math.min(newStart, endMinutes - 15)); // Min 15min block
-              this._editingBlocks[index].start_time = this.minutesToTime(newStart);
+              const newTime = this.minutesToTime(newStart);
+
+              // Only update if changed to reduce renders
+              if (this._editingBlocks[index].start_time !== newTime) {
+                this._editingBlocks[index].start_time = newTime;
+                // Update block position directly without full render
+                const leftPercent = (newStart / 1440) * 100;
+                const widthPercent = ((endMinutes - newStart) / 1440) * 100;
+                block.style.left = `${leftPercent.toFixed(2)}%`;
+                block.style.width = `${widthPercent.toFixed(2)}%`;
+                // Update displayed time
+                const timeDisplay = block.querySelector('.timeline-time');
+                if (timeDisplay) {
+                  timeDisplay.textContent = `${this.formatTime(newTime)}-${this.formatTime(blockData.end_time)}`;
+                }
+              }
             } else {
               // Resize from right - change end time
               let newEnd = endMinutes + snappedDelta;
               newEnd = Math.max(startMinutes + 15, Math.min(newEnd, 1440)); // Max 24:00
-              this._editingBlocks[index].end_time = this.minutesToTime(newEnd);
-            }
+              const newTime = this.minutesToTime(newEnd);
 
-            this.render();
+              // Only update if changed to reduce renders
+              if (this._editingBlocks[index].end_time !== newTime) {
+                this._editingBlocks[index].end_time = newTime;
+                // Update block width directly without full render
+                const widthPercent = ((newEnd - startMinutes) / 1440) * 100;
+                block.style.width = `${widthPercent.toFixed(2)}%`;
+                // Update displayed time
+                const timeDisplay = block.querySelector('.timeline-time');
+                if (timeDisplay) {
+                  timeDisplay.textContent = `${this.formatTime(blockData.start_time)}-${this.formatTime(newTime)}`;
+                }
+              }
+            }
           };
 
           const onMouseUp = () => {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
+            // Full render after resize is complete to update everything
+            this.render();
           };
 
           document.addEventListener('mousemove', onMouseMove);
