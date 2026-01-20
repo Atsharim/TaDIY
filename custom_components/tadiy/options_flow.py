@@ -60,14 +60,8 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
     async def async_step_init_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Room initial menu."""
-        return self.async_show_menu(
-            step_id="init_room",
-            menu_options={
-                "room_config": "Room Configuration",
-                "manage_schedules": "Manage Schedules",
-            },
-        )
+        """Room initial menu - directly show room config."""
+        return await self.async_step_room_config(user_input)
 
     async def async_step_init_hub(
         self, user_input: dict[str, Any] | None = None
