@@ -60,7 +60,8 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         self._room_name = room_name
         self._trv_entity_ids = trv_entity_ids
         self._attr_unique_id = f"{entry.entry_id}_climate"
-        self._attr_name = room_name
+        self._attr_has_entity_name = True  # Use device name as entity name
+        self._attr_name = None  # No additional name suffix
         self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     @property
