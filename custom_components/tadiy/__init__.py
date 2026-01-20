@@ -270,7 +270,7 @@ async def async_register_services(
             _LOGGER.error("Room not found for entity: %s", entity_id)
             return {"blocks": []}
 
-        room_name = room_coord.room_config.room_name
+        room_name = room_coord.room_config.name
         room_schedule = room_coord.schedule_engine._room_schedules.get(room_name)
 
         if not room_schedule:
@@ -323,6 +323,8 @@ async def async_register_services(
             _LOGGER.error("Room not found for entity: %s", entity_id)
             return
 
+        room_name = room_coord.room_config.name
+
         # Convert to UI blocks and validate
         ui_blocks = [ScheduleUIBlock.from_dict(b) for b in blocks_data]
         is_valid, error = ScheduleStorageManager.validate_ui_blocks(ui_blocks)
@@ -336,7 +338,6 @@ async def async_register_services(
         day_schedule = DaySchedule(schedule_type=schedule_type, blocks=schedule_blocks)
 
         # Update room schedule
-        room_name = room_coord.room_config.room_name
         room_schedule = room_coord.schedule_engine._room_schedules.get(room_name)
 
         if not room_schedule:
