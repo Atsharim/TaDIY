@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 import voluptuous as vol
 
 from .const import (
@@ -141,12 +142,21 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY Room."""
+    import asyncio
     room_name = entry.data.get(CONF_ROOM_NAME, "Unknown")
     _LOGGER.info("Setting up TaDIY Room: %s", room_name)
 
-    hub_coordinator = hass.data[DOMAIN].get("hub_coordinator")
+    # Wait for hub coordinator with retries (max 10 seconds)
+    hub_coordinator = None
+    for _ in range(20):  # 20 attempts * 0.5s = 10 seconds max
+        hub_coordinator = hass.data[DOMAIN].get("hub_coordinator")
+        if hub_coordinator:
+            break
+        _LOGGER.debug("Waiting for hub coordinator... (room: %s)", room_name)
+        await asyncio.sleep(0.5)
+
     if not hub_coordinator:
-        _LOGGER.error("Hub coordinator not found for room setup")
+        _LOGGER.error("Hub coordinator not found for room setup after timeout")
         return False
 
     room_coordinator = TaDIYRoomCoordinator(hass, entry.entry_id, entry.data, hub_coordinator)
@@ -245,11 +255,11 @@ async def async_register_services(
 
         # Find room coordinator by entity_id
         room_coord = None
+        entity_registry = er.async_get(hass)
         for data_entry_id, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and data.get("type") == "room":
                 # Check if this room has the entity - match by unique_id pattern
                 expected_unique_id = f"{data_entry_id}_climate"
-                entity_registry = hass.helpers.entity_registry.async_get(hass)
                 entity_entry = entity_registry.async_get(entity_id)
 
                 if entity_entry and entity_entry.unique_id == expected_unique_id:
@@ -298,11 +308,11 @@ async def async_register_services(
 
         # Find room coordinator
         room_coord = None
+        entity_registry = er.async_get(hass)
         for data_entry_id, data in hass.data[DOMAIN].items():
             if isinstance(data, dict) and data.get("type") == "room":
                 # Check if this room has the entity - match by unique_id pattern
                 expected_unique_id = f"{data_entry_id}_climate"
-                entity_registry = hass.helpers.entity_registry.async_get(hass)
                 entity_entry = entity_registry.async_get(entity_id)
 
                 if entity_entry and entity_entry.unique_id == expected_unique_id:

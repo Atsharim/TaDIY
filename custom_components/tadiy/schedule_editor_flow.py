@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import entity_registry as er
 
 from .const import VERSION
 
@@ -20,7 +21,7 @@ class ScheduleEditorMixin:
     ) -> FlowResult:
         """Show information about using the Lovelace card for schedule editing."""
         # Get room entity_id from entity registry using unique_id
-        entity_registry = self.hass.helpers.entity_registry.async_get(self.hass)
+        entity_registry = er.async_get(self.hass)
         expected_unique_id = f"{self.config_entry.entry_id}_climate"
 
         entity_id = None
