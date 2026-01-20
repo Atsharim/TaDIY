@@ -206,8 +206,17 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   snapToGrid(minutes) {
-    // Snap to 15-minute intervals
+    // Snap to 15-minute intervals (0, 15, 30, 45)
+    // Always round to nearest 15-minute mark
     return Math.round(minutes / 15) * 15;
+  }
+
+  snapTimeToQuarter(timeStr) {
+    // Snap a HH:MM time string to nearest quarter hour (0, 15, 30, 45)
+    const [h, m] = timeStr.split(':').map(Number);
+    const totalMinutes = h * 60 + m;
+    const snappedMinutes = Math.round(totalMinutes / 15) * 15;
+    return this.minutesToTime(snappedMinutes);
   }
 
   generateTimeline() {
@@ -752,12 +761,17 @@ class TaDiyScheduleCard extends HTMLElement {
             return;
           }
 
+          // Snap to 15-minute intervals (0, 15, 30, 45)
+          value = this.snapTimeToQuarter(value);
+
           // Handle 00:00 at end -> 24:00
           if (field === 'end_time' && value === '00:00') {
             value = '24:00';
           }
 
+          // Update both the data and the input field to show snapped value
           this._editingBlocks[index][field] = value;
+          e.target.value = value;
         }
 
         // Re-render immediately after input validation
@@ -811,6 +825,16 @@ class TaDiyScheduleCard extends HTMLElement {
     const timelineBlocks = this.shadowRoot.querySelectorAll('.timeline-block.draggable');
 
     timelineBlocks.forEach(block => {
+      // Click to select corresponding editor block
+      block.addEventListener('click', (e) => {
+        // Don't trigger if clicking on resize handles
+        if (e.target.classList.contains('resize-handle')) return;
+
+        const index = parseInt(block.dataset.blockIndex);
+        this._selectedBlockIndex = index;
+        this.render();
+      });
+
       // Drag & drop for moving blocks
       block.addEventListener('dragstart', (e) => {
         const index = parseInt(block.dataset.blockIndex);
@@ -964,75 +988,61 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   addBlock() {
-    // Improved block insertion logic:
-    // - If a block is selected, insert after it
-    // - New block is 1 hour long if there's space
-    // - Insert in the middle of available time
-
+    // Split selected block in half, or split the largest block if none selected
     const sortedBlocks = [...this._editingBlocks].sort((a, b) => {
       return this.timeToMinutes(a.start_time) - this.timeToMinutes(b.start_time);
     });
 
-    let insertIndex = this._selectedBlockIndex !== null ?
-      this._selectedBlockIndex + 1 : sortedBlocks.length;
+    let blockToSplit;
 
-    // Find the gap to insert into
-    let newStart, newEnd;
-
-    if (insertIndex === 0) {
-      // Insert at beginning
-      const firstBlockStart = this.timeToMinutes(sortedBlocks[0].start_time);
-      if (firstBlockStart >= 60) {
-        // Room for 1 hour block
-        newStart = '00:00';
-        newEnd = '01:00';
-      } else {
-        // Insert half the available space
-        newStart = '00:00';
-        newEnd = this.minutesToTime(Math.floor(firstBlockStart / 2));
-      }
-    } else if (insertIndex >= sortedBlocks.length) {
-      // Insert at end
-      const lastBlockEnd = this.timeToMinutes(sortedBlocks[sortedBlocks.length - 1].end_time);
-      const remainingMinutes = 1440 - lastBlockEnd; // 1440 = 24*60
-
-      if (remainingMinutes >= 60) {
-        // Room for 1 hour block
-        newStart = this.minutesToTime(lastBlockEnd);
-        newEnd = this.minutesToTime(lastBlockEnd + 60);
-      } else {
-        // Use remaining space
-        newStart = this.minutesToTime(lastBlockEnd);
-        newEnd = '24:00';
-      }
+    if (this._selectedBlockIndex !== null) {
+      // Split the selected block
+      blockToSplit = this._editingBlocks[this._selectedBlockIndex];
     } else {
-      // Insert in middle
-      const prevBlock = sortedBlocks[insertIndex - 1];
-      const nextBlock = sortedBlocks[insertIndex];
-      const gapStart = this.timeToMinutes(prevBlock.end_time);
-      const gapEnd = this.timeToMinutes(nextBlock.start_time);
-      const gapSize = gapEnd - gapStart;
-
-      if (gapSize >= 60) {
-        // Create 1 hour block in middle of gap
-        const midPoint = gapStart + Math.floor(gapSize / 2);
-        newStart = this.minutesToTime(midPoint - 30);
-        newEnd = this.minutesToTime(midPoint + 30);
-      } else {
-        // Use half the gap
-        newStart = this.minutesToTime(gapStart);
-        newEnd = this.minutesToTime(gapStart + Math.floor(gapSize / 2));
-      }
+      // Find the largest block to split
+      let maxDuration = 0;
+      sortedBlocks.forEach((block) => {
+        const start = this.timeToMinutes(block.start_time);
+        const end = this.timeToMinutes(block.end_time);
+        const duration = end - start;
+        if (duration > maxDuration) {
+          maxDuration = duration;
+          blockToSplit = block;
+        }
+      });
     }
 
+    const startMinutes = this.timeToMinutes(blockToSplit.start_time);
+    const endMinutes = this.timeToMinutes(blockToSplit.end_time);
+    const duration = endMinutes - startMinutes;
+
+    // Can't split blocks smaller than 30 minutes (2 x 15 minute minimum)
+    if (duration < 30) {
+      this.showError('Block is too small to split (minimum 30 minutes needed)');
+      return;
+    }
+
+    // Split at midpoint, snapped to 15-minute grid
+    const midMinutes = startMinutes + Math.floor(duration / 2);
+    const snappedMid = this.snapToGrid(midMinutes);
+    const splitTime = this.minutesToTime(snappedMid);
+
+    // Update existing block's end time
+    const originalIndex = this._editingBlocks.indexOf(blockToSplit);
+    this._editingBlocks[originalIndex].end_time = splitTime;
+
+    // Create new block for the second half
     const newBlock = {
-      start_time: newStart,
-      end_time: newEnd,
-      temperature: 21.0
+      start_time: splitTime,
+      end_time: blockToSplit.end_time,
+      temperature: 21.0  // Default temperature
     };
 
-    this._editingBlocks.splice(insertIndex, 0, newBlock);
-    this._selectedBlockIndex = insertIndex; // Select the new block
+    // Insert new block after the original
+    this._editingBlocks.splice(originalIndex + 1, 0, newBlock);
+
+    // Select the new block
+    this._selectedBlockIndex = originalIndex + 1;
     this.render();
   }
 

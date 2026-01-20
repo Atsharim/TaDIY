@@ -275,7 +275,8 @@ async def async_register_services(
 
         if not room_schedule:
             # Return default schedule
-            return {"blocks": ScheduleStorageManager.create_default_schedule(schedule_type)}
+            default_blocks = ScheduleStorageManager.create_default_schedule(schedule_type)
+            return {"blocks": [b.to_dict() for b in default_blocks]}
 
         # Get day schedule based on mode and type
         day_schedule = None
@@ -293,7 +294,9 @@ async def async_register_services(
             ui_blocks = ScheduleStorageManager.schedule_blocks_to_ui_blocks(day_schedule.blocks)
             return {"blocks": [b.to_dict() for b in ui_blocks]}
 
-        return {"blocks": ScheduleStorageManager.create_default_schedule(schedule_type)}
+        # Fallback to default schedule
+        default_blocks = ScheduleStorageManager.create_default_schedule(schedule_type)
+        return {"blocks": [b.to_dict() for b in default_blocks]}
 
     async def handle_set_schedule(call: ServiceCall) -> None:
         """Set schedule for a room."""
