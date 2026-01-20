@@ -221,11 +221,17 @@ class TaDiyScheduleCard extends HTMLElement {
     `;
   }
 
+  snapToGrid(minutes) {
+    // Snap to 15-minute intervals
+    return Math.round(minutes / 15) * 15;
+  }
+
   generateTimeline() {
     const totalMinutes = 24 * 60;
-    let html = '<div class="timeline">';
+    const isEditing = this._isEditing;
+    let html = `<div class="timeline ${isEditing ? 'interactive' : ''}" data-timeline>`;
 
-    for (const block of this._editingBlocks) {
+    this._editingBlocks.forEach((block, index) => {
       const [startH, startM] = block.start_time.split(':').map(Number);
       const [endH, endM] = block.end_time.split(':').map(Number);
 
@@ -244,15 +250,26 @@ class TaDiyScheduleCard extends HTMLElement {
       const color = this.getTemperatureColor(block.temperature);
       const tempDisplay = this.formatTemperature(block.temperature);
 
+      const interactiveAttrs = isEditing ? `
+        data-block-index="${index}"
+        data-start-minutes="${startTotal}"
+        data-end-minutes="${endTotal}"
+        draggable="true"
+      ` : '';
+
       html += `
-        <div class="timeline-block" style="flex: 0 0 ${percentage.toFixed(2)}%; background: ${color};">
+        <div class="timeline-block ${isEditing ? 'draggable' : ''}"
+             style="flex: 0 0 ${percentage.toFixed(2)}%; background: ${color};"
+             ${interactiveAttrs}>
+          ${isEditing ? '<div class="resize-handle resize-left" data-handle="left"></div>' : ''}
           <div class="timeline-content">
             <div class="timeline-temp">${tempDisplay}</div>
             <div class="timeline-time">${this.formatTime(block.start_time)}-${this.formatTime(block.end_time)}</div>
           </div>
+          ${isEditing ? '<div class="resize-handle resize-right" data-handle="right"></div>' : ''}
         </div>
       `;
-    }
+    });
 
     html += '</div>';
     html += `
@@ -318,6 +335,10 @@ class TaDiyScheduleCard extends HTMLElement {
           overflow: hidden;
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
           margin-bottom: 8px;
+          position: relative;
+        }
+        .timeline.interactive {
+          height: 80px;
         }
         .timeline-block {
           display: flex;
@@ -326,10 +347,46 @@ class TaDiyScheduleCard extends HTMLElement {
           color: white;
           font-weight: bold;
           border-right: 1px solid rgba(255,255,255,0.3);
+          position: relative;
+        }
+        .timeline-block.draggable {
+          cursor: move;
+          transition: opacity 0.2s;
+        }
+        .timeline-block.draggable:hover {
+          opacity: 0.9;
+          box-shadow: inset 0 0 0 2px rgba(255,255,255,0.5);
+        }
+        .timeline-block.dragging {
+          opacity: 0.5;
+        }
+        .resize-handle {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          width: 10px;
+          cursor: ew-resize;
+          z-index: 10;
+          background: rgba(255,255,255,0.2);
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+        .timeline-block:hover .resize-handle {
+          opacity: 1;
+        }
+        .resize-handle:hover {
+          background: rgba(255,255,255,0.4);
+        }
+        .resize-left {
+          left: 0;
+        }
+        .resize-right {
+          right: 0;
         }
         .timeline-content {
           text-align: center;
           padding: 5px;
+          pointer-events: none;
         }
         .timeline-temp {
           font-size: 14px;
@@ -656,6 +713,97 @@ class TaDiyScheduleCard extends HTMLElement {
 
       document.addEventListener('keydown', this._keyboardHandler);
     }
+
+    // Timeline drag & drop and resize
+    if (this._isEditing) {
+      this.attachTimelineInteractions();
+    }
+  }
+
+  attachTimelineInteractions() {
+    const timeline = this.shadowRoot.querySelector('[data-timeline]');
+    if (!timeline) return;
+
+    const timelineBlocks = this.shadowRoot.querySelectorAll('.timeline-block.draggable');
+
+    timelineBlocks.forEach(block => {
+      // Drag & drop for moving blocks
+      block.addEventListener('dragstart', (e) => {
+        const index = parseInt(block.dataset.blockIndex);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('blockIndex', index);
+        block.classList.add('dragging');
+      });
+
+      block.addEventListener('dragend', () => {
+        block.classList.remove('dragging');
+      });
+
+      block.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+      });
+
+      block.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const draggedIndex = parseInt(e.dataTransfer.getData('blockIndex'));
+        const targetIndex = parseInt(block.dataset.blockIndex);
+
+        if (draggedIndex !== targetIndex) {
+          // Swap blocks
+          const temp = this._editingBlocks[draggedIndex];
+          this._editingBlocks[draggedIndex] = this._editingBlocks[targetIndex];
+          this._editingBlocks[targetIndex] = temp;
+          this.render();
+        }
+      });
+
+      // Resize handles
+      const resizeHandles = block.querySelectorAll('.resize-handle');
+      resizeHandles.forEach(handle => {
+        handle.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const index = parseInt(block.dataset.blockIndex);
+          const handleType = handle.dataset.handle; // 'left' or 'right'
+          const timelineRect = timeline.getBoundingClientRect();
+          const startX = e.clientX;
+          const blockData = this._editingBlocks[index];
+          const startMinutes = this.timeToMinutes(blockData.start_time);
+          const endMinutes = this.timeToMinutes(blockData.end_time);
+
+          const onMouseMove = (moveEvent) => {
+            const deltaX = moveEvent.clientX - startX;
+            const timelineWidth = timelineRect.width;
+            const deltaMinutes = Math.round((deltaX / timelineWidth) * (24 * 60));
+            const snappedDelta = this.snapToGrid(deltaMinutes);
+
+            if (handleType === 'left') {
+              // Resize from left - change start time
+              let newStart = startMinutes + snappedDelta;
+              newStart = Math.max(0, Math.min(newStart, endMinutes - 15)); // Min 15min block
+              this._editingBlocks[index].start_time = this.minutesToTime(newStart);
+            } else {
+              // Resize from right - change end time
+              let newEnd = endMinutes + snappedDelta;
+              newEnd = Math.max(startMinutes + 15, Math.min(newEnd, 1440)); // Max 24:00
+              this._editingBlocks[index].end_time = this.minutesToTime(newEnd);
+            }
+
+            this.render();
+          };
+
+          const onMouseUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+          };
+
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
+        });
+      });
+    });
   }
 
   selectSchedule(mode, scheduleType) {
