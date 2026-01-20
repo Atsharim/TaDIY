@@ -19,9 +19,20 @@ class ScheduleEditorMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Show information about using the Lovelace card for schedule editing."""
-        # Get room entity_id
-        room_name = self.config_entry.data.get("room_name", "unknown")
-        entity_id = f"climate.{room_name.lower().replace(' ', '_')}"
+        # Get room entity_id from entity registry using unique_id
+        entity_registry = self.hass.helpers.entity_registry.async_get(self.hass)
+        expected_unique_id = f"{self.config_entry.entry_id}_climate"
+
+        entity_id = None
+        for entity in entity_registry.entities.values():
+            if entity.unique_id == expected_unique_id:
+                entity_id = entity.entity_id
+                break
+
+        if not entity_id:
+            # Fallback to old method
+            room_name = self.config_entry.data.get("room_name", "unknown")
+            entity_id = f"climate.{room_name.lower().replace(' ', '_')}"
 
         # Create card config YAML
         card_yaml = f"""type: custom:tadiy-schedule-card
