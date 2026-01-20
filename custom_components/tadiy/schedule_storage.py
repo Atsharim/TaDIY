@@ -105,7 +105,7 @@ class ScheduleStorageManager:
         Convert ScheduleBlocks to UI blocks by calculating end times.
 
         End time is derived from the start of the next block,
-        or 23:59 for the last block (end of day).
+        or 24:00 for the last block (end of day).
         """
         if not blocks:
             return []
@@ -119,8 +119,8 @@ class ScheduleStorageManager:
                 # End is start of next block
                 end_time = blocks[i + 1].start_time.strftime("%H:%M")
             else:
-                # Last block ends at 23:59 (end of day)
-                end_time = "23:59"
+                # Last block ends at 24:00 (end of day)
+                end_time = "24:00"
 
             ui_blocks.append(
                 ScheduleUIBlock(
@@ -176,9 +176,10 @@ class ScheduleStorageManager:
         if sorted_blocks[0].start_time != "00:00":
             return False, "First block must start at 00:00"
 
-        # Last block must end at 23:59 (end of day)
-        if sorted_blocks[-1].end_time != "23:59":
-            return False, "Last block must end at 23:59"
+        # Last block must end at 24:00 or 23:59 (end of day)
+        last_end = sorted_blocks[-1].end_time
+        if last_end != "24:00" and last_end != "23:59":
+            return False, "Last block must end at 24:00 or 23:59"
 
         # Check for gaps and overlaps
         for i in range(len(sorted_blocks) - 1):
@@ -210,19 +211,19 @@ class ScheduleStorageManager:
                 ScheduleUIBlock("06:00", "08:00", 21.0),
                 ScheduleUIBlock("08:00", "16:00", 18.0),
                 ScheduleUIBlock("16:00", "22:00", 21.0),
-                ScheduleUIBlock("22:00", "23:59", 18.0),
+                ScheduleUIBlock("22:00", "24:00", 18.0),
             ]
         elif schedule_type == SCHEDULE_TYPE_WEEKEND:
             return [
                 ScheduleUIBlock("00:00", "08:00", 18.0),
                 ScheduleUIBlock("08:00", "23:00", 21.0),
-                ScheduleUIBlock("23:00", "23:59", 18.0),
+                ScheduleUIBlock("23:00", "24:00", 18.0),
             ]
         else:  # SCHEDULE_TYPE_DAILY
             return [
                 ScheduleUIBlock("00:00", "06:00", 18.0),
                 ScheduleUIBlock("06:00", "22:00", 21.0),
-                ScheduleUIBlock("22:00", "23:59", 18.0),
+                ScheduleUIBlock("22:00", "24:00", 18.0),
             ]
 
     @staticmethod
