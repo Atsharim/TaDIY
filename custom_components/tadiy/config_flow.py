@@ -24,6 +24,7 @@ from .const import (
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
     CONF_ROOM_NAME,
+    CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
     CONF_WINDOW_SENSORS,
     DEFAULT_DONT_HEAT_BELOW,
@@ -87,6 +88,7 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             hub_data = {
                 "name": "TaDIY Hub",
                 CONF_HUB: True,
+                CONF_SHOW_PANEL: True,
                 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: DEFAULT_WINDOW_OPEN_TIMEOUT,
                 CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT: DEFAULT_WINDOW_CLOSE_TIMEOUT,
                 CONF_GLOBAL_DONT_HEAT_BELOW: DEFAULT_DONT_HEAT_BELOW,
