@@ -132,9 +132,14 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await async_register_services(hass, hub_coordinator, entry)
 
-    # Register custom panel
-    from .panel import async_register_panel
-    await async_register_panel(hass)
+    # Register custom panel (only if enabled in config)
+    show_panel = entry.data.get(CONF_SHOW_PANEL, True)
+    if show_panel:
+        from .panel import async_register_panel
+        await async_register_panel(hass)
+        _LOGGER.info("TaDIY panel registered")
+    else:
+        _LOGGER.info("TaDIY panel disabled in config")
 
     _LOGGER.info("TaDIY Hub setup complete")
 
