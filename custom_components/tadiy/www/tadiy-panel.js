@@ -15,9 +15,41 @@ class TaDiyPanel extends HTMLElement {
   }
 
   set hass(hass) {
+    const oldHass = this._hass;
     this._hass = hass;
-    this.loadRooms();
-    this.render();
+
+    // Only re-render if relevant state actually changed
+    if (!oldHass || this._shouldRerender(oldHass, hass)) {
+      this.loadRooms();
+      this.render();
+    }
+  }
+
+  _shouldRerender(oldHass, newHass) {
+    // Check if any TaDIY entity or hub mode changed
+    const oldStates = Object.keys(oldHass.states).filter(id =>
+      id.includes('tadiy') || id.includes('hub_mode')
+    );
+    const newStates = Object.keys(newHass.states).filter(id =>
+      id.includes('tadiy') || id.includes('hub_mode')
+    );
+
+    // Different number of entities
+    if (oldStates.length !== newStates.length) return true;
+
+    // Check if any relevant entity changed
+    for (const entityId of oldStates) {
+      const oldState = oldHass.states[entityId];
+      const newState = newHass.states[entityId];
+
+      if (!newState ||
+          oldState.state !== newState.state ||
+          JSON.stringify(oldState.attributes) !== JSON.stringify(newState.attributes)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   set panel(panel) {

@@ -212,7 +212,7 @@ class TaDiyScheduleCard extends HTMLElement {
           <div class="time-part minutes-part ${isFixed ? 'disabled' : ''}" data-part="minutes">
             <span class="time-value">${minutes}</span>
             ${!isFixed ? '<span class="dropdown-arrow">▼</span>' : ''}
-            ${!isFixed ? this.renderMinutesDropdown(parseInt(minutes), index, isEndTime) : ''}
+            ${!isFixed ? this.renderMinutesDropdown(parseInt(minutes), parseInt(hours), index, isEndTime) : ''}
           </div>
         </div>
       </div>
@@ -220,23 +220,85 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   renderHoursDropdown(currentHour, index, isEndTime) {
+    // Get constraints based on neighboring blocks
+    const constraints = this.getTimeConstraints(index, isEndTime);
     const maxHour = isEndTime ? 24 : 23;
+
     let options = '';
     for (let h = 0; h <= maxHour; h++) {
       const selected = h === currentHour ? 'selected' : '';
-      options += `<div class="time-option ${selected}" data-value="${h}">${String(h).padStart(2, '0')}</div>`;
+      const disabled = !this.isHourAllowed(h, 0, constraints);
+      const disabledClass = disabled ? 'disabled' : '';
+      const disabledAttr = disabled ? 'disabled' : '';
+      options += `<div class="time-option ${selected} ${disabledClass}" data-value="${h}" ${disabledAttr}>${String(h).padStart(2, '0')}</div>`;
     }
     return `<div class="time-dropdown hours-dropdown">${options}</div>`;
   }
 
-  renderMinutesDropdown(currentMinute, index, isEndTime) {
+  renderMinutesDropdown(currentMinute, currentHour, index, isEndTime) {
     const minuteOptions = [0, 15, 30, 45];
+    const constraints = this.getTimeConstraints(index, isEndTime);
+
     let options = '';
     for (const m of minuteOptions) {
       const selected = m === currentMinute ? 'selected' : '';
-      options += `<div class="time-option ${selected}" data-value="${m}">${String(m).padStart(2, '0')}</div>`;
+      const disabled = !this.isMinuteAllowed(currentHour, m, constraints);
+      const disabledClass = disabled ? 'disabled' : '';
+      const disabledAttr = disabled ? 'disabled' : '';
+      options += `<div class="time-option ${selected} ${disabledClass}" data-value="${m}" ${disabledAttr}>${String(m).padStart(2, '0')}</div>`;
     }
     return `<div class="time-dropdown minutes-dropdown">${options}</div>`;
+  }
+
+  getTimeConstraints(index, isEndTime) {
+    // Get min/max time based on neighboring blocks
+    let minTime = "00:00";
+    let maxTime = "24:00";
+
+    if (isEndTime) {
+      // End time: minimum is start time + 15min, maximum is next block's end time - 15min
+      const startTime = this._editingBlocks[index].start_time;
+      const [sh, sm] = startTime.split(':').map(Number);
+      minTime = this.minutesToTime(sh * 60 + sm + 15); // At least 15min after start
+
+      // Find next block
+      if (index < this._editingBlocks.length - 1) {
+        maxTime = this._editingBlocks[index + 1].end_time;
+        const [mh, mm] = maxTime.split(':').map(Number);
+        maxTime = this.minutesToTime(Math.max(0, mh * 60 + mm - 15)); // At most 15min before next block's end
+      } else {
+        maxTime = "24:00"; // Last block must end at 24:00
+      }
+    } else {
+      // Start time: minimum is previous block's start time + 15min, maximum is end time - 15min
+      if (index > 0) {
+        const prevStart = this._editingBlocks[index - 1].start_time;
+        const [ph, pm] = prevStart.split(':').map(Number);
+        minTime = this.minutesToTime(ph * 60 + pm + 15); // At least 15min after previous start
+      } else {
+        minTime = "00:00"; // First block must start at 00:00
+      }
+
+      const endTime = this._editingBlocks[index].end_time;
+      const [eh, em] = endTime.split(':').map(Number);
+      maxTime = this.minutesToTime(Math.max(0, eh * 60 + em - 15)); // At most 15min before end
+    }
+
+    return { minTime, maxTime };
+  }
+
+  isHourAllowed(hour, minute, constraints) {
+    const timeMinutes = hour * 60 + minute;
+    const minMinutes = this.timeToMinutes(constraints.minTime);
+    const maxMinutes = this.timeToMinutes(constraints.maxTime);
+    return timeMinutes >= minMinutes && timeMinutes <= maxMinutes;
+  }
+
+  isMinuteAllowed(hour, minute, constraints) {
+    const timeMinutes = hour * 60 + minute;
+    const minMinutes = this.timeToMinutes(constraints.minTime);
+    const maxMinutes = this.timeToMinutes(constraints.maxTime);
+    return timeMinutes >= minMinutes && timeMinutes <= maxMinutes;
   }
 
   snapToGrid(minutes) {
@@ -561,7 +623,8 @@ class TaDiyScheduleCard extends HTMLElement {
           color: var(--primary-text-color);
           font-size: 14px;
           font-family: monospace;
-          width: 100%;
+          min-width: 90px;
+          justify-content: center;
         }
         .time-separator {
           font-weight: bold;
@@ -586,7 +649,7 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .time-value {
           font-weight: bold;
-          min-width: 20px;
+          min-width: 22px;
           text-align: center;
         }
         .dropdown-arrow {
@@ -617,12 +680,17 @@ class TaDiyScheduleCard extends HTMLElement {
           transition: background 0.1s;
           font-weight: bold;
         }
-        .time-option:hover {
+        .time-option:hover:not(.disabled) {
           background: var(--secondary-background-color);
         }
         .time-option.selected {
           background: var(--primary-color);
           color: white;
+        }
+        .time-option.disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+          text-decoration: line-through;
         }
         input[type="number"] {
           padding: 8px;
@@ -901,7 +969,7 @@ class TaDiyScheduleCard extends HTMLElement {
       });
 
       // Handle option selection
-      dropdown.querySelectorAll('.time-option').forEach(option => {
+      dropdown.querySelectorAll('.time-option:not(.disabled)').forEach(option => {
         option.addEventListener('click', (e) => {
           e.stopPropagation();
 
