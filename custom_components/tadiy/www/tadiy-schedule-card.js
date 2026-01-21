@@ -17,6 +17,7 @@ class TaDiyScheduleCard extends HTMLElement {
     this._selectedBlockIndex = null; // Track selected block for keyboard operations
     this._renderDebounce = null; // Debounce timer for rendering
     this._modeExpanded = false; // Track if mode is expanded to show timeline
+    this._hasOpenDropdown = false; // Track if any dropdown is open
   }
 
   setConfig(config) {
@@ -441,6 +442,11 @@ class TaDiyScheduleCard extends HTMLElement {
 
   render() {
     if (!this._hass || !this._config) return;
+
+    // NEVER re-render while dropdown is open to prevent closure
+    if (this._hasOpenDropdown) {
+      return;
+    }
 
     const entity = this._hass.states[this._config.entity];
     if (!entity) {
@@ -953,6 +959,7 @@ class TaDiyScheduleCard extends HTMLElement {
         // Toggle this dropdown
         const wasOpen = dropdown.classList.contains('open');
         dropdown.classList.toggle('open');
+        this._hasOpenDropdown = !wasOpen; // Track dropdown state
 
         // Position dropdown below the time part using fixed positioning
         if (!wasOpen) {
@@ -1012,6 +1019,7 @@ class TaDiyScheduleCard extends HTMLElement {
 
           // Close dropdown and re-render
           dropdown.classList.remove('open');
+          this._hasOpenDropdown = false; // Mark dropdown closed before render
           this.render();
         });
       });
@@ -1024,6 +1032,7 @@ class TaDiyScheduleCard extends HTMLElement {
         this.shadowRoot.querySelectorAll('.time-dropdown').forEach(dd => {
           dd.classList.remove('open');
         });
+        this._hasOpenDropdown = false; // Mark dropdown closed
       }
     };
 
