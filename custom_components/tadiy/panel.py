@@ -44,7 +44,10 @@ async def async_unregister_panel(hass: HomeAssistant) -> None:
     try:
         # Check if panel exists before removing
         if "tadiy" in hass.data.get("frontend_panels", {}):
-            await async_remove_panel(hass, "tadiy")
+            result = async_remove_panel(hass, "tadiy")
+            # Only await if result is awaitable
+            if result is not None:
+                await result
             _LOGGER.info("TaDIY panel unregistered")
         else:
             _LOGGER.debug("TaDIY panel was not registered, skipping unregister")
