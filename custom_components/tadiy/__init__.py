@@ -132,9 +132,10 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await async_register_services(hass, hub_coordinator, entry)
 
-    # TODO: Implement custom panel registration
-    # Note: Direct writing to hass.data["frontend_panels"] does not work
-    # Need to use proper panel registration API
+    # Register custom panel
+    from .panel import async_register_panel
+    await async_register_panel(hass)
+
     _LOGGER.info("TaDIY Hub setup complete")
 
     return True
@@ -393,6 +394,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id)
 
         if entry_data.get("type") == "hub":
+            # Unregister panel
+            from .panel import async_unregister_panel
+            await async_unregister_panel(hass)
+
             hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)
             hass.services.async_remove(DOMAIN, SERVICE_RESET_LEARNING)
             hass.services.async_remove(DOMAIN, SERVICE_BOOST_ALL_ROOMS)
