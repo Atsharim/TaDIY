@@ -77,6 +77,47 @@ Advanced settings:
 
 ## Usage
 
+### Lovelace Cards
+
+TaDIY provides custom Lovelace cards for your dashboards:
+
+#### Schedule Card
+Edit heating schedules with an intuitive visual timeline:
+
+```yaml
+type: custom:tadiy-schedule-card
+entity: climate.living_room_tadiy
+```
+
+Features:
+- Visual timeline showing temperature blocks across 24 hours
+- Inline time editing with dropdowns
+- Add/edit/delete schedule blocks
+- Switch between modes (Normal, Home Office, etc.)
+- Weekday/weekend schedule support
+- Drag-and-drop timeline editing
+- Real-time validation
+
+#### Overview Card
+Display all TaDIY rooms with embedded climate controls:
+
+```yaml
+type: custom:tadiy-overview-card
+```
+
+Features:
+- Shows all TaDIY rooms in a grid layout
+- Embedded thermostat controls for each room
+- Hub mode selector
+- Quick access to schedule editor
+- Same layout as the sidebar panel
+
+**Setup**: Add cards via Settings → Dashboards → Resources:
+- Schedule Card: `/tadiy/tadiy-schedule-card.js`
+- Overview Card: `/tadiy/tadiy-overview-card.js`
+
+Note: Version parameter (e.g. `?v=0.2.6.1`) is optional and only for cache busting. Without it, use Ctrl+F5 to reload after updates.
+
 ### Operating Modes
 
 - **Normal**: Standard scheduled heating

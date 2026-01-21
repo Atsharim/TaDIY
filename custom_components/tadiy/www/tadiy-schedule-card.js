@@ -26,6 +26,15 @@ class TaDiyScheduleCard extends HTMLElement {
     this._config = config;
     // Don't set defaults here - wait for hass to initialize
     this._initialized = false;
+
+    // Support opening with a specific mode pre-selected (from panel)
+    if (config.initialMode) {
+      this._selectedMode = config.initialMode;
+      this._modeExpanded = true;
+    }
+    if (config.initialScheduleType) {
+      this._selectedScheduleType = config.initialScheduleType;
+    }
   }
 
   set hass(hass) {
@@ -587,9 +596,7 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .time-dropdown {
           display: none;
-          position: absolute;
-          top: 100%;
-          left: 0;
+          position: fixed;
           margin-top: 4px;
           background: var(--card-background-color);
           border: 2px solid var(--primary-color);
@@ -597,8 +604,8 @@ class TaDiyScheduleCard extends HTMLElement {
           max-height: 200px;
           overflow-y: auto;
           box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-          z-index: 1000;
-          min-width: 50px;
+          z-index: 10000;
+          min-width: 60px;
         }
         .time-dropdown.open {
           display: block;
@@ -876,10 +883,16 @@ class TaDiyScheduleCard extends HTMLElement {
         });
 
         // Toggle this dropdown
+        const wasOpen = dropdown.classList.contains('open');
         dropdown.classList.toggle('open');
 
-        // Scroll selected option into view
-        if (dropdown.classList.contains('open')) {
+        // Position dropdown below the time part using fixed positioning
+        if (!wasOpen) {
+          const rect = part.getBoundingClientRect();
+          dropdown.style.top = `${rect.bottom + 4}px`;
+          dropdown.style.left = `${rect.left}px`;
+
+          // Scroll selected option into view
           const selected = dropdown.querySelector('.time-option.selected');
           if (selected) {
             selected.scrollIntoView({ block: 'nearest' });
@@ -916,8 +929,18 @@ class TaDiyScheduleCard extends HTMLElement {
             if (newHours === 24 && newMinutes !== 0) newMinutes = 0;
           }
 
-          // Update block
-          this._editingBlocks[index][field] = `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
+          // Update block time
+          const newTime = `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
+          this._editingBlocks[index][field] = newTime;
+
+          // Update adjacent blocks to maintain continuity
+          if (isEndTime && index < this._editingBlocks.length - 1) {
+            // Changed end time - update next block's start time
+            this._editingBlocks[index + 1].start_time = newTime;
+          } else if (!isEndTime && index > 0) {
+            // Changed start time - update previous block's end time
+            this._editingBlocks[index - 1].end_time = newTime;
+          }
 
           // Close dropdown and re-render
           dropdown.classList.remove('open');
@@ -1364,4 +1387,7 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 }
 
-customElements.define('tadiy-schedule-card', TaDiyScheduleCard);
+// Only define if not already defined
+if (!customElements.get('tadiy-schedule-card')) {
+  customElements.define('tadiy-schedule-card', TaDiyScheduleCard);
+}
