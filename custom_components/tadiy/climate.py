@@ -100,6 +100,13 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         """Return the supported step of target temperature."""
         return 0.5
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return entity specific state attributes."""
+        return {
+            "integration": "tadiy",
+        }
+
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for all TRVs in this room."""
         temperature = kwargs.get(ATTR_TEMPERATURE)

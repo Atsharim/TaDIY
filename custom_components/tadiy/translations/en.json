@@ -83,7 +83,18 @@
         "menu_options": {
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
-          "view_modes": "View All Modes"
+          "view_modes": "View All Modes",
+          "panel_settings": "Panel Settings"
+        }
+      },
+      "panel_settings": {
+        "title": "Panel Settings",
+        "description": "{info}",
+        "data": {
+          "show_panel": "Show Schedules Panel in Sidebar"
+        },
+        "data_description": {
+          "show_panel": "Enable or disable the TaDIY panel in the Home Assistant sidebar. When enabled, you can access all room schedules directly from the sidebar. When disabled, schedules are only accessible through room configuration."
         }
       },
       "init_room": {
