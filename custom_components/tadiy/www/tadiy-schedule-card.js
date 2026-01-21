@@ -184,20 +184,50 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   renderTimeInput(value, className, index, isEndTime = false) {
-    // Read-only input with time picker icon
+    // Check if this is a fixed time (first start or last end)
+    const isFirstStart = index === 0 && !isEndTime;
+    const isLastEnd = index === this._editingBlocks.length - 1 && isEndTime;
+    const isFixed = isFirstStart || isLastEnd;
+
+    const [hours, minutes] = value.split(':');
+
     return `
-      <div class="time-input-wrapper">
-        <input type="text"
-               class="${className}"
-               value="${value}"
-               readonly
-               data-index="${index}"
-               data-is-end="${isEndTime}">
-        <button type="button" class="time-picker-btn" data-index="${index}" data-is-end="${isEndTime}">
-          🕐
-        </button>
+      <div class="time-input-wrapper ${isFixed ? 'fixed' : ''}">
+        <div class="time-input-inline" data-index="${index}" data-is-end="${isEndTime}">
+          <div class="time-part hours-part ${isFixed ? 'disabled' : ''}" data-part="hours">
+            <span class="time-value">${hours}</span>
+            ${!isFixed ? '<span class="dropdown-arrow">▼</span>' : ''}
+            ${!isFixed ? this.renderHoursDropdown(parseInt(hours), index, isEndTime) : ''}
+          </div>
+          <span class="time-separator">:</span>
+          <div class="time-part minutes-part ${isFixed ? 'disabled' : ''}" data-part="minutes">
+            <span class="time-value">${minutes}</span>
+            ${!isFixed ? '<span class="dropdown-arrow">▼</span>' : ''}
+            ${!isFixed ? this.renderMinutesDropdown(parseInt(minutes), index, isEndTime) : ''}
+          </div>
+        </div>
       </div>
     `;
+  }
+
+  renderHoursDropdown(currentHour, index, isEndTime) {
+    const maxHour = isEndTime ? 24 : 23;
+    let options = '';
+    for (let h = 0; h <= maxHour; h++) {
+      const selected = h === currentHour ? 'selected' : '';
+      options += `<div class="time-option ${selected}" data-value="${h}">${String(h).padStart(2, '0')}</div>`;
+    }
+    return `<div class="time-dropdown hours-dropdown">${options}</div>`;
+  }
+
+  renderMinutesDropdown(currentMinute, index, isEndTime) {
+    const minuteOptions = [0, 15, 30, 45];
+    let options = '';
+    for (const m of minuteOptions) {
+      const selected = m === currentMinute ? 'selected' : '';
+      options += `<div class="time-option ${selected}" data-value="${m}">${String(m).padStart(2, '0')}</div>`;
+    }
+    return `<div class="time-dropdown minutes-dropdown">${options}</div>`;
   }
 
   snapToGrid(minutes) {
@@ -507,28 +537,15 @@ class TaDiyScheduleCard extends HTMLElement {
           display: flex;
           align-items: center;
         }
-        .time-picker-btn {
-          position: absolute;
-          right: 4px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: transparent;
-          border: none;
-          font-size: 18px;
-          cursor: pointer;
-          padding: 4px;
-          line-height: 1;
-          opacity: 0.6;
-          transition: opacity 0.2s;
+        .time-input-wrapper.fixed {
+          opacity: 0.5;
+          cursor: not-allowed;
         }
-        .time-picker-btn:hover {
-          opacity: 1;
-        }
-        input[type="time"],
-        input[type="number"],
-        input[type="text"].start-time,
-        input[type="text"].end-time {
-          padding: 8px 32px 8px 8px;
+        .time-input-inline {
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          padding: 8px;
           border: 1px solid var(--divider-color);
           border-radius: 4px;
           background: var(--card-background-color);
@@ -537,14 +554,77 @@ class TaDiyScheduleCard extends HTMLElement {
           font-family: monospace;
           width: 100%;
         }
-        input[type="text"].start-time[readonly],
-        input[type="text"].end-time[readonly] {
+        .time-separator {
+          font-weight: bold;
+          padding: 0 2px;
+        }
+        .time-part {
+          position: relative;
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 6px;
           cursor: pointer;
+          border-radius: 3px;
+          transition: background 0.2s;
+          user-select: none;
+        }
+        .time-part:hover:not(.disabled) {
           background: var(--secondary-background-color);
         }
-        input[type="text"].start-time[readonly]:hover,
-        input[type="text"].end-time[readonly]:hover {
-          border-color: var(--primary-color);
+        .time-part.disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
+        }
+        .time-value {
+          font-weight: bold;
+          min-width: 20px;
+          text-align: center;
+        }
+        .dropdown-arrow {
+          font-size: 8px;
+          margin-left: 2px;
+          opacity: 0.6;
+        }
+        .time-dropdown {
+          display: none;
+          position: absolute;
+          top: 100%;
+          left: 0;
+          margin-top: 4px;
+          background: var(--card-background-color);
+          border: 2px solid var(--primary-color);
+          border-radius: 4px;
+          max-height: 200px;
+          overflow-y: auto;
+          box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+          z-index: 1000;
+          min-width: 50px;
+        }
+        .time-dropdown.open {
+          display: block;
+        }
+        .time-option {
+          padding: 8px 12px;
+          text-align: center;
+          cursor: pointer;
+          transition: background 0.1s;
+          font-weight: bold;
+        }
+        .time-option:hover {
+          background: var(--secondary-background-color);
+        }
+        .time-option.selected {
+          background: var(--primary-color);
+          color: white;
+        }
+        input[type="number"] {
+          padding: 8px;
+          border: 1px solid var(--divider-color);
+          border-radius: 4px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          font-size: 14px;
+          width: 100%;
         }
         .delete-btn {
           padding: 8px;
@@ -781,15 +861,87 @@ class TaDiyScheduleCard extends HTMLElement {
       });
     });
 
-    // Time picker buttons
-    this.shadowRoot.querySelectorAll('.time-picker-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+    // Inline dropdown time pickers
+    this.shadowRoot.querySelectorAll('.time-part:not(.disabled)').forEach(part => {
+      const dropdown = part.querySelector('.time-dropdown');
+      if (!dropdown) return;
+
+      // Toggle dropdown on click
+      part.addEventListener('click', (e) => {
         e.stopPropagation(); // Prevent block selection
-        const index = parseInt(btn.dataset.index);
-        const isEndTime = btn.dataset.isEnd === 'true';
-        this.openTimePicker(index, isEndTime);
+
+        // Close all other dropdowns first
+        this.shadowRoot.querySelectorAll('.time-dropdown').forEach(dd => {
+          if (dd !== dropdown) dd.classList.remove('open');
+        });
+
+        // Toggle this dropdown
+        dropdown.classList.toggle('open');
+
+        // Scroll selected option into view
+        if (dropdown.classList.contains('open')) {
+          const selected = dropdown.querySelector('.time-option.selected');
+          if (selected) {
+            selected.scrollIntoView({ block: 'nearest' });
+          }
+        }
+      });
+
+      // Handle option selection
+      dropdown.querySelectorAll('.time-option').forEach(option => {
+        option.addEventListener('click', (e) => {
+          e.stopPropagation();
+
+          // Get context
+          const timeInput = part.closest('.time-input-inline');
+          const index = parseInt(timeInput.dataset.index);
+          const isEndTime = timeInput.dataset.isEnd === 'true';
+          const partType = part.dataset.part; // 'hours' or 'minutes'
+          const newValue = parseInt(option.dataset.value);
+
+          // Get current time
+          const field = isEndTime ? 'end_time' : 'start_time';
+          const [h, m] = this._editingBlocks[index][field].split(':').map(Number);
+
+          // Update appropriate part
+          let newHours = h;
+          let newMinutes = m;
+          if (partType === 'hours') {
+            newHours = newValue;
+            // Special case: if 24:00, force minutes to 00
+            if (newHours === 24) newMinutes = 0;
+          } else {
+            newMinutes = newValue;
+            // Can't have 24:XX except 24:00
+            if (newHours === 24 && newMinutes !== 0) newMinutes = 0;
+          }
+
+          // Update block
+          this._editingBlocks[index][field] = `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
+
+          // Close dropdown and re-render
+          dropdown.classList.remove('open');
+          this.render();
+        });
       });
     });
+
+    // Close dropdowns when clicking outside
+    const closeDropdowns = (e) => {
+      const isTimePart = e.target.closest('.time-part');
+      if (!isTimePart) {
+        this.shadowRoot.querySelectorAll('.time-dropdown').forEach(dd => {
+          dd.classList.remove('open');
+        });
+      }
+    };
+
+    // Remove old listener if exists
+    if (this._dropdownCloseHandler) {
+      document.removeEventListener('click', this._dropdownCloseHandler, true);
+    }
+    document.addEventListener('click', closeDropdowns, true);
+    this._dropdownCloseHandler = closeDropdowns;
 
     // Delete buttons
     this.shadowRoot.querySelectorAll('.delete-btn').forEach(btn => {
@@ -1168,301 +1320,6 @@ class TaDiyScheduleCard extends HTMLElement {
     return { valid: true };
   }
 
-  openTimePicker(index, isEndTime) {
-    const field = isEndTime ? 'end_time' : 'start_time';
-    const currentValue = this._editingBlocks[index][field];
-
-    // Parse current time
-    const [currentH, currentM] = currentValue.split(':').map(Number);
-
-    // Generate hours options (00-24 for end time, 00-23 for start time)
-    const maxHour = isEndTime ? 24 : 23;
-    const hoursOptions = [];
-    for (let h = 0; h <= maxHour; h++) {
-      hoursOptions.push(String(h).padStart(2, '0'));
-    }
-
-    // Generate minutes options in 15-minute intervals (00, 15, 30, 45)
-    const minutesOptions = ['00', '15', '30', '45'];
-
-    // Create a modal dialog
-    const dialog = document.createElement('div');
-    dialog.className = 'time-picker-dialog';
-
-    dialog.innerHTML = `
-      <div class="time-picker-backdrop"></div>
-      <div class="time-picker-content">
-        <h3>Select Time</h3>
-        <div class="time-picker-inputs">
-          <div class="time-input-group">
-            <label>HH</label>
-            <div class="time-picker-field" data-field="hours">
-              <div class="time-picker-value">${String(currentH).padStart(2, '0')}</div>
-              <div class="time-picker-dropdown">
-                ${hoursOptions.map(h => `
-                  <div class="time-picker-option ${parseInt(h) === currentH ? 'selected' : ''}"
-                       data-value="${h}">${h}</div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-          <span class="time-separator">:</span>
-          <div class="time-input-group">
-            <label>MM</label>
-            <div class="time-picker-field" data-field="minutes">
-              <div class="time-picker-value">${String(currentM).padStart(2, '0')}</div>
-              <div class="time-picker-dropdown">
-                ${minutesOptions.map(m => `
-                  <div class="time-picker-option ${parseInt(m) === currentM ? 'selected' : ''}"
-                       data-value="${m}">${m}</div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="time-picker-actions">
-          <button class="btn btn-secondary time-picker-cancel">Cancel</button>
-          <button class="btn btn-primary time-picker-ok">OK</button>
-        </div>
-      </div>
-    `;
-
-    // Add styles
-    const style = document.createElement('style');
-    style.textContent = `
-      .time-picker-dialog {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 10000;
-      }
-      .time-picker-backdrop {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-      }
-      .time-picker-content {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: var(--card-background-color);
-        padding: 24px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        min-width: 320px;
-      }
-      .time-picker-content h3 {
-        margin: 0 0 16px 0;
-        color: var(--primary-text-color);
-      }
-      .time-picker-inputs {
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
-        gap: 12px;
-        margin-bottom: 20px;
-      }
-      .time-input-group {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .time-input-group label {
-        font-size: 12px;
-        font-weight: bold;
-        color: var(--secondary-text-color);
-        text-align: center;
-      }
-      .time-picker-field {
-        position: relative;
-        width: 80px;
-      }
-      .time-picker-value {
-        padding: 12px 8px;
-        font-size: 24px;
-        font-weight: bold;
-        text-align: center;
-        border: 2px solid var(--divider-color);
-        border-radius: 4px;
-        background: var(--card-background-color);
-        color: var(--primary-text-color);
-        cursor: pointer;
-        user-select: none;
-        transition: border-color 0.2s;
-      }
-      .time-picker-value:hover {
-        border-color: var(--primary-color);
-      }
-      .time-picker-dropdown {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        margin-top: 4px;
-        background: var(--card-background-color);
-        border: 2px solid var(--primary-color);
-        border-radius: 4px;
-        max-height: 200px;
-        overflow-y: auto;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        display: none;
-        z-index: 1000;
-      }
-      .time-picker-dropdown.open {
-        display: block;
-      }
-      .time-picker-option {
-        padding: 10px 8px;
-        text-align: center;
-        cursor: pointer;
-        font-size: 18px;
-        transition: background 0.1s;
-        color: var(--primary-text-color);
-      }
-      .time-picker-option:hover {
-        background: var(--secondary-background-color);
-      }
-      .time-picker-option.selected {
-        background: var(--primary-color);
-        color: white;
-        font-weight: bold;
-      }
-      .time-separator {
-        font-size: 32px;
-        font-weight: bold;
-        color: var(--primary-text-color);
-        padding-top: 30px;
-      }
-      .time-picker-actions {
-        display: flex;
-        gap: 8px;
-        justify-content: flex-end;
-      }
-    `;
-
-    this.shadowRoot.appendChild(style);
-    this.shadowRoot.appendChild(dialog);
-
-    const hoursField = dialog.querySelector('[data-field="hours"]');
-    const minutesField = dialog.querySelector('[data-field="minutes"]');
-    const hoursValue = hoursField.querySelector('.time-picker-value');
-    const minutesValue = minutesField.querySelector('.time-picker-value');
-    const hoursDropdown = hoursField.querySelector('.time-picker-dropdown');
-    const minutesDropdown = minutesField.querySelector('.time-picker-dropdown');
-    const cancelBtn = dialog.querySelector('.time-picker-cancel');
-    const okBtn = dialog.querySelector('.time-picker-ok');
-
-    let selectedHours = currentH;
-    let selectedMinutes = currentM;
-
-    const closeDialog = () => {
-      this.shadowRoot.removeChild(dialog);
-      this.shadowRoot.removeChild(style);
-    };
-
-    // Toggle dropdown on click
-    hoursValue.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = hoursDropdown.classList.contains('open');
-      hoursDropdown.classList.toggle('open', !isOpen);
-      minutesDropdown.classList.remove('open');
-
-      // Scroll to selected option
-      if (!isOpen) {
-        const selectedOption = hoursDropdown.querySelector('.time-picker-option.selected');
-        if (selectedOption) {
-          selectedOption.scrollIntoView({ block: 'nearest' });
-        }
-      }
-    });
-
-    minutesValue.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const isOpen = minutesDropdown.classList.contains('open');
-      minutesDropdown.classList.toggle('open', !isOpen);
-      hoursDropdown.classList.remove('open');
-
-      // Scroll to selected option
-      if (!isOpen) {
-        const selectedOption = minutesDropdown.querySelector('.time-picker-option.selected');
-        if (selectedOption) {
-          selectedOption.scrollIntoView({ block: 'nearest' });
-        }
-      }
-    });
-
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', () => {
-      hoursDropdown.classList.remove('open');
-      minutesDropdown.classList.remove('open');
-    });
-
-    // Hours option selection
-    hoursDropdown.querySelectorAll('.time-picker-option').forEach(option => {
-      option.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectedHours = parseInt(option.dataset.value);
-        hoursValue.textContent = option.dataset.value;
-
-        // Update selected state
-        hoursDropdown.querySelectorAll('.time-picker-option').forEach(opt => {
-          opt.classList.remove('selected');
-        });
-        option.classList.add('selected');
-
-        hoursDropdown.classList.remove('open');
-      });
-    });
-
-    // Minutes option selection
-    minutesDropdown.querySelectorAll('.time-picker-option').forEach(option => {
-      option.addEventListener('click', (e) => {
-        e.stopPropagation();
-        selectedMinutes = parseInt(option.dataset.value);
-        minutesValue.textContent = option.dataset.value;
-
-        // Update selected state
-        minutesDropdown.querySelectorAll('.time-picker-option').forEach(opt => {
-          opt.classList.remove('selected');
-        });
-        option.classList.add('selected');
-
-        minutesDropdown.classList.remove('open');
-      });
-    });
-
-    // Cancel button
-    cancelBtn.addEventListener('click', closeDialog);
-
-    // OK button
-    okBtn.addEventListener('click', () => {
-      // Special case: 24:00 is only valid as end time
-      if (selectedHours === 24) {
-        if (isEndTime) {
-          selectedMinutes = 0; // Force 24:00
-        } else {
-          selectedHours = 23; // Start time can't be 24:00
-        }
-      }
-
-      const selectedTime = `${String(selectedHours).padStart(2, '0')}:${String(selectedMinutes).padStart(2, '0')}`;
-
-      // Update the block
-      this._editingBlocks[index][field] = selectedTime;
-
-      closeDialog();
-      this.render();
-    });
-
-    // Don't close on backdrop click - only on Cancel or OK
-    // This ensures user must explicitly cancel or confirm
-  }
 
   async saveSchedule() {
     const validation = this.validateBlocks();

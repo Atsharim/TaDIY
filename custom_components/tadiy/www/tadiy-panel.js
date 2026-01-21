@@ -153,65 +153,26 @@ class TaDiyPanel extends HTMLElement {
           gap: 16px;
           margin-bottom: 24px;
         }
-        .room-card {
+        .room-card-wrapper {
           background: var(--card-background-color);
           border-radius: 8px;
           padding: 16px;
           box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          cursor: pointer;
           transition: transform 0.2s, box-shadow 0.2s;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
         }
-        .room-card:hover {
+        .room-card-wrapper:hover {
           transform: translateY(-2px);
           box-shadow: 0 4px 8px rgba(0,0,0,0.15);
         }
-        .room-name {
-          font-size: 18px;
-          font-weight: bold;
-          margin-bottom: 12px;
-          color: var(--primary-text-color);
+        .room-climate-container {
+          flex: 1;
+          min-height: 200px;
         }
-        .room-temps {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 8px;
-        }
-        .temp-current {
-          font-size: 32px;
-          font-weight: 300;
-          color: var(--primary-text-color);
-        }
-        .temp-target {
-          font-size: 18px;
-          color: var(--secondary-text-color);
-        }
-        .room-status {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px;
-          border-radius: 4px;
-          background: var(--secondary-background-color);
-        }
-        .status-icon {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-        }
-        .status-icon.heating {
-          background: #ff9800;
-        }
-        .status-icon.idle {
-          background: #4caf50;
-        }
-        .status-icon.off {
-          background: #9e9e9e;
-        }
-        .status-text {
-          font-size: 14px;
-          text-transform: capitalize;
-          color: var(--secondary-text-color);
+        .room-climate-container > * {
+          width: 100%;
         }
         .edit-schedule-btn {
           width: 100%;
@@ -274,42 +235,41 @@ class TaDiyPanel extends HTMLElement {
     `;
 
     this.attachEventListeners();
+    this.embedClimateCards();
   }
 
   renderRoomCard(room) {
-    const currentTemp = room.current_temp !== null && room.current_temp !== undefined
-      ? `${room.current_temp.toFixed(1)}°C`
-      : '--°C';
-
-    const targetTemp = room.target_temp !== null && room.target_temp !== undefined
-      ? `${room.target_temp.toFixed(1)}°C`
-      : '--°C';
-
-    let statusClass = 'idle';
-    let statusText = room.hvac_action || room.hvac_mode || 'idle';
-
-    if (statusText === 'heating') {
-      statusClass = 'heating';
-    } else if (statusText === 'off') {
-      statusClass = 'off';
-    }
-
+    // We'll embed the climate card dynamically after render
     return `
-      <div class="room-card" data-entity="${room.entity_id}">
-        <div class="room-name">${room.name}</div>
-        <div class="room-temps">
-          <div class="temp-current">${currentTemp}</div>
-          <div class="temp-target">→ ${targetTemp}</div>
-        </div>
-        <div class="room-status">
-          <div class="status-icon ${statusClass}"></div>
-          <div class="status-text">${statusText}</div>
+      <div class="room-card-wrapper" data-entity="${room.entity_id}">
+        <div class="room-climate-container" data-climate="${room.entity_id}">
+          <!-- Climate card will be inserted here -->
         </div>
         <button class="edit-schedule-btn" data-entity="${room.entity_id}">
           📅 Edit Schedule
         </button>
       </div>
     `;
+  }
+
+  embedClimateCards() {
+    // Embed actual Home Assistant climate cards into containers
+    this.shadowRoot.querySelectorAll('.room-climate-container').forEach(container => {
+      const entityId = container.dataset.climate;
+
+      // Clear existing content
+      container.innerHTML = '';
+
+      // Create a thermostat card element
+      const card = document.createElement('hui-thermostat-card');
+      card.setConfig({
+        entity: entityId,
+        show_current_as_primary: true
+      });
+      card.hass = this._hass;
+
+      container.appendChild(card);
+    });
   }
 
   attachEventListeners() {
@@ -324,10 +284,27 @@ class TaDiyPanel extends HTMLElement {
         dropdown.style.display = isVisible ? 'none' : 'block';
       });
 
-      // Close dropdown when clicking outside
-      document.addEventListener('click', () => {
-        dropdown.style.display = 'none';
+      // Prevent dropdown from closing when clicking inside it
+      dropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
       });
+
+      // Close dropdown when clicking outside
+      const closeDropdownHandler = (e) => {
+        // Check if click is outside both button and dropdown
+        if (!modeBtn.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.style.display = 'none';
+        }
+      };
+
+      // Use capture phase to ensure we catch clicks before they bubble
+      document.addEventListener('click', closeDropdownHandler, true);
+
+      // Clean up old listeners if re-rendering
+      if (this._dropdownCloseHandler) {
+        document.removeEventListener('click', this._dropdownCloseHandler, true);
+      }
+      this._dropdownCloseHandler = closeDropdownHandler;
 
       // Hub mode options
       this.shadowRoot.querySelectorAll('.hub-mode-option').forEach(option => {
@@ -355,17 +332,6 @@ class TaDiyPanel extends HTMLElement {
       });
     }
 
-    // Room card clicks - show more-info dialog
-    this.shadowRoot.querySelectorAll('.room-card').forEach(card => {
-      card.addEventListener('click', (e) => {
-        // Don't trigger if clicking the button
-        if (e.target.classList.contains('edit-schedule-btn')) return;
-
-        const entityId = card.dataset.entity;
-        this.showMoreInfo(entityId);
-      });
-    });
-
     // Edit schedule buttons
     this.shadowRoot.querySelectorAll('.edit-schedule-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -376,33 +342,42 @@ class TaDiyPanel extends HTMLElement {
     });
   }
 
-  showMoreInfo(entityId) {
-    // Dispatch Home Assistant event to show more-info dialog
-    const event = new Event('hass-more-info', {
-      bubbles: true,
-      composed: true,
-    });
-    event.detail = { entityId };
-    this.dispatchEvent(event);
-  }
-
   showScheduleEditor(entityId) {
     // Show a popup with the schedule card
     const dialog = document.createElement('div');
     dialog.className = 'schedule-editor-dialog';
 
-    dialog.innerHTML = `
-      <div class="dialog-backdrop"></div>
-      <div class="dialog-content">
-        <div class="dialog-header">
-          <h2>Edit Schedule</h2>
-          <button class="close-btn">✕</button>
-        </div>
-        <div class="dialog-body">
-          <tadiy-schedule-card></tadiy-schedule-card>
-        </div>
-      </div>
-    `;
+    // Create backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'dialog-backdrop';
+
+    // Create content container
+    const content = document.createElement('div');
+    content.className = 'dialog-content';
+
+    // Create header
+    const header = document.createElement('div');
+    header.className = 'dialog-header';
+    const title = document.createElement('h2');
+    title.textContent = 'Edit Schedule';
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'close-btn';
+    closeBtn.textContent = '✕';
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+
+    // Create body
+    const body = document.createElement('div');
+    body.className = 'dialog-body';
+
+    // Create schedule card using createElement (not innerHTML!)
+    const scheduleCard = document.createElement('tadiy-schedule-card');
+
+    body.appendChild(scheduleCard);
+    content.appendChild(header);
+    content.appendChild(body);
+    dialog.appendChild(backdrop);
+    dialog.appendChild(content);
 
     const style = document.createElement('style');
     style.textContent = `
@@ -465,22 +440,25 @@ class TaDiyPanel extends HTMLElement {
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(dialog);
 
-    // Configure the schedule card
-    const scheduleCard = dialog.querySelector('tadiy-schedule-card');
+    // Configure the schedule card AFTER it's added to DOM
     scheduleCard.setConfig({ entity: entityId });
     scheduleCard.hass = this._hass;
 
-    // Close button
-    const closeBtn = dialog.querySelector('.close-btn');
-    const backdrop = dialog.querySelector('.dialog-backdrop');
-
+    // Close dialog function
     const closeDialog = () => {
       this.shadowRoot.removeChild(dialog);
       this.shadowRoot.removeChild(style);
     };
 
+    // Close button - don't close on backdrop click to prevent accidental closes
     closeBtn.addEventListener('click', closeDialog);
-    backdrop.addEventListener('click', closeDialog);
+
+    // Only close on backdrop click if explicitly clicking it (not on focus loss)
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) {
+        closeDialog();
+      }
+    });
   }
 }
 
