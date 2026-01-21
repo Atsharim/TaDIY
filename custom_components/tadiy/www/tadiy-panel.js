@@ -12,11 +12,17 @@ class TaDiyPanel extends HTMLElement {
     this._hubMode = 'normal';
     this._hubModeOptions = [];
     this._hubModeEntityId = null;
+    this._hasOpenDialog = false; // Track if schedule editor dialog is open
   }
 
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+
+    // NEVER re-render while dialog is open to prevent dropdown/dialog closure
+    if (this._hasOpenDialog) {
+      return;
+    }
 
     // Only re-render if relevant state actually changed
     if (!oldHass || this._shouldRerender(oldHass, hass)) {
@@ -314,6 +320,7 @@ class TaDiyPanel extends HTMLElement {
         e.stopPropagation();
         const isVisible = dropdown.style.display !== 'none';
         dropdown.style.display = isVisible ? 'none' : 'block';
+        this._hasOpenDialog = !isVisible; // Track dropdown state (using same flag as dialog)
       });
 
       // Prevent dropdown from closing when clicking inside it
@@ -326,6 +333,7 @@ class TaDiyPanel extends HTMLElement {
         // Check if click is outside both button and dropdown
         if (!modeBtn.contains(e.target) && !dropdown.contains(e.target)) {
           dropdown.style.display = 'none';
+          this._hasOpenDialog = false; // Mark dropdown closed
         }
       };
 
@@ -354,6 +362,7 @@ class TaDiyPanel extends HTMLElement {
               // Update local state
               this._hubMode = newMode;
               dropdown.style.display = 'none';
+              this._hasOpenDialog = false; // Mark dropdown closed before render
               this.render();
             } catch (error) {
               console.error('Failed to change hub mode:', error);
@@ -485,8 +494,12 @@ class TaDiyPanel extends HTMLElement {
     });
     scheduleCard.hass = this._hass;
 
+    // Mark dialog as open
+    this._hasOpenDialog = true;
+
     // Close dialog function
     const closeDialog = () => {
+      this._hasOpenDialog = false;
       this.shadowRoot.removeChild(dialog);
       this.shadowRoot.removeChild(style);
     };

@@ -13,6 +13,7 @@ class TaDiyOverviewCard extends HTMLElement {
     this._hubMode = 'normal';
     this._hubModeOptions = [];
     this._hubModeEntityId = null;
+    this._hasOpenDropdown = false; // Track if dropdown is open
   }
 
   setConfig(config) {
@@ -22,6 +23,11 @@ class TaDiyOverviewCard extends HTMLElement {
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+
+    // NEVER re-render while dropdown is open to prevent closure
+    if (this._hasOpenDropdown) {
+      return;
+    }
 
     // Only re-render if relevant state actually changed
     if (!oldHass || this._shouldRerender(oldHass, hass)) {
@@ -308,6 +314,7 @@ class TaDiyOverviewCard extends HTMLElement {
         e.stopPropagation();
         const isVisible = dropdown.style.display !== 'none';
         dropdown.style.display = isVisible ? 'none' : 'block';
+        this._hasOpenDropdown = !isVisible; // Track dropdown state
       });
 
       dropdown.addEventListener('click', (e) => {
@@ -317,6 +324,7 @@ class TaDiyOverviewCard extends HTMLElement {
       const closeDropdownHandler = (e) => {
         if (!modeBtn.contains(e.target) && !dropdown.contains(e.target)) {
           dropdown.style.display = 'none';
+          this._hasOpenDropdown = false; // Track dropdown closed
         }
       };
 
@@ -342,6 +350,7 @@ class TaDiyOverviewCard extends HTMLElement {
 
               this._hubMode = newMode;
               dropdown.style.display = 'none';
+              this._hasOpenDropdown = false; // Mark dropdown closed before render
               this.render();
             } catch (error) {
               console.error('Failed to change hub mode:', error);
@@ -391,7 +400,7 @@ window.customCards.push({
 });
 
 console.info(
-  '%c TaDIY Overview Card %c v0.2.6.2 ',
+  '%c TaDIY Overview Card %c v0.2.6.3 ',
   'background-color: #ef5350; color: #fff; font-weight: bold;',
   'background-color: #424242; color: #fff; font-weight: bold;'
 );
