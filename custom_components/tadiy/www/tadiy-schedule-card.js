@@ -1175,6 +1175,16 @@ class TaDiyScheduleCard extends HTMLElement {
     // Parse current time
     const [currentH, currentM] = currentValue.split(':').map(Number);
 
+    // Generate hours options (00-24 for end time, 00-23 for start time)
+    const maxHour = isEndTime ? 24 : 23;
+    const hoursOptions = [];
+    for (let h = 0; h <= maxHour; h++) {
+      hoursOptions.push(String(h).padStart(2, '0'));
+    }
+
+    // Generate minutes options in 15-minute intervals (00, 15, 30, 45)
+    const minutesOptions = ['00', '15', '30', '45'];
+
     // Create a modal dialog
     const dialog = document.createElement('div');
     dialog.className = 'time-picker-dialog';
@@ -1185,23 +1195,29 @@ class TaDiyScheduleCard extends HTMLElement {
         <h3>Select Time</h3>
         <div class="time-picker-inputs">
           <div class="time-input-group">
-            <label>Hours</label>
-            <input type="number"
-                   class="time-picker-hours"
-                   value="${currentH}"
-                   min="0"
-                   max="24"
-                   step="1">
+            <label>HH</label>
+            <div class="time-picker-field" data-field="hours">
+              <div class="time-picker-value">${String(currentH).padStart(2, '0')}</div>
+              <div class="time-picker-dropdown">
+                ${hoursOptions.map(h => `
+                  <div class="time-picker-option ${parseInt(h) === currentH ? 'selected' : ''}"
+                       data-value="${h}">${h}</div>
+                `).join('')}
+              </div>
+            </div>
           </div>
           <span class="time-separator">:</span>
           <div class="time-input-group">
-            <label>Minutes</label>
-            <input type="number"
-                   class="time-picker-minutes"
-                   value="${currentM}"
-                   min="0"
-                   max="59"
-                   step="15">
+            <label>MM</label>
+            <div class="time-picker-field" data-field="minutes">
+              <div class="time-picker-value">${String(currentM).padStart(2, '0')}</div>
+              <div class="time-picker-dropdown">
+                ${minutesOptions.map(m => `
+                  <div class="time-picker-option ${parseInt(m) === currentM ? 'selected' : ''}"
+                       data-value="${m}">${m}</div>
+                `).join('')}
+              </div>
+            </div>
           </div>
         </div>
         <div class="time-picker-actions">
@@ -1247,7 +1263,7 @@ class TaDiyScheduleCard extends HTMLElement {
       }
       .time-picker-inputs {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         gap: 12px;
         margin-bottom: 20px;
@@ -1255,16 +1271,19 @@ class TaDiyScheduleCard extends HTMLElement {
       .time-input-group {
         display: flex;
         flex-direction: column;
-        gap: 4px;
+        gap: 6px;
       }
       .time-input-group label {
         font-size: 12px;
+        font-weight: bold;
         color: var(--secondary-text-color);
         text-align: center;
       }
-      .time-picker-hours,
-      .time-picker-minutes {
+      .time-picker-field {
+        position: relative;
         width: 80px;
+      }
+      .time-picker-value {
         padding: 12px 8px;
         font-size: 24px;
         font-weight: bold;
@@ -1273,17 +1292,52 @@ class TaDiyScheduleCard extends HTMLElement {
         border-radius: 4px;
         background: var(--card-background-color);
         color: var(--primary-text-color);
+        cursor: pointer;
+        user-select: none;
+        transition: border-color 0.2s;
       }
-      .time-picker-hours:focus,
-      .time-picker-minutes:focus {
-        outline: none;
+      .time-picker-value:hover {
         border-color: var(--primary-color);
+      }
+      .time-picker-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 4px;
+        background: var(--card-background-color);
+        border: 2px solid var(--primary-color);
+        border-radius: 4px;
+        max-height: 200px;
+        overflow-y: auto;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        display: none;
+        z-index: 1000;
+      }
+      .time-picker-dropdown.open {
+        display: block;
+      }
+      .time-picker-option {
+        padding: 10px 8px;
+        text-align: center;
+        cursor: pointer;
+        font-size: 18px;
+        transition: background 0.1s;
+        color: var(--primary-text-color);
+      }
+      .time-picker-option:hover {
+        background: var(--secondary-background-color);
+      }
+      .time-picker-option.selected {
+        background: var(--primary-color);
+        color: white;
+        font-weight: bold;
       }
       .time-separator {
         font-size: 32px;
         font-weight: bold;
         color: var(--primary-text-color);
-        padding-top: 20px;
+        padding-top: 30px;
       }
       .time-picker-actions {
         display: flex;
@@ -1295,65 +1349,109 @@ class TaDiyScheduleCard extends HTMLElement {
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(dialog);
 
-    const hoursInput = dialog.querySelector('.time-picker-hours');
-    const minutesInput = dialog.querySelector('.time-picker-minutes');
+    const hoursField = dialog.querySelector('[data-field="hours"]');
+    const minutesField = dialog.querySelector('[data-field="minutes"]');
+    const hoursValue = hoursField.querySelector('.time-picker-value');
+    const minutesValue = minutesField.querySelector('.time-picker-value');
+    const hoursDropdown = hoursField.querySelector('.time-picker-dropdown');
+    const minutesDropdown = minutesField.querySelector('.time-picker-dropdown');
     const cancelBtn = dialog.querySelector('.time-picker-cancel');
     const okBtn = dialog.querySelector('.time-picker-ok');
+
+    let selectedHours = currentH;
+    let selectedMinutes = currentM;
 
     const closeDialog = () => {
       this.shadowRoot.removeChild(dialog);
       this.shadowRoot.removeChild(style);
     };
 
-    // Validate and constrain inputs
-    const validateHours = (input) => {
-      let val = parseInt(input.value) || 0;
-      if (val < 0) val = 0;
-      if (val > 24) val = 24;
-      input.value = val;
-    };
+    // Toggle dropdown on click
+    hoursValue.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = hoursDropdown.classList.contains('open');
+      hoursDropdown.classList.toggle('open', !isOpen);
+      minutesDropdown.classList.remove('open');
 
-    const validateMinutes = (input) => {
-      let val = parseInt(input.value) || 0;
-      if (val < 0) val = 0;
-      if (val > 59) val = 59;
-      // Snap to 15-minute intervals
-      val = Math.round(val / 15) * 15;
-      if (val === 60) val = 45;
-      input.value = val;
-    };
-
-    hoursInput.addEventListener('blur', () => validateHours(hoursInput));
-    minutesInput.addEventListener('blur', () => validateMinutes(minutesInput));
-
-    // Handle Enter key
-    const handleEnter = (e) => {
-      if (e.key === 'Enter') {
-        okBtn.click();
+      // Scroll to selected option
+      if (!isOpen) {
+        const selectedOption = hoursDropdown.querySelector('.time-picker-option.selected');
+        if (selectedOption) {
+          selectedOption.scrollIntoView({ block: 'nearest' });
+        }
       }
-    };
-    hoursInput.addEventListener('keydown', handleEnter);
-    minutesInput.addEventListener('keydown', handleEnter);
+    });
 
+    minutesValue.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = minutesDropdown.classList.contains('open');
+      minutesDropdown.classList.toggle('open', !isOpen);
+      hoursDropdown.classList.remove('open');
+
+      // Scroll to selected option
+      if (!isOpen) {
+        const selectedOption = minutesDropdown.querySelector('.time-picker-option.selected');
+        if (selectedOption) {
+          selectedOption.scrollIntoView({ block: 'nearest' });
+        }
+      }
+    });
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', () => {
+      hoursDropdown.classList.remove('open');
+      minutesDropdown.classList.remove('open');
+    });
+
+    // Hours option selection
+    hoursDropdown.querySelectorAll('.time-picker-option').forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedHours = parseInt(option.dataset.value);
+        hoursValue.textContent = option.dataset.value;
+
+        // Update selected state
+        hoursDropdown.querySelectorAll('.time-picker-option').forEach(opt => {
+          opt.classList.remove('selected');
+        });
+        option.classList.add('selected');
+
+        hoursDropdown.classList.remove('open');
+      });
+    });
+
+    // Minutes option selection
+    minutesDropdown.querySelectorAll('.time-picker-option').forEach(option => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedMinutes = parseInt(option.dataset.value);
+        minutesValue.textContent = option.dataset.value;
+
+        // Update selected state
+        minutesDropdown.querySelectorAll('.time-picker-option').forEach(opt => {
+          opt.classList.remove('selected');
+        });
+        option.classList.add('selected');
+
+        minutesDropdown.classList.remove('open');
+      });
+    });
+
+    // Cancel button
     cancelBtn.addEventListener('click', closeDialog);
 
+    // OK button
     okBtn.addEventListener('click', () => {
-      validateHours(hoursInput);
-      validateMinutes(minutesInput);
-
-      let hours = parseInt(hoursInput.value) || 0;
-      let minutes = parseInt(minutesInput.value) || 0;
-
       // Special case: 24:00 is only valid as end time
-      if (hours === 24) {
+      if (selectedHours === 24) {
         if (isEndTime) {
-          minutes = 0; // Force 24:00
+          selectedMinutes = 0; // Force 24:00
         } else {
-          hours = 23; // Start time can't be 24:00
+          selectedHours = 23; // Start time can't be 24:00
         }
       }
 
-      const selectedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      const selectedTime = `${String(selectedHours).padStart(2, '0')}:${String(selectedMinutes).padStart(2, '0')}`;
 
       // Update the block
       this._editingBlocks[index][field] = selectedTime;
@@ -1364,9 +1462,6 @@ class TaDiyScheduleCard extends HTMLElement {
 
     // Don't close on backdrop click - only on Cancel or OK
     // This ensures user must explicitly cancel or confirm
-
-    // Focus the hours input
-    setTimeout(() => hoursInput.focus(), 100);
   }
 
   async saveSchedule() {

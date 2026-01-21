@@ -10,6 +10,8 @@ class TaDiyPanel extends HTMLElement {
     this._config = null;
     this._rooms = [];
     this._hubMode = 'normal';
+    this._hubModeOptions = [];
+    this._hubModeEntityId = null;
   }
 
   set hass(hass) {
@@ -26,11 +28,23 @@ class TaDiyPanel extends HTMLElement {
     if (!this._hass) return;
 
     // Find all climate entities that belong to TaDIY rooms
+    // Check for both 'integration' attribute AND 'tadiy' in entity_id
     this._rooms = Object.values(this._hass.states)
-      .filter(entity =>
-        entity.entity_id.startsWith('climate.') &&
-        entity.attributes.integration === 'tadiy'
-      )
+      .filter(entity => {
+        if (!entity.entity_id.startsWith('climate.')) return false;
+
+        // Check if integration attribute exists and equals 'tadiy'
+        if (entity.attributes.integration === 'tadiy') return true;
+
+        // Fallback: check if entity_id contains 'tadiy'
+        if (entity.entity_id.includes('tadiy')) return true;
+
+        // Also check if device_class or friendly_name mentions TaDIY
+        const friendlyName = (entity.attributes.friendly_name || '').toLowerCase();
+        if (friendlyName.includes('tadiy')) return true;
+
+        return false;
+      })
       .map(entity => ({
         entity_id: entity.entity_id,
         name: entity.attributes.friendly_name || entity.entity_id,
@@ -41,13 +55,18 @@ class TaDiyPanel extends HTMLElement {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Get hub mode
+    console.log('TaDIY Panel: Found rooms:', this._rooms);
+
+    // Get hub mode entity and options
     const hubModeEntity = Object.values(this._hass.states).find(
       entity => entity.entity_id.startsWith('select.') &&
                 entity.entity_id.includes('hub_mode')
     );
     if (hubModeEntity) {
       this._hubMode = hubModeEntity.state;
+      this._hubModeOptions = hubModeEntity.attributes.options || [];
+      this._hubModeEntityId = hubModeEntity.entity_id;
+      console.log('TaDIY Panel: Hub mode:', this._hubMode, 'Options:', this._hubModeOptions);
     }
   }
 
@@ -82,13 +101,51 @@ class TaDiyPanel extends HTMLElement {
           font-size: 16px;
           color: var(--secondary-text-color);
         }
+        .hub-mode-selector {
+          position: relative;
+          display: inline-block;
+        }
         .hub-mode-badge {
-          padding: 6px 12px;
+          padding: 8px 16px;
           border-radius: 16px;
           background: var(--primary-color);
           color: white;
           font-weight: bold;
           text-transform: capitalize;
+          cursor: pointer;
+          transition: opacity 0.2s;
+          border: none;
+          font-size: 16px;
+        }
+        .hub-mode-badge:hover {
+          opacity: 0.9;
+        }
+        .hub-mode-dropdown {
+          position: absolute;
+          top: 100%;
+          right: 0;
+          margin-top: 8px;
+          background: var(--card-background-color);
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+          min-width: 160px;
+          z-index: 1000;
+          overflow: hidden;
+        }
+        .hub-mode-option {
+          padding: 12px 16px;
+          cursor: pointer;
+          text-transform: capitalize;
+          transition: background 0.2s;
+          color: var(--primary-text-color);
+        }
+        .hub-mode-option:hover {
+          background: var(--secondary-background-color);
+        }
+        .hub-mode-option.active {
+          background: var(--primary-color);
+          color: white;
+          font-weight: bold;
         }
         .rooms-grid {
           display: grid;
@@ -187,7 +244,19 @@ class TaDiyPanel extends HTMLElement {
         <div class="panel-title">TaDIY Climate Control</div>
         <div class="hub-mode">
           <span>Mode:</span>
-          <span class="hub-mode-badge">${this._hubMode}</span>
+          <div class="hub-mode-selector">
+            <button class="hub-mode-badge" data-action="toggle-mode-dropdown">
+              ${this._hubMode}
+            </button>
+            <div class="hub-mode-dropdown" style="display: none;" data-dropdown>
+              ${this._hubModeOptions.map(mode => `
+                <div class="hub-mode-option ${mode === this._hubMode ? 'active' : ''}"
+                     data-mode="${mode}">
+                  ${mode}
+                </div>
+              `).join('')}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -244,6 +313,48 @@ class TaDiyPanel extends HTMLElement {
   }
 
   attachEventListeners() {
+    // Hub mode dropdown toggle
+    const modeBtn = this.shadowRoot.querySelector('[data-action="toggle-mode-dropdown"]');
+    const dropdown = this.shadowRoot.querySelector('[data-dropdown]');
+
+    if (modeBtn && dropdown) {
+      modeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isVisible = dropdown.style.display !== 'none';
+        dropdown.style.display = isVisible ? 'none' : 'block';
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', () => {
+        dropdown.style.display = 'none';
+      });
+
+      // Hub mode options
+      this.shadowRoot.querySelectorAll('.hub-mode-option').forEach(option => {
+        option.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const newMode = option.dataset.mode;
+
+          if (newMode !== this._hubMode && this._hubModeEntityId) {
+            try {
+              await this._hass.callService('select', 'select_option', {
+                entity_id: this._hubModeEntityId,
+                option: newMode
+              });
+
+              // Update local state
+              this._hubMode = newMode;
+              dropdown.style.display = 'none';
+              this.render();
+            } catch (error) {
+              console.error('Failed to change hub mode:', error);
+              alert(`Failed to change mode: ${error.message}`);
+            }
+          }
+        });
+      });
+    }
+
     // Room card clicks - show more-info dialog
     this.shadowRoot.querySelectorAll('.room-card').forEach(card => {
       card.addEventListener('click', (e) => {
