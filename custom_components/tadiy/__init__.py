@@ -102,6 +102,38 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+async def async_register_lovelace_resources(hass: HomeAssistant) -> None:
+    """Log instructions for registering Lovelace resources."""
+    from .const import VERSION
+
+    # Note: Home Assistant doesn't allow automatic registration of Lovelace resources
+    # for security reasons. Users must add them manually.
+
+    _LOGGER.info(
+        "\n"
+        "═══════════════════════════════════════════════════════════════════\n"
+        "  TaDIY Schedule Card Setup Required\n"
+        "═══════════════════════════════════════════════════════════════════\n"
+        "\n"
+        "To use the TaDIY Schedule Card in your Lovelace dashboards:\n"
+        "\n"
+        "1. Go to Settings → Dashboards → Resources (⋮ menu → Resources)\n"
+        "2. Click '+ ADD RESOURCE'\n"
+        "3. Enter URL: /tadiy/tadiy-schedule-card.js?v=%s\n"
+        "4. Select resource type: JavaScript Module\n"
+        "5. Click CREATE\n"
+        "\n"
+        "After adding the resource, you can use the card:\n"
+        "  type: custom:tadiy-schedule-card\n"
+        "  entity: climate.your_room\n"
+        "\n"
+        "The TaDIY Panel is already available in the sidebar!\n"
+        "═══════════════════════════════════════════════════════════════════\n",
+        VERSION
+    )
+
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY from a config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -132,6 +164,9 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     await async_register_services(hass, hub_coordinator, entry)
+
+    # Register Lovelace resources for cards
+    await async_register_lovelace_resources(hass)
 
     # Register custom panel (only if enabled in config)
     show_panel = entry.data.get(CONF_SHOW_PANEL, True)
