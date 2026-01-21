@@ -184,15 +184,13 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   renderTimeInput(value, className, index, isEndTime = false) {
-    // Text input with time picker icon
+    // Read-only input with time picker icon
     return `
       <div class="time-input-wrapper">
         <input type="text"
                class="${className}"
                value="${value}"
-               pattern="([01]?[0-9]|2[0-4]):[0-5][0-9]"
-               placeholder="HH:MM"
-               maxlength="5"
+               readonly
                data-index="${index}"
                data-is-end="${isEndTime}">
         <button type="button" class="time-picker-btn" data-index="${index}" data-is-end="${isEndTime}">
@@ -539,9 +537,14 @@ class TaDiyScheduleCard extends HTMLElement {
           font-family: monospace;
           width: 100%;
         }
-        input[type="text"].start-time:invalid,
-        input[type="text"].end-time:invalid {
-          border-color: #dc3545;
+        input[type="text"].start-time[readonly],
+        input[type="text"].end-time[readonly] {
+          cursor: pointer;
+          background: var(--secondary-background-color);
+        }
+        input[type="text"].start-time[readonly]:hover,
+        input[type="text"].end-time[readonly]:hover {
+          border-color: var(--primary-color);
         }
         .delete-btn {
           padding: 8px;
@@ -759,44 +762,14 @@ class TaDiyScheduleCard extends HTMLElement {
       });
     });
 
-    // Input changes - handles text inputs for time and temperature
-    this.shadowRoot.querySelectorAll('.start-time, .end-time, .temperature').forEach(input => {
+    // Input changes - handles temperature inputs only (time inputs are readonly)
+    this.shadowRoot.querySelectorAll('.temperature').forEach(input => {
       input.addEventListener('blur', (e) => {
         const index = parseInt(e.target.dataset.index);
-        const field = e.target.classList.contains('start-time') ? 'start_time' :
-                      e.target.classList.contains('end-time') ? 'end_time' : 'temperature';
-
-        if (field === 'temperature') {
-          let temp = parseFloat(e.target.value);
-          if (isNaN(temp) || temp < 5) temp = 5;
-          if (temp > 30) temp = 30;
-          this._editingBlocks[index][field] = temp;
-        } else {
-          // Validate time format HH:MM
-          let value = e.target.value.trim();
-          const timeRegex = /^([01]?[0-9]|2[0-4]):([0-5][0-9])$/;
-
-          if (!timeRegex.test(value)) {
-            // Invalid format - revert to previous value
-            e.target.value = this._editingBlocks[index][field];
-            this.showError(`Invalid time format. Use HH:MM (e.g., 08:30)`);
-            return;
-          }
-
-          // Snap to 15-minute intervals (0, 15, 30, 45)
-          value = this.snapTimeToQuarter(value);
-
-          // Handle 00:00 at end -> 24:00
-          if (field === 'end_time' && value === '00:00') {
-            value = '24:00';
-          }
-
-          // Update both the data and the input field to show snapped value
-          this._editingBlocks[index][field] = value;
-          e.target.value = value;
-        }
-
-        // Re-render immediately after input validation
+        let temp = parseFloat(e.target.value);
+        if (isNaN(temp) || temp < 5) temp = 5;
+        if (temp > 30) temp = 30;
+        this._editingBlocks[index].temperature = temp;
         this.render();
       });
 
@@ -1029,99 +1002,84 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   addBlock() {
-    // Add new 60-minute block at current time or split selected block
+    // Sort blocks by start time first
+    const sortedBlocks = [...this._editingBlocks].sort((a, b) => {
+      return this.timeToMinutes(a.start_time) - this.timeToMinutes(b.start_time);
+    });
+
+    let blockToSplit = null;
+    let sortedIndex = -1;
+
     if (this._selectedBlockIndex !== null) {
-      // Split the selected block
-      const blockToSplit = this._editingBlocks[this._selectedBlockIndex];
-      const startMinutes = this.timeToMinutes(blockToSplit.start_time);
-      const endMinutes = this.timeToMinutes(blockToSplit.end_time);
-      const duration = endMinutes - startMinutes;
-
-      // Can't split blocks smaller than 120 minutes (to create 2x 60 minute blocks)
-      if (duration < 120) {
-        this.showError('Block is too small to split (minimum 120 minutes needed for 60-minute blocks)');
-        return;
-      }
-
-      // Calculate split point to create 60-minute first block
-      let splitMinutes = startMinutes + 60;
-      splitMinutes = this.snapToGrid(splitMinutes);
-
-      // Ensure we don't exceed the block
-      if (splitMinutes >= endMinutes - 60) {
-        // If not enough space, split in half
-        splitMinutes = startMinutes + Math.floor(duration / 2);
-        splitMinutes = this.snapToGrid(splitMinutes);
-      }
-
-      const splitTime = this.minutesToTime(splitMinutes);
-
-      // Update existing block's end time
-      this._editingBlocks[this._selectedBlockIndex].end_time = splitTime;
-
-      // Create new block for the second half
-      const newBlock = {
-        start_time: splitTime,
-        end_time: blockToSplit.end_time,
-        temperature: 21.0
-      };
-
-      // Insert new block after the original
-      this._editingBlocks.splice(this._selectedBlockIndex + 1, 0, newBlock);
-
-      // Select the new block
-      this._selectedBlockIndex = this._selectedBlockIndex + 1;
+      // Find the selected block in sorted array
+      const selectedBlock = this._editingBlocks[this._selectedBlockIndex];
+      sortedIndex = sortedBlocks.findIndex(b => b === selectedBlock);
+      blockToSplit = selectedBlock;
     } else {
-      // No block selected - find largest block and split it to create 60-minute block
-      const sortedBlocks = [...this._editingBlocks].sort((a, b) => {
-        return this.timeToMinutes(a.start_time) - this.timeToMinutes(b.start_time);
-      });
-
+      // No block selected - find largest block
       let maxDuration = 0;
-      let blockToSplit = null;
-      let originalIndex = -1;
-
-      sortedBlocks.forEach((block) => {
+      sortedBlocks.forEach((block, idx) => {
         const start = this.timeToMinutes(block.start_time);
         const end = this.timeToMinutes(block.end_time);
         const duration = end - start;
         if (duration > maxDuration) {
           maxDuration = duration;
           blockToSplit = block;
-          originalIndex = this._editingBlocks.indexOf(block);
+          sortedIndex = idx;
         }
       });
-
-      if (!blockToSplit || maxDuration < 120) {
-        this.showError('No block large enough to split (minimum 120 minutes needed)');
-        return;
-      }
-
-      const startMinutes = this.timeToMinutes(blockToSplit.start_time);
-      const endMinutes = this.timeToMinutes(blockToSplit.end_time);
-
-      // Create 60-minute first block
-      let splitMinutes = startMinutes + 60;
-      splitMinutes = this.snapToGrid(splitMinutes);
-
-      const splitTime = this.minutesToTime(splitMinutes);
-
-      // Update existing block's end time
-      this._editingBlocks[originalIndex].end_time = splitTime;
-
-      // Create new block for the remainder
-      const newBlock = {
-        start_time: splitTime,
-        end_time: blockToSplit.end_time,
-        temperature: 21.0
-      };
-
-      // Insert new block after the original
-      this._editingBlocks.splice(originalIndex + 1, 0, newBlock);
-
-      // Select the new block
-      this._selectedBlockIndex = originalIndex + 1;
     }
+
+    if (!blockToSplit) {
+      this.showError('No block to split');
+      return;
+    }
+
+    const startMinutes = this.timeToMinutes(blockToSplit.start_time);
+    const endMinutes = this.timeToMinutes(blockToSplit.end_time);
+    const duration = endMinutes - startMinutes;
+
+    // Can't split blocks smaller than 30 minutes (minimum 15-minute blocks)
+    if (duration < 30) {
+      this.showError('Block is too small to split (minimum 30 minutes needed)');
+      return;
+    }
+
+    // Calculate split point - try 60 minutes, or half if smaller
+    let splitMinutes;
+    if (duration >= 120) {
+      // Large block: create 60-minute first block
+      splitMinutes = startMinutes + 60;
+    } else {
+      // Small block: split in half
+      splitMinutes = startMinutes + Math.floor(duration / 2);
+    }
+    splitMinutes = this.snapToGrid(splitMinutes);
+
+    // Ensure split is within bounds
+    if (splitMinutes <= startMinutes) splitMinutes = startMinutes + 15;
+    if (splitMinutes >= endMinutes) splitMinutes = endMinutes - 15;
+
+    const splitTime = this.minutesToTime(splitMinutes);
+
+    // Create new block
+    const newBlock = {
+      start_time: splitTime,
+      end_time: blockToSplit.end_time,
+      temperature: 21.0
+    };
+
+    // Update existing block's end time
+    blockToSplit.end_time = splitTime;
+
+    // Insert new block into sorted array
+    sortedBlocks.splice(sortedIndex + 1, 0, newBlock);
+
+    // Replace editing blocks with sorted blocks
+    this._editingBlocks = sortedBlocks;
+
+    // Select the new block
+    this._selectedBlockIndex = sortedIndex + 1;
 
     this.render();
   }
@@ -1211,25 +1169,41 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   openTimePicker(index, isEndTime) {
-    // Create a simple time picker dialog using Home Assistant's more-info dialog pattern
     const field = isEndTime ? 'end_time' : 'start_time';
     const currentValue = this._editingBlocks[index][field];
+
+    // Parse current time
+    const [currentH, currentM] = currentValue.split(':').map(Number);
 
     // Create a modal dialog
     const dialog = document.createElement('div');
     dialog.className = 'time-picker-dialog';
 
-    // Convert 24:00 to 23:59 for the time input (browsers don't support 24:00)
-    const inputValue = currentValue === '24:00' ? '23:59' : currentValue;
-
     dialog.innerHTML = `
       <div class="time-picker-backdrop"></div>
       <div class="time-picker-content">
         <h3>Select Time</h3>
-        <input type="time"
-               class="time-picker-input"
-               value="${inputValue}"
-               step="900">
+        <div class="time-picker-inputs">
+          <div class="time-input-group">
+            <label>Hours</label>
+            <input type="number"
+                   class="time-picker-hours"
+                   value="${currentH}"
+                   min="0"
+                   max="24"
+                   step="1">
+          </div>
+          <span class="time-separator">:</span>
+          <div class="time-input-group">
+            <label>Minutes</label>
+            <input type="number"
+                   class="time-picker-minutes"
+                   value="${currentM}"
+                   min="0"
+                   max="59"
+                   step="15">
+          </div>
+        </div>
         <div class="time-picker-actions">
           <button class="btn btn-secondary time-picker-cancel">Cancel</button>
           <button class="btn btn-primary time-picker-ok">OK</button>
@@ -1265,21 +1239,51 @@ class TaDiyScheduleCard extends HTMLElement {
         padding: 24px;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        min-width: 300px;
+        min-width: 320px;
       }
       .time-picker-content h3 {
         margin: 0 0 16px 0;
         color: var(--primary-text-color);
       }
-      .time-picker-input {
-        width: 100%;
-        padding: 12px;
-        font-size: 18px;
-        border: 1px solid var(--divider-color);
+      .time-picker-inputs {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .time-input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .time-input-group label {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        text-align: center;
+      }
+      .time-picker-hours,
+      .time-picker-minutes {
+        width: 80px;
+        padding: 12px 8px;
+        font-size: 24px;
+        font-weight: bold;
+        text-align: center;
+        border: 2px solid var(--divider-color);
         border-radius: 4px;
         background: var(--card-background-color);
         color: var(--primary-text-color);
-        margin-bottom: 16px;
+      }
+      .time-picker-hours:focus,
+      .time-picker-minutes:focus {
+        outline: none;
+        border-color: var(--primary-color);
+      }
+      .time-separator {
+        font-size: 32px;
+        font-weight: bold;
+        color: var(--primary-text-color);
+        padding-top: 20px;
       }
       .time-picker-actions {
         display: flex;
@@ -1291,7 +1295,8 @@ class TaDiyScheduleCard extends HTMLElement {
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(dialog);
 
-    const timeInput = dialog.querySelector('.time-picker-input');
+    const hoursInput = dialog.querySelector('.time-picker-hours');
+    const minutesInput = dialog.querySelector('.time-picker-minutes');
     const cancelBtn = dialog.querySelector('.time-picker-cancel');
     const okBtn = dialog.querySelector('.time-picker-ok');
 
@@ -1300,18 +1305,55 @@ class TaDiyScheduleCard extends HTMLElement {
       this.shadowRoot.removeChild(style);
     };
 
+    // Validate and constrain inputs
+    const validateHours = (input) => {
+      let val = parseInt(input.value) || 0;
+      if (val < 0) val = 0;
+      if (val > 24) val = 24;
+      input.value = val;
+    };
+
+    const validateMinutes = (input) => {
+      let val = parseInt(input.value) || 0;
+      if (val < 0) val = 0;
+      if (val > 59) val = 59;
+      // Snap to 15-minute intervals
+      val = Math.round(val / 15) * 15;
+      if (val === 60) val = 45;
+      input.value = val;
+    };
+
+    hoursInput.addEventListener('blur', () => validateHours(hoursInput));
+    minutesInput.addEventListener('blur', () => validateMinutes(minutesInput));
+
+    // Handle Enter key
+    const handleEnter = (e) => {
+      if (e.key === 'Enter') {
+        okBtn.click();
+      }
+    };
+    hoursInput.addEventListener('keydown', handleEnter);
+    minutesInput.addEventListener('keydown', handleEnter);
+
     cancelBtn.addEventListener('click', closeDialog);
 
     okBtn.addEventListener('click', () => {
-      let selectedTime = timeInput.value;
+      validateHours(hoursInput);
+      validateMinutes(minutesInput);
 
-      // Snap to 15-minute intervals
-      selectedTime = this.snapTimeToQuarter(selectedTime);
+      let hours = parseInt(hoursInput.value) || 0;
+      let minutes = parseInt(minutesInput.value) || 0;
 
-      // Handle end time special case
-      if (isEndTime && selectedTime === '00:00') {
-        selectedTime = '24:00';
+      // Special case: 24:00 is only valid as end time
+      if (hours === 24) {
+        if (isEndTime) {
+          minutes = 0; // Force 24:00
+        } else {
+          hours = 23; // Start time can't be 24:00
+        }
       }
+
+      const selectedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 
       // Update the block
       this._editingBlocks[index][field] = selectedTime;
@@ -1320,11 +1362,11 @@ class TaDiyScheduleCard extends HTMLElement {
       this.render();
     });
 
-    // Close on backdrop click
-    dialog.querySelector('.time-picker-backdrop').addEventListener('click', closeDialog);
+    // Don't close on backdrop click - only on Cancel or OK
+    // This ensures user must explicitly cancel or confirm
 
-    // Focus the input
-    setTimeout(() => timeInput.focus(), 100);
+    // Focus the hours input
+    setTimeout(() => hoursInput.focus(), 100);
   }
 
   async saveSchedule() {
