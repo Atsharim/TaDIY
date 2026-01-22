@@ -510,6 +510,17 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         self.current_room_data: RoomData | None = None
         self._heat_model = HeatUpModel(room_name=self.room_config.name)
+
+        # Thermal Mass Model for cooling rate learning
+        from .core.thermal_mass import ThermalMassModel
+
+        self._thermal_mass_model = ThermalMassModel(room_name=self.room_config.name)
+        self.thermal_mass_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"tadiy_thermal_mass_{entry_id}",
+        )
+
         self.schedule_engine = ScheduleEngine()
         self.schedule_store = Store(
             hass,
@@ -710,6 +721,42 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error(
                 "Failed to save overrides for %s: %s", self.room_config.name, err
+            )
+
+    async def async_load_thermal_mass(self) -> None:
+        """Load thermal mass model from storage."""
+        data = await self.thermal_mass_store.async_load()
+        if not data:
+            _LOGGER.info(
+                "No thermal mass data found for room: %s (using defaults)",
+                self.room_config.name,
+            )
+            return
+
+        try:
+            from .core.thermal_mass import ThermalMassModel
+
+            self._thermal_mass_model = ThermalMassModel.from_dict(data)
+            _LOGGER.info(
+                "Loaded thermal mass for room %s: cooling_rate=%.2f°C/h, confidence=%.0f%%",
+                self.room_config.name,
+                self._thermal_mass_model.cooling_rate,
+                self._thermal_mass_model.confidence * 100,
+            )
+        except (ValueError, KeyError) as err:
+            _LOGGER.warning(
+                "Failed to load thermal mass for %s: %s", self.room_config.name, err
+            )
+
+    async def async_save_thermal_mass(self) -> None:
+        """Save thermal mass model to storage."""
+        try:
+            data = self._thermal_mass_model.to_dict()
+            await self.thermal_mass_store.async_save(data)
+            _LOGGER.debug("Saved thermal mass for room: %s", self.room_config.name)
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to save thermal mass for %s: %s", self.room_config.name, err
             )
 
     async def async_load_feature_settings(self) -> None:
@@ -1208,6 +1255,24 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             if fused_temp is not None and heating_active:
                 if not hasattr(self, '_last_temp_measurement_time') or self._last_temp_measurement_time is None:
                     self._last_temp_measurement_time = dt_util.utcnow()
+
+            # Track cooling rate when heating is not active (thermal mass learning)
+            if fused_temp is not None:
+                # Start or continue cooling measurement
+                self._thermal_mass_model.start_cooling_measurement(
+                    fused_temp,
+                    heating_active,
+                )
+
+                # Update cooling rate if measurement is ongoing
+                if not heating_active:
+                    updated = self._thermal_mass_model.update_with_cooling_measurement(
+                        fused_temp,
+                        outdoor_temp,
+                    )
+                    if updated:
+                        # Save thermal mass model after successful learning
+                        await self.async_save_thermal_mass()
 
             # Check for expired overrides and restore scheduled temperatures
             expired_entities = self.override_manager.check_expired_overrides()
