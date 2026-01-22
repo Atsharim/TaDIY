@@ -18,7 +18,10 @@ from .const import (
     ATTR_DURATION_MINUTES,
     ATTR_ENTITY_ID,
     ATTR_HEATING_RATE,
+    ATTR_LOCATION_OVERRIDE,
     ATTR_MODE,
+    ATTR_MULTIPLIER,
+    ATTR_OFFSET,
     ATTR_ROOM,
     ATTR_SCHEDULE_TYPE,
     ATTR_TEMPERATURE,
@@ -31,16 +34,23 @@ from .const import (
     MAX_BOOST_DURATION,
     MAX_BOOST_TEMP,
     MAX_HEATING_RATE,
+    MAX_TRV_MULTIPLIER,
+    MAX_TRV_OFFSET,
     MIN_BOOST_DURATION,
     MIN_BOOST_TEMP,
     MIN_HEATING_RATE,
+    MIN_TRV_MULTIPLIER,
+    MIN_TRV_OFFSET,
     SERVICE_BOOST_ALL_ROOMS,
+    SERVICE_CLEAR_OVERRIDE,
     SERVICE_FORCE_REFRESH,
     SERVICE_GET_SCHEDULE,
     SERVICE_RESET_LEARNING,
     SERVICE_SET_HEATING_CURVE,
     SERVICE_SET_HUB_MODE,
+    SERVICE_SET_LOCATION_OVERRIDE,
     SERVICE_SET_SCHEDULE,
+    SERVICE_SET_TRV_CALIBRATION,
 )
 from .coordinator import TaDIYHubCoordinator, TaDIYRoomCoordinator
 
@@ -85,6 +95,23 @@ SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema({
     vol.Required(ATTR_MODE): cv.string,
     vol.Optional(ATTR_SCHEDULE_TYPE): cv.string,
     vol.Required(ATTR_BLOCKS): vol.All(cv.ensure_list, [dict]),
+})
+SERVICE_SET_TRV_CALIBRATION_SCHEMA = vol.Schema({
+    vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+    vol.Optional(ATTR_MODE): vol.In(["auto", "manual", "disabled"]),
+    vol.Optional(ATTR_OFFSET): vol.All(
+        vol.Coerce(float), vol.Range(min=MIN_TRV_OFFSET, max=MAX_TRV_OFFSET)
+    ),
+    vol.Optional(ATTR_MULTIPLIER): vol.All(
+        vol.Coerce(float), vol.Range(min=MIN_TRV_MULTIPLIER, max=MAX_TRV_MULTIPLIER)
+    ),
+})
+SERVICE_CLEAR_OVERRIDE_SCHEMA = vol.Schema({
+    vol.Optional(ATTR_ROOM): cv.string,
+    vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
+})
+SERVICE_SET_LOCATION_OVERRIDE_SCHEMA = vol.Schema({
+    vol.Required(ATTR_LOCATION_OVERRIDE): vol.In(["auto", "home", "away"]),
 })
 
 
@@ -216,7 +243,13 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     room_coordinator = TaDIYRoomCoordinator(hass, entry.entry_id, entry.data, hub_coordinator)
     await room_coordinator.async_load_schedules()
+    await room_coordinator.async_load_calibrations()
+    await room_coordinator.async_load_overrides()
+    await room_coordinator.async_load_feature_settings()
     await room_coordinator.async_config_entry_first_refresh()
+
+    # Set up state listeners for override detection
+    room_coordinator.setup_state_listeners()
 
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": room_coordinator,
@@ -419,6 +452,112 @@ async def async_register_services(
         await room_coord.async_request_refresh()
         _LOGGER.info("Schedule updated for %s - %s/%s", room_name, mode, schedule_type)
 
+    async def handle_set_trv_calibration(call: ServiceCall) -> None:
+        """Set TRV calibration mode/offset/multiplier."""
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+        mode = call.data.get(ATTR_MODE)
+        offset = call.data.get(ATTR_OFFSET)
+        multiplier = call.data.get(ATTR_MULTIPLIER)
+
+        # Find room coordinator that manages this TRV
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+                if entity_id in room_coord.room_config.trv_entity_ids:
+                    cal_mgr = room_coord.calibration_manager
+
+                    # Update mode
+                    if mode:
+                        cal_mgr.set_mode(entity_id, mode)
+
+                    # Update offset (manual mode)
+                    if offset is not None:
+                        cal_mgr.set_manual_offset(entity_id, offset)
+
+                    # Update multiplier (auto mode fine-tuning)
+                    if multiplier is not None:
+                        cal_mgr.set_multiplier(entity_id, multiplier)
+
+                    await room_coord.async_save_calibrations()
+                    _LOGGER.info("TRV calibration updated for %s", entity_id)
+                    return
+
+        _LOGGER.error("TRV %s not found in any room", entity_id)
+
+    async def handle_clear_override(call: ServiceCall) -> None:
+        """Clear manual temperature overrides."""
+        room_name = call.data.get(ATTR_ROOM)
+        entity_id = call.data.get(ATTR_ENTITY_ID)
+
+        if not room_name and not entity_id:
+            _LOGGER.error("Must specify either room or entity_id")
+            return
+
+        cleared_count = 0
+
+        # Find room coordinator(s)
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+
+                # Check if this is the target room (if room_name specified)
+                if room_name and room_coord.room_config.name != room_name:
+                    continue
+
+                # If entity_id specified, only clear that specific override
+                if entity_id:
+                    if entity_id in room_coord.room_config.trv_entity_ids:
+                        if room_coord.override_manager.clear_override(entity_id):
+                            cleared_count += 1
+                            await room_coord.async_save_overrides()
+                            _LOGGER.info("Cleared override for %s", entity_id)
+                else:
+                    # Clear all overrides for this room
+                    count = room_coord.override_manager.clear_all_overrides()
+                    if count > 0:
+                        cleared_count += count
+                        await room_coord.async_save_overrides()
+                        _LOGGER.info("Cleared %d override(s) for room %s", count, room_coord.room_config.name)
+
+                # If entity_id was specified and found, stop searching
+                if entity_id and cleared_count > 0:
+                    return
+
+        if cleared_count == 0:
+            if entity_id:
+                _LOGGER.warning("No override found for entity %s", entity_id)
+            elif room_name:
+                _LOGGER.warning("No overrides found for room %s", room_name)
+        else:
+            _LOGGER.info("Cleared %d override(s) total", cleared_count)
+
+    async def handle_set_location_override(call: ServiceCall) -> None:
+        """Set location override (auto/home/away)."""
+        location_override = call.data.get(ATTR_LOCATION_OVERRIDE)
+
+        # Find hub coordinator
+        hub_coordinator = hass.data[DOMAIN].get("hub_coordinator")
+        if not hub_coordinator:
+            _LOGGER.error("Hub coordinator not found")
+            return
+
+        # Map string to boolean override
+        if location_override == "auto":
+            override_value = None
+        elif location_override == "home":
+            override_value = True
+        elif location_override == "away":
+            override_value = False
+        else:
+            _LOGGER.error("Invalid location override: %s", location_override)
+            return
+
+        hub_coordinator.set_location_override(override_value)
+        _LOGGER.info("Location override set to: %s", location_override)
+
+        # Request refresh to apply changes immediately
+        await hub_coordinator.async_request_refresh()
+
     hass.services.async_register(DOMAIN, SERVICE_FORCE_REFRESH, handle_force_refresh)
     hass.services.async_register(DOMAIN, SERVICE_RESET_LEARNING, handle_reset_learning, schema=SERVICE_RESET_LEARNING_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_BOOST_ALL_ROOMS, handle_boost_all_rooms, schema=SERVICE_BOOST_ALL_SCHEMA)
@@ -426,6 +565,9 @@ async def async_register_services(
     hass.services.async_register(DOMAIN, SERVICE_SET_HEATING_CURVE, handle_set_heating_curve, schema=SERVICE_SET_HEATING_CURVE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_GET_SCHEDULE, handle_get_schedule, schema=SERVICE_GET_SCHEDULE_SCHEMA, supports_response=True)
     hass.services.async_register(DOMAIN, SERVICE_SET_SCHEDULE, handle_set_schedule, schema=SERVICE_SET_SCHEDULE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_SET_TRV_CALIBRATION, handle_set_trv_calibration, schema=SERVICE_SET_TRV_CALIBRATION_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_CLEAR_OVERRIDE, handle_clear_override, schema=SERVICE_CLEAR_OVERRIDE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_SET_LOCATION_OVERRIDE, handle_set_location_override, schema=SERVICE_SET_LOCATION_OVERRIDE_SCHEMA)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -441,6 +583,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_save_schedules()
     elif entry_data.get("type") == "room":
         await coordinator.async_save_schedules()
+        await coordinator.async_save_calibrations()
+        await coordinator.async_save_overrides()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
@@ -458,7 +602,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_SET_HUB_MODE)
             hass.services.async_remove(DOMAIN, SERVICE_SET_HEATING_CURVE)
             hass.services.async_remove(DOMAIN, SERVICE_GET_SCHEDULE)
+            hass.services.async_remove(DOMAIN, SERVICE_SET_TRV_CALIBRATION)
             hass.services.async_remove(DOMAIN, SERVICE_SET_SCHEDULE)
+            hass.services.async_remove(DOMAIN, SERVICE_CLEAR_OVERRIDE)
+            hass.services.async_remove(DOMAIN, SERVICE_SET_LOCATION_OVERRIDE)
             hass.data[DOMAIN].pop("hub_coordinator", None)
 
     return unload_ok

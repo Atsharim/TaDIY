@@ -21,6 +21,7 @@ from .const import (
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HUB,
+    CONF_HUMIDITY_SENSOR,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
     CONF_ROOM_NAME,
@@ -177,9 +178,17 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         )
 
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default="")] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="humidity",
+            )
+        )
+
         schema_dict[vol.Optional(CONF_WINDOW_SENSORS, default=[])] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="binary_sensor",
+                device_class=["door", "window", "opening"],
                 multiple=True,
             )
         )

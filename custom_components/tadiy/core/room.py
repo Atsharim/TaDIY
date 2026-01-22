@@ -24,6 +24,7 @@ class RoomConfig:
     name: str
     trv_entity_ids: list[str]
     main_temp_sensor_id: str
+    humidity_sensor_id: str = ""
     window_sensor_ids: list[str] = field(default_factory=list)
     outdoor_sensor_id: str = ""
     weather_entity_id: str = ""
@@ -32,6 +33,14 @@ class RoomConfig:
     dont_heat_below_outdoor: float = 20.0
     use_early_start: bool = True
     learn_heating_rate: bool = True
+    early_start_offset: int | None = None  # Room override (minutes), None = use hub setting
+    early_start_max: int | None = None  # Room override (minutes), None = use hub setting
+    override_timeout: str | None = None  # Room override timeout mode, None = use hub setting
+    hysteresis: float = 0.3  # Temperature deadband in °C
+    use_pid_control: bool = False  # PID controller disabled by default
+    pid_kp: float = 0.5  # Proportional gain
+    pid_ki: float = 0.01  # Integral gain
+    pid_kd: float = 0.1  # Derivative gain
     use_humidity_compensation: bool = False
 
     def __post_init__(self) -> None:
@@ -59,6 +68,7 @@ class RoomConfig:
             "name": self.name,
             "trv_entity_ids": self.trv_entity_ids,
             "main_temp_sensor_id": self.main_temp_sensor_id,
+            "humidity_sensor_id": self.humidity_sensor_id,
             "window_sensor_ids": self.window_sensor_ids,
             "outdoor_sensor_id": self.outdoor_sensor_id,
             "weather_entity_id": self.weather_entity_id,
@@ -67,6 +77,14 @@ class RoomConfig:
             "dont_heat_below_outdoor": self.dont_heat_below_outdoor,
             "use_early_start": self.use_early_start,
             "learn_heating_rate": self.learn_heating_rate,
+            "early_start_offset": self.early_start_offset,
+            "early_start_max": self.early_start_max,
+            "override_timeout": self.override_timeout,
+            "hysteresis": self.hysteresis,
+            "use_pid_control": self.use_pid_control,
+            "pid_kp": self.pid_kp,
+            "pid_ki": self.pid_ki,
+            "pid_kd": self.pid_kd,
             "use_humidity_compensation": self.use_humidity_compensation,
         }
 
@@ -77,6 +95,7 @@ class RoomConfig:
             name=data["name"],
             trv_entity_ids=data["trv_entity_ids"],
             main_temp_sensor_id=data["main_temp_sensor_id"],
+            humidity_sensor_id=data.get("humidity_sensor_id", ""),
             window_sensor_ids=data.get("window_sensor_ids", []),
             outdoor_sensor_id=data.get("outdoor_sensor_id", ""),
             weather_entity_id=data.get("weather_entity_id", ""),
@@ -89,6 +108,14 @@ class RoomConfig:
             dont_heat_below_outdoor=data.get("dont_heat_below_outdoor", 20.0),
             use_early_start=data.get("use_early_start", True),
             learn_heating_rate=data.get("learn_heating_rate", True),
+            early_start_offset=data.get("early_start_offset"),
+            early_start_max=data.get("early_start_max"),
+            override_timeout=data.get("override_timeout"),
+            hysteresis=data.get("hysteresis", 0.3),
+            use_pid_control=data.get("use_pid_control", False),
+            pid_kp=data.get("pid_kp", 0.5),
+            pid_ki=data.get("pid_ki", 0.01),
+            pid_kd=data.get("pid_kd", 0.1),
             use_humidity_compensation=data.get("use_humidity_compensation", False),
         )
 
@@ -105,9 +132,14 @@ class RoomData:
     outdoor_temperature: float | None
     target_temperature: float | None
     hvac_mode: str
+    humidity: float | None = None
     last_update: datetime = field(default_factory=dt_util.utcnow)
     heating_active: bool = False
     heating_rate: float = DEFAULT_HEATING_RATE
+    heating_rate_sample_count: int = 0
+    heating_rate_confidence: float = 0.0
+    override_count: int = 0  # Number of active overrides
+    override_active: bool = False  # At least one override active
 
     def __post_init__(self) -> None:
         """Validate data after initialization."""
