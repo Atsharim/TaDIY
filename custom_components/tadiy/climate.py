@@ -113,15 +113,65 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         if temperature is None:
             return
 
-        # Set temperature for all TRVs in the room
+        # Get current room temperature for auto-calibration
+        room_temp = (
+            self.coordinator.current_room_data.current_temperature
+            if self.coordinator.current_room_data
+            else None
+        )
+
+        # Set temperature for all TRVs in the room (with calibration)
         for trv_entity_id in self._trv_entity_ids:
             try:
+                # Get TRV current temperature
+                trv_state = self.hass.states.get(trv_entity_id)
+                trv_temp = None
+                if trv_state:
+                    trv_current = trv_state.attributes.get("current_temperature")
+                    if trv_current:
+                        try:
+                            trv_temp = float(trv_current)
+                        except (ValueError, TypeError):
+                            pass
+
+                # Update auto-calibration if applicable
+                if room_temp and trv_temp:
+                    self.coordinator.calibration_manager.update_auto_calibration(
+                        trv_entity_id, trv_temp, room_temp
+                    )
+
+                # Get calibrated target
+                calibrated_temp = self.coordinator.calibration_manager.get_calibrated_target(
+                    trv_entity_id, temperature, room_temp, trv_temp
+                )
+
                 await self.hass.services.async_call(
                     "climate",
                     "set_temperature",
-                    {"entity_id": trv_entity_id, "temperature": temperature},
+                    {"entity_id": trv_entity_id, "temperature": calibrated_temp},
                     blocking=True,
                 )
+
+                # Log calibration info
+                cal_info = self.coordinator.calibration_manager.get_calibration_info(
+                    trv_entity_id
+                )
+                if cal_info and cal_info["mode"] != "disabled":
+                    _LOGGER.debug(
+                        "TRV %s: Set target %.1f°C (calibrated from %.1f°C, mode=%s, multiplier=%.3f)",
+                        trv_entity_id,
+                        calibrated_temp,
+                        temperature,
+                        cal_info["mode"],
+                        cal_info["multiplier"] if cal_info["mode"] == "auto" else 1.0,
+                    )
+                else:
+                    _LOGGER.debug(
+                        "TRV %s: Set target %.1f°C (no calibration)",
+                        trv_entity_id,
+                        temperature,
+                    )
+
             except Exception as err:
                 _LOGGER.error("Failed to set temperature for %s: %s", trv_entity_id, err)
 
