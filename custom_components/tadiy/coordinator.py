@@ -21,6 +21,7 @@ from .const import (
     CONF_GLOBAL_USE_EARLY_START,
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+    CONF_HEATING_CURVE_SLOPE,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
     CONF_LOCATION_MODE_ENABLED,
@@ -32,6 +33,7 @@ from .const import (
     CONF_PID_KP,
     CONF_ROOM_NAME,
     CONF_TRV_ENTITIES,
+    CONF_USE_HEATING_CURVE,
     CONF_USE_PID_CONTROL,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -40,6 +42,7 @@ from .const import (
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_FROST_PROTECTION_TEMP,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
+    DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HUB_MODE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
@@ -48,6 +51,7 @@ from .const import (
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
     DEFAULT_USE_EARLY_START,
+    DEFAULT_USE_HEATING_CURVE,
     DEFAULT_USE_PID_CONTROL,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
@@ -62,6 +66,7 @@ from .const import (
 )
 from .core.control import HeatingController, PIDConfig, PIDHeatingController
 from .core.early_start import HeatUpModel
+from .core.heating_curve import HeatingCurve, HeatingCurveConfig
 from .core.location import LocationManager
 from .core.override import OverrideManager
 from .core.room import RoomConfig, RoomData
@@ -536,6 +541,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self._state_listeners = []
         self._last_trv_targets: dict[str, float] = {}
 
+        # Cached outdoor temperature for heating curve
+        self._cached_outdoor_temp: float | None = None
+
         # Heating Controller with Hysteresis and optional PID
         hysteresis = room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
         use_pid = room_data.get(CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL)
@@ -563,6 +571,21 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 self.room_config.name,
                 hysteresis,
             )
+
+        # Heating Curve (optional weather compensation)
+        use_curve = room_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
+        if use_curve:
+            curve_config = HeatingCurveConfig(
+                curve_slope=room_data.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE),
+            )
+            self.heating_curve = HeatingCurve(curve_config)
+            _LOGGER.info(
+                "Initialized heating curve for room %s (slope=%.2f)",
+                self.room_config.name,
+                curve_config.curve_slope,
+            )
+        else:
+            self.heating_curve = None
 
         # Feature Settings Store
         self.feature_store = Store(
@@ -601,6 +624,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "pid_kp": room_data.get(CONF_PID_KP, DEFAULT_PID_KP),
             "pid_ki": room_data.get(CONF_PID_KI, DEFAULT_PID_KI),
             "pid_kd": room_data.get(CONF_PID_KD, DEFAULT_PID_KD),
+            "use_heating_curve": room_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE),
+            "heating_curve_slope": room_data.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE),
             "use_humidity_compensation": room_data.get(
                 "use_humidity_compensation", False
             ),
@@ -746,6 +771,33 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     self.heating_controller.config.kd,
                 )
 
+        # Load heating curve settings from storage
+        if "use_heating_curve" in data:
+            use_curve = data["use_heating_curve"]
+            if use_curve and self.heating_curve is None:
+                # Enable heating curve
+                curve_config = HeatingCurveConfig(
+                    curve_slope=data.get("heating_curve_slope", DEFAULT_HEATING_CURVE_SLOPE),
+                )
+                self.heating_curve = HeatingCurve(curve_config)
+                _LOGGER.info(
+                    "Enabled heating curve for room %s (slope=%.2f)",
+                    self.room_config.name,
+                    curve_config.curve_slope,
+                )
+            elif not use_curve and self.heating_curve is not None:
+                # Disable heating curve
+                self.heating_curve = None
+                _LOGGER.info("Disabled heating curve for room %s", self.room_config.name)
+            elif use_curve and self.heating_curve is not None:
+                # Update heating curve slope
+                self.heating_curve.config.curve_slope = data.get("heating_curve_slope", DEFAULT_HEATING_CURVE_SLOPE)
+                _LOGGER.debug(
+                    "Updated heating curve slope for room %s (slope=%.2f)",
+                    self.room_config.name,
+                    self.heating_curve.config.curve_slope,
+                )
+
         _LOGGER.info("Loaded feature settings from storage for room %s", self.room_config.name)
 
     async def async_save_feature_settings(self) -> None:
@@ -761,6 +813,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 data["pid_kp"] = self.heating_controller.config.kp
                 data["pid_ki"] = self.heating_controller.config.ki
                 data["pid_kd"] = self.heating_controller.config.kd
+
+            # Save heating curve settings
+            data["use_heating_curve"] = self.heating_curve is not None
+            if self.heating_curve is not None:
+                data["heating_curve_slope"] = self.heating_curve.config.curve_slope
 
             await self.feature_store.async_save(data)
             _LOGGER.debug("Saved feature settings for room: %s", self.room_config.name)
@@ -849,9 +906,29 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         )
 
     def get_scheduled_target(self) -> float | None:
-        """Get scheduled target temperature for this room."""
+        """Get scheduled target temperature for this room (with optional heating curve)."""
         mode = self.get_hub_mode()
-        return self.schedule_engine.get_target_temperature(self.room_config.name, mode)
+        base_target = self.schedule_engine.get_target_temperature(self.room_config.name, mode)
+
+        # Apply heating curve if enabled and outdoor temp available
+        if (
+            base_target is not None
+            and self.heating_curve is not None
+            and self._cached_outdoor_temp is not None
+        ):
+            adjusted_target = self.heating_curve.calculate_target(
+                self._cached_outdoor_temp, base_target
+            )
+            _LOGGER.debug(
+                "Room %s: Heating curve applied: base=%.1f°C, outdoor=%.1f°C, adjusted=%.1f°C",
+                self.room_config.name,
+                base_target,
+                self._cached_outdoor_temp,
+                adjusted_target,
+            )
+            return adjusted_target
+
+        return base_target
 
     def setup_state_listeners(self) -> None:
         """Set up state listeners for TRV entities to detect manual overrides."""
@@ -968,6 +1045,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                             outdoor_temp = float(weather_state.attributes.get("temperature", None))
                         except (ValueError, TypeError):
                             pass
+
+            # Cache outdoor temperature for heating curve
+            self._cached_outdoor_temp = outdoor_temp
 
             window_open = self._check_window_state(self.room_config.window_sensor_ids)
 

@@ -151,6 +151,14 @@ DEFAULT_PID_KP: Final = 0.5
 DEFAULT_PID_KI: Final = 0.01
 DEFAULT_PID_KD: Final = 0.1
 
+# Heating Curve settings
+CONF_USE_HEATING_CURVE: Final = "use_heating_curve"
+DEFAULT_USE_HEATING_CURVE: Final = False  # Disabled by default, opt-in available
+CONF_HEATING_CURVE_SLOPE: Final = "heating_curve_slope"
+DEFAULT_HEATING_CURVE_SLOPE: Final = 0.5
+MIN_HEATING_CURVE_SLOPE: Final = 0.1
+MAX_HEATING_CURVE_SLOPE: Final = 2.0
+
 # Frost Protection limits
 MIN_FROST_PROTECTION: Final = -5.0  # Minimum frost protection temperature
 MAX_FROST_PROTECTION: Final = 15.0  # Maximum frost protection temperature

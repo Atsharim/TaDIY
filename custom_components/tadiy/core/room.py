@@ -41,6 +41,8 @@ class RoomConfig:
     pid_kp: float = 0.5  # Proportional gain
     pid_ki: float = 0.01  # Integral gain
     pid_kd: float = 0.1  # Derivative gain
+    use_heating_curve: bool = False  # Heating curve disabled by default
+    heating_curve_slope: float = 0.5  # Curve slope (°C indoor per °C outdoor)
     use_humidity_compensation: bool = False
 
     def __post_init__(self) -> None:
@@ -85,6 +87,8 @@ class RoomConfig:
             "pid_kp": self.pid_kp,
             "pid_ki": self.pid_ki,
             "pid_kd": self.pid_kd,
+            "use_heating_curve": self.use_heating_curve,
+            "heating_curve_slope": self.heating_curve_slope,
             "use_humidity_compensation": self.use_humidity_compensation,
         }
 
@@ -116,6 +120,8 @@ class RoomConfig:
             pid_kp=data.get("pid_kp", 0.5),
             pid_ki=data.get("pid_ki", 0.01),
             pid_kd=data.get("pid_kd", 0.1),
+            use_heating_curve=data.get("use_heating_curve", False),
+            heating_curve_slope=data.get("heating_curve_slope", 0.5),
             use_humidity_compensation=data.get("use_humidity_compensation", False),
         )
 

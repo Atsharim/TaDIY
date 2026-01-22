@@ -14,6 +14,7 @@ from .const import (
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
+    CONF_HEATING_CURVE_SLOPE,
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
@@ -28,21 +29,26 @@ from .const import (
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
+    CONF_USE_HEATING_CURVE,
     CONF_USE_PID_CONTROL,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
+    DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
     DEFAULT_PID_KD,
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
+    DEFAULT_USE_HEATING_CURVE,
     DEFAULT_USE_PID_CONTROL,
     DOMAIN,
     MAX_CUSTOM_MODES,
+    MAX_HEATING_CURVE_SLOPE,
     MAX_HYSTERESIS,
+    MIN_HEATING_CURVE_SLOPE,
     MIN_HYSTERESIS,
     OVERRIDE_TIMEOUT_1H,
     OVERRIDE_TIMEOUT_2H,
@@ -362,8 +368,8 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 data=new_data,
             )
 
-            # Save feature settings if hysteresis or PID changed
-            if CONF_HYSTERESIS in user_input or CONF_USE_PID_CONTROL in user_input:
+            # Save feature settings if hysteresis, PID, or heating curve changed
+            if CONF_HYSTERESIS in user_input or CONF_USE_PID_CONTROL in user_input or CONF_USE_HEATING_CURVE in user_input:
                 coordinator = self.hass.data[DOMAIN].get(self.config_entry.entry_id, {}).get("coordinator")
                 if coordinator and hasattr(coordinator, "async_save_feature_settings"):
                     # Update hysteresis in controller
@@ -395,6 +401,25 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                             coordinator.heating_controller.config.kp = user_input.get(CONF_PID_KP, DEFAULT_PID_KP)
                             coordinator.heating_controller.config.ki = user_input.get(CONF_PID_KI, DEFAULT_PID_KI)
                             coordinator.heating_controller.config.kd = user_input.get(CONF_PID_KD, DEFAULT_PID_KD)
+
+                    # Update heating curve settings if changed
+                    if CONF_USE_HEATING_CURVE in user_input:
+                        from .core.heating_curve import HeatingCurve, HeatingCurveConfig
+
+                        use_curve = user_input[CONF_USE_HEATING_CURVE]
+
+                        if use_curve and coordinator.heating_curve is None:
+                            # Enable heating curve
+                            curve_config = HeatingCurveConfig(
+                                curve_slope=user_input.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE),
+                            )
+                            coordinator.heating_curve = HeatingCurve(curve_config)
+                        elif not use_curve and coordinator.heating_curve is not None:
+                            # Disable heating curve
+                            coordinator.heating_curve = None
+                        elif use_curve and coordinator.heating_curve is not None:
+                            # Update heating curve slope
+                            coordinator.heating_curve.config.curve_slope = user_input.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE)
 
                     # Save to storage
                     await coordinator.async_save_feature_settings()
@@ -579,6 +604,27 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        # Heating Curve (Weather-Compensated Heating)
+        current_use_heating_curve = current_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
+        schema_dict[vol.Optional(
+            CONF_USE_HEATING_CURVE,
+            default=current_use_heating_curve,
+        )] = selector.BooleanSelector()
+
+        # Heating Curve Slope
+        current_heating_curve_slope = current_data.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE)
+        schema_dict[vol.Optional(
+            CONF_HEATING_CURVE_SLOPE,
+            default=current_heating_curve_slope,
+        )] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_HEATING_CURVE_SLOPE,
+                max=MAX_HEATING_CURVE_SLOPE,
+                step=0.1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
         return self.async_show_form(
             step_id="room_config",
             data_schema=vol.Schema(schema_dict),
@@ -592,7 +638,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     "• PID Control: Enable advanced PID controller for smoother temperature regulation (opt-in)\n"
                     "• PID Kp: Proportional gain (higher = more aggressive response to temperature error)\n"
                     "• PID Ki: Integral gain (compensates for persistent error over time)\n"
-                    "• PID Kd: Derivative gain (dampens oscillations, predicts future error)\n\n"
+                    "• PID Kd: Derivative gain (dampens oscillations, predicts future error)\n"
+                    "• Heating Curve: Enable weather-compensated heating to adjust target based on outdoor temperature (opt-in)\n"
+                    "• Heating Curve Slope: How much to reduce indoor target per °C outdoor increase (higher = more aggressive reduction)\n\n"
                     f"Hub Defaults: Offset={DEFAULT_EARLY_START_OFFSET}min, Max={DEFAULT_EARLY_START_MAX}min, Timeout={DEFAULT_GLOBAL_OVERRIDE_TIMEOUT}, Hysteresis={DEFAULT_HYSTERESIS}°C"
                 )
             },
