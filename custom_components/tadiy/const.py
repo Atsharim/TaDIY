@@ -157,6 +157,13 @@ DEFAULT_USE_HEATING_CURVE: Final = False  # Disabled by default, opt-in availabl
 CONF_HEATING_CURVE_SLOPE: Final = "heating_curve_slope"
 DEFAULT_HEATING_CURVE_SLOPE: Final = 0.5
 MIN_HEATING_CURVE_SLOPE: Final = 0.1
+
+# Thermal Mass Learning settings
+CONF_LEARN_COOLING_RATE: Final = "learn_cooling_rate"
+DEFAULT_LEARN_COOLING_RATE: Final = True  # Enabled by default, opt-out available
+DEFAULT_COOLING_RATE: Final = 0.5  # °C/h conservative default
+MIN_COOLING_RATE: Final = 0.1
+MAX_COOLING_RATE: Final = 3.0
 MAX_HEATING_CURVE_SLOPE: Final = 2.0
 
 # Frost Protection limits
