@@ -204,6 +204,9 @@ SERVICE_SET_SCHEDULE: Final = "set_schedule"
 SERVICE_SET_TRV_CALIBRATION: Final = "set_trv_calibration"
 SERVICE_CLEAR_OVERRIDE: Final = "clear_override"
 SERVICE_SET_LOCATION_OVERRIDE: Final = "set_location_override"
+SERVICE_START_PID_AUTOTUNE: Final = "start_pid_autotune"
+SERVICE_STOP_PID_AUTOTUNE: Final = "stop_pid_autotune"
+SERVICE_APPLY_PID_AUTOTUNE: Final = "apply_pid_autotune"
 
 # Service attributes
 ATTR_ROOM: Final = "room"

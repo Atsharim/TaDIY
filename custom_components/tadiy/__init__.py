@@ -51,6 +51,9 @@ from .const import (
     SERVICE_SET_LOCATION_OVERRIDE,
     SERVICE_SET_SCHEDULE,
     SERVICE_SET_TRV_CALIBRATION,
+    SERVICE_START_PID_AUTOTUNE,
+    SERVICE_STOP_PID_AUTOTUNE,
+    SERVICE_APPLY_PID_AUTOTUNE,
 )
 from .coordinator import TaDIYHubCoordinator, TaDIYRoomCoordinator
 
@@ -559,6 +562,92 @@ async def async_register_services(
         # Request refresh to apply changes immediately
         await hub_coordinator.async_request_refresh()
 
+    async def handle_start_pid_autotune(call: ServiceCall) -> None:
+        """Start PID auto-tuning for a room."""
+        room_name = call.data.get(ATTR_ROOM)
+
+        # Find room coordinator
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+                if room_coord.room_config.name == room_name:
+                    # Check if PID control is enabled
+                    if not room_coord.room_config.use_pid_control:
+                        _LOGGER.error(
+                            "Cannot start PID auto-tuning for room %s: PID control is disabled",
+                            room_name,
+                        )
+                        return
+
+                    room_coord.pid_autotuner.start_tuning()
+                    _LOGGER.info("Started PID auto-tuning for room %s", room_name)
+                    return
+
+        _LOGGER.error("Room %s not found", room_name)
+
+    async def handle_stop_pid_autotune(call: ServiceCall) -> None:
+        """Stop PID auto-tuning for a room."""
+        room_name = call.data.get(ATTR_ROOM)
+
+        # Find room coordinator
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+                if room_coord.room_config.name == room_name:
+                    room_coord.pid_autotuner.stop_tuning()
+                    _LOGGER.info("Stopped PID auto-tuning for room %s", room_name)
+                    return
+
+        _LOGGER.error("Room %s not found", room_name)
+
+    async def handle_apply_pid_autotune(call: ServiceCall) -> None:
+        """Apply auto-tuned PID parameters to a room."""
+        room_name = call.data.get(ATTR_ROOM)
+
+        # Find room coordinator
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+                if room_coord.room_config.name == room_name:
+                    # Get tuned parameters
+                    params = room_coord.pid_autotuner.get_tuned_parameters()
+                    if not params:
+                        _LOGGER.error(
+                            "No tuned parameters available for room %s (tuning not complete)",
+                            room_name,
+                        )
+                        return
+
+                    kp, ki, kd = params
+
+                    # Apply to PID controller
+                    from .core.control import PIDHeatingController
+
+                    if isinstance(room_coord.heating_controller, PIDHeatingController):
+                        room_coord.heating_controller.config.kp = kp
+                        room_coord.heating_controller.config.ki = ki
+                        room_coord.heating_controller.config.kd = kd
+                        room_coord.heating_controller.reset()
+
+                        # Save to storage
+                        await room_coord.async_save_feature_settings()
+
+                        _LOGGER.info(
+                            "Applied auto-tuned PID parameters to room %s: Kp=%.3f, Ki=%.4f, Kd=%.3f",
+                            room_name,
+                            kp,
+                            ki,
+                            kd,
+                        )
+                    else:
+                        _LOGGER.error(
+                            "Room %s does not use PID controller",
+                            room_name,
+                        )
+                    return
+
+        _LOGGER.error("Room %s not found", room_name)
+
     hass.services.async_register(DOMAIN, SERVICE_FORCE_REFRESH, handle_force_refresh)
     hass.services.async_register(DOMAIN, SERVICE_RESET_LEARNING, handle_reset_learning, schema=SERVICE_RESET_LEARNING_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_BOOST_ALL_ROOMS, handle_boost_all_rooms, schema=SERVICE_BOOST_ALL_SCHEMA)
@@ -569,6 +658,15 @@ async def async_register_services(
     hass.services.async_register(DOMAIN, SERVICE_SET_TRV_CALIBRATION, handle_set_trv_calibration, schema=SERVICE_SET_TRV_CALIBRATION_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_CLEAR_OVERRIDE, handle_clear_override, schema=SERVICE_CLEAR_OVERRIDE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_SET_LOCATION_OVERRIDE, handle_set_location_override, schema=SERVICE_SET_LOCATION_OVERRIDE_SCHEMA)
+
+    # PID Auto-Tuning services
+    SERVICE_START_PID_AUTOTUNE_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
+    SERVICE_STOP_PID_AUTOTUNE_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
+    SERVICE_APPLY_PID_AUTOTUNE_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
+
+    hass.services.async_register(DOMAIN, SERVICE_START_PID_AUTOTUNE, handle_start_pid_autotune, schema=SERVICE_START_PID_AUTOTUNE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_STOP_PID_AUTOTUNE, handle_stop_pid_autotune, schema=SERVICE_STOP_PID_AUTOTUNE_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_APPLY_PID_AUTOTUNE, handle_apply_pid_autotune, schema=SERVICE_APPLY_PID_AUTOTUNE_SCHEMA)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
