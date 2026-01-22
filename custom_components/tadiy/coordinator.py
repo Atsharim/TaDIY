@@ -521,6 +521,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_thermal_mass_{entry_id}",
         )
 
+        # PID Auto-Tuner
+        from .core.pid_tuning import PIDAutoTuner
+
+        self.pid_autotuner = PIDAutoTuner(room_name=self.room_config.name)
+
         self.schedule_engine = ScheduleEngine()
         self.schedule_store = Store(
             hass,
@@ -1273,6 +1278,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     if updated:
                         # Save thermal mass model after successful learning
                         await self.async_save_thermal_mass()
+
+            # Update PID auto-tuner if active
+            if fused_temp is not None and self.pid_autotuner.is_tuning_active():
+                tuned_params = self.pid_autotuner.update(fused_temp)
+                if tuned_params:
+                    # Auto-tuning complete
+                    kp, ki, kd = tuned_params
+                    _LOGGER.info(
+                        "Room %s: PID auto-tuning complete - Kp=%.3f, Ki=%.4f, Kd=%.3f",
+                        self.room_config.name,
+                        kp,
+                        ki,
+                        kd,
+                    )
 
             # Check for expired overrides and restore scheduled temperatures
             expired_entities = self.override_manager.check_expired_overrides()
