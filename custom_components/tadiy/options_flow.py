@@ -452,10 +452,11 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        # Add optional fields with explicit defaults
+        # Add optional fields with conditional defaults
+        main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR)
         schema_dict[vol.Optional(
             CONF_MAIN_TEMP_SENSOR,
-            default=current_data.get(CONF_MAIN_TEMP_SENSOR, ""),
+            description={"suggested_value": main_temp} if main_temp else None,
         )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
@@ -463,9 +464,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        humidity_sensor = current_data.get(CONF_HUMIDITY_SENSOR)
         schema_dict[vol.Optional(
             CONF_HUMIDITY_SENSOR,
-            default=current_data.get(CONF_HUMIDITY_SENSOR, ""),
+            description={"suggested_value": humidity_sensor} if humidity_sensor else None,
         )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
@@ -484,9 +486,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
         schema_dict[vol.Optional(
             CONF_OUTDOOR_SENSOR,
-            default=current_data.get(CONF_OUTDOOR_SENSOR, ""),
+            description={"suggested_value": outdoor_sensor} if outdoor_sensor else None,
         )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
@@ -494,9 +497,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        weather_entity = current_data.get(CONF_WEATHER_ENTITY)
         schema_dict[vol.Optional(
             CONF_WEATHER_ENTITY,
-            default=current_data.get(CONF_WEATHER_ENTITY, ""),
+            description={"suggested_value": weather_entity} if weather_entity else None,
         )] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="weather",
