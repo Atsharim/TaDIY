@@ -49,8 +49,8 @@ class TaDiyPanel extends HTMLElement {
       const newState = newHass.states[entityId];
 
       if (!newState ||
-          oldState.state !== newState.state ||
-          JSON.stringify(oldState.attributes) !== JSON.stringify(newState.attributes)) {
+        oldState.state !== newState.state ||
+        JSON.stringify(oldState.attributes) !== JSON.stringify(newState.attributes)) {
         return true;
       }
     }
@@ -98,7 +98,7 @@ class TaDiyPanel extends HTMLElement {
     // Get hub mode entity and options
     const hubModeEntity = Object.values(this._hass.states).find(
       entity => entity.entity_id.startsWith('select.') &&
-                entity.entity_id.includes('hub_mode')
+        entity.entity_id.includes('hub_mode')
     );
     if (hubModeEntity) {
       this._hubMode = hubModeEntity.state;
@@ -485,14 +485,30 @@ class TaDiyPanel extends HTMLElement {
     const today = new Date().getDay();
     const initialScheduleType = (today === 0 || today === 6) ? 'weekend' : 'weekday';
 
-    // Configure the schedule card AFTER it's added to DOM
-    // Open expanded with current hub mode pre-selected
-    scheduleCard.setConfig({
-      entity: entityId,
-      initialMode: this._hubMode || 'normal',
-      initialScheduleType: initialScheduleType
-    });
-    scheduleCard.hass = this._hass;
+    // Configure the schedule card AFTER it's added to DOM and defined
+    const configureCard = () => {
+      // Check if upgrade is complete
+      if (scheduleCard.setConfig) {
+        scheduleCard.setConfig({
+          entity: entityId,
+          initialMode: this._hubMode || 'normal',
+          initialScheduleType: initialScheduleType
+        });
+        scheduleCard.hass = this._hass;
+      } else {
+        // Fallback if not yet upgraded
+        customElements.whenDefined('tadiy-schedule-card').then(() => {
+          scheduleCard.setConfig({
+            entity: entityId,
+            initialMode: this._hubMode || 'normal',
+            initialScheduleType: initialScheduleType
+          });
+          scheduleCard.hass = this._hass;
+        });
+      }
+    };
+
+    configureCard();
 
     // Mark dialog as open
     this._hasOpenDialog = true;
