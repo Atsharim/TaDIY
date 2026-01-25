@@ -27,6 +27,8 @@ from .const import (
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
+    CONF_USE_PID_CONTROL,
+    CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
@@ -197,6 +199,12 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
+            )
+        )
+
+        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default="")] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="weather",
             )
         )
 

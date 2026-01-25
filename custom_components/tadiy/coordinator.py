@@ -626,7 +626,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "humidity_sensor_id": room_data.get(CONF_HUMIDITY_SENSOR, ""),
             "window_sensor_ids": room_data.get(CONF_WINDOW_SENSORS, []),
             "outdoor_sensor_id": room_data.get(CONF_OUTDOOR_SENSOR, ""),
-            "weather_entity_id": room_data.get("weather_entity_id", ""),
+            "weather_entity_id": room_data.get(CONF_WEATHER_ENTITY, ""),
             "window_open_timeout": room_data.get("window_open_timeout", 300),
             "window_close_timeout": room_data.get("window_close_timeout", 180),
             "dont_heat_below_outdoor": room_data.get("dont_heat_below_outdoor", 20.0),
@@ -1052,9 +1052,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # Only create override if this wasn't set by TaDIY
             if last_known is None or abs(new_temp - last_known) > 0.2:
                 # Get next schedule block time for timeout calculation
-                next_block_time = self.schedule_engine.get_next_block_change_time(
+                next_change = self.schedule_engine.get_next_schedule_change(
                     self.room_config.name, self.get_hub_mode()
                 )
+                next_block_time = next_change[0] if next_change else None
 
                 # Create override record
                 self.override_manager.create_override(
@@ -1134,49 +1135,77 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
                 fused_temp = None
 
-            # Get current target from TRVs
-            current_target = None
-            for trv_id in self.room_config.trv_entity_ids:
-                trv_state = self.hass.states.get(trv_id)
-                if trv_state and "temperature" in trv_state.attributes:
-                    temp_attr = trv_state.attributes.get("temperature")
-                    if temp_attr is not None:
+            # Determine Desired Target Temperature
+            # Priority:
+            # 1. Window Open / Safety cutoff (Frost Protection)
+            # 2. Away Mode (Frost Protection or Eco)
+            # 3. Outdoor Temperature Threshold (Frost Protection)
+            # 4. Manual Override
+            # 5. Schedule / Heating Curve
+
+            # Get base scheduled target (includes heating curve if enabled)
+            scheduled_target = self.get_scheduled_target()
+            desired_target = scheduled_target
+
+            # Check for active override
+            active_override = self.override_manager.get_active_override()
+            if active_override:
+                desired_target = active_override.temperature
+
+            # Check defaults if no schedule and no override (e.g. Manual Hub Mode)
+            # In Manual Hub Mode, get_scheduled_target returns None.
+            # We explicitly do NOT enforce any target in Manual Mode, unless safety features trigger.
+            enforce_target = True
+            if desired_target is None:
+                enforce_target = False
+                # Use current TRV setting as reference for display
+                for trv_id in self.room_config.trv_entity_ids:
+                    trv_state = self.hass.states.get(trv_id)
+                    if trv_state and "temperature" in trv_state.attributes:
                         try:
-                            current_target = float(temp_attr)
+                            desired_target = float(trv_state.attributes["temperature"])
                             break
                         except (ValueError, TypeError):
                             continue
+                if desired_target is None:
+                    desired_target = 20.0 # Fallback
 
-            # Check location-based away mode
-            if self.hub_coordinator and self.hub_coordinator.should_reduce_heating_for_away():
-                frost_protection = self.hub_coordinator.get_frost_protection_temp()
-                _LOGGER.info(
-                    "Room %s: Away mode active (nobody home), "
-                    "switching to frost protection %.1f°C",
-                    self.room_config.name,
-                    frost_protection,
-                )
-                current_target = frost_protection
-
-            # Check outdoor temperature threshold and override if needed
-            elif outdoor_temp is not None and current_target is not None:
-                outdoor_threshold = self.room_config.dont_heat_below_outdoor
-                if outdoor_temp >= outdoor_threshold:
-                    # Outdoor temp too high, switch to frost protection mode
+            # 3. Outdoor Temperature Threshold
+            if outdoor_temp is not None and self.room_config.dont_heat_below_outdoor:
+                if outdoor_temp >= self.room_config.dont_heat_below_outdoor:
                     frost_protection = (
                         self.hub_coordinator.get_frost_protection_temp()
                         if self.hub_coordinator
                         else DEFAULT_FROST_PROTECTION_TEMP
                     )
-                    _LOGGER.info(
-                        "Room %s: Outdoor temp %.1f°C >= threshold %.1f°C, "
-                        "switching to frost protection %.1f°C",
-                        self.room_config.name,
-                        outdoor_temp,
-                        outdoor_threshold,
-                        frost_protection,
-                    )
-                    current_target = frost_protection
+                    desired_target = frost_protection
+                    enforce_target = True # Safety overrides Manual Mode
+                    _LOGGER.debug("Room %s: Outdoor temp high, forcing frost protection", self.room_config.name)
+
+            # 2. Away Mode
+            if self.hub_coordinator and self.hub_coordinator.should_reduce_heating_for_away():
+                 frost_protection = self.hub_coordinator.get_frost_protection_temp()
+                 desired_target = frost_protection
+                 enforce_target = True
+                 _LOGGER.debug("Room %s: Away mode active, forcing frost protection", self.room_config.name)
+
+            # 1. Window Open (Highest Priority)
+            if window_state.heating_should_stop:
+                frost_protection = (
+                    self.hub_coordinator.get_frost_protection_temp()
+                    if self.hub_coordinator
+                    else DEFAULT_FROST_PROTECTION_TEMP
+                )
+                # Or usage of specific window open temperature if added to config
+                desired_target = frost_protection
+                enforce_target = True
+                _LOGGER.debug("Room %s: Window open, forcing frost protection", self.room_config.name)
+
+            current_target = desired_target
+
+            # Apply target to TRVs if needed
+            if enforce_target and current_target is not None:
+                await self._apply_trv_target(current_target)
 
             # Get HVAC mode
             hvac_mode = "heat"
@@ -1363,6 +1392,39 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             if state and state.state == "on":
                 return True
         return False
+
+    async def _apply_trv_target(self, target: float) -> None:
+        """Apply target temperature to all TRVs in the room."""
+        for trv_id in self.room_config.trv_entity_ids:
+            try:
+                state = self.hass.states.get(trv_id)
+                if not state:
+                    continue
+
+                current_trv_temp = state.attributes.get("temperature")
+                
+                # Convert to float for comparison
+                try:
+                    current_val = float(current_trv_temp) if current_trv_temp is not None else None
+                except (ValueError, TypeError):
+                    current_val = None
+
+                # Only send command if difference is significant or current is unknown
+                if current_val is None or abs(current_val - target) > 0.1:
+                    await self.hass.services.async_call(
+                        "climate",
+                        "set_temperature",
+                        {"entity_id": trv_id, "temperature": target},
+                        blocking=False, # Don't block the coordinator loop
+                    )
+                    _LOGGER.debug("Applied target %.1f°C to TRV %s", target, trv_id)
+                    
+                    # Update local cache to match what we just sent, 
+                    # preventing immediate override detection loop
+                    self._last_trv_targets[trv_id] = target
+
+            except Exception as err:
+                 _LOGGER.warning("Failed to set TRV %s to %.1f°C: %s", trv_id, target, err)
 
     def _calculate_window_state(self, window_open: bool) -> WindowState:
         """Calculate current window state."""
