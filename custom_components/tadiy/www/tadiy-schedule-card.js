@@ -82,7 +82,7 @@ class TaDiyScheduleCard extends HTMLElement {
 
     console.log('TaDIY: Found hub entity:', hubEntity);
 
-    if (hubEntity && hubEntity.options) {
+    if (hubEntity && hubEntity.attributes && hubEntity.attributes.options) {
       this._availableModes = hubEntity.attributes.options;
       console.log('TaDIY: Loaded modes:', this._availableModes);
 
@@ -581,8 +581,8 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .block-editor {
           display: grid;
-          grid-template-columns: 85px 85px 60px 40px; /* Reduced temp width */
-          gap: 12px;
+          grid-template-columns: 85px 85px 85px 50px; /* Equal width for inputs */
+          gap: 16px; /* User requested more distance */
           align-items: center;
           margin-bottom: 12px;
           padding: 12px;
@@ -1479,6 +1479,13 @@ class TaDiyScheduleCard extends HTMLElement {
 
   getCardSize() {
     return this._isEditing ? 10 : 4;
+  }
+
+  closeAllDropdowns() {
+    this.shadowRoot.querySelectorAll('.time-dropdown').forEach(dd => {
+      dd.classList.remove('open');
+    });
+    this._hasOpenDropdown = false;
   }
 }
 

@@ -1264,7 +1264,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                         temp_increase = fused_temp - prev_temp
 
                         # Only record if temperature is increasing (heating is working)
-                        if temp_increase > 0.05:  # Minimum 0.05°C increase
+                        if temp_increase > 0.01:  # Minimum 0.01°C increase
                             try:
                                 self._heat_model.update_with_measurement(
                                     start_temp=prev_temp,

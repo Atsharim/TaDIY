@@ -18,7 +18,7 @@ _LOGGER = logging.getLogger(__name__)
 
 LEARNING_RATE: float = 0.1
 MAX_SAMPLES_FOR_AVERAGING: int = 50
-MIN_TEMP_INCREASE: float = 0.05
+MIN_TEMP_INCREASE: float = 0.01
 MAX_TEMP_INCREASE_PER_MINUTE: float = 0.5
 
 
