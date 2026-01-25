@@ -44,6 +44,7 @@ class RoomConfig:
     use_heating_curve: bool = False  # Heating curve disabled by default
     heating_curve_slope: float = 0.5  # Curve slope (°C indoor per °C outdoor)
     use_humidity_compensation: bool = False
+    use_hvac_off_for_low_temp: bool = False  # Use HVAC off instead of low temp for Moes TRVs
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -90,6 +91,7 @@ class RoomConfig:
             "use_heating_curve": self.use_heating_curve,
             "heating_curve_slope": self.heating_curve_slope,
             "use_humidity_compensation": self.use_humidity_compensation,
+            "use_hvac_off_for_low_temp": self.use_hvac_off_for_low_temp,
         }
 
     @classmethod
@@ -123,6 +125,7 @@ class RoomConfig:
             use_heating_curve=data.get("use_heating_curve", False),
             heating_curve_slope=data.get("heating_curve_slope", 0.5),
             use_humidity_compensation=data.get("use_humidity_compensation", False),
+            use_hvac_off_for_low_temp=data.get("use_hvac_off_for_low_temp", False),
         )
 
 

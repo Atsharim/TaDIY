@@ -58,6 +58,7 @@
           "pid_kd": "PID: Derivative Gain (Kd)",
           "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
           "heating_curve_slope": "Heating Curve Slope",
+          "use_hvac_off_for_low_temp": "Use HVAC Off for Low Temp (Moes TRVs)",
           "person_entities": "Person Entities (for away mode)",
           "location_mode_enabled": "Enable Location-Based Heating",
           "global_override_timeout": "Default Override Timeout"
@@ -68,7 +69,8 @@
           "main_temp_sensor": "Select the primary temperature sensor for this room (optional).",
           "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
           "outdoor_sensor": "Select an outdoor temperature sensor (optional).",
-          "heating_curve_slope": "Higher value = higher target temp at lower outdoor temps."
+          "heating_curve_slope": "Higher value = higher target temp at lower outdoor temps.",
+          "use_hvac_off_for_low_temp": "Enable for Moes TRVs that don't support low temperatures - uses HVAC 'off' mode instead."
         }
       },
       "add_mode": {

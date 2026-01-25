@@ -30,6 +30,7 @@ from .const import (
     CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
     CONF_USE_HEATING_CURVE,
+    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -43,6 +44,7 @@ from .const import (
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
     DEFAULT_USE_HEATING_CURVE,
+    DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
     DOMAIN,
     MAX_CUSTOM_MODES,
@@ -639,6 +641,13 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        # Moes TRV Mode (Use HVAC Off for Low Temperatures)
+        current_use_hvac_off = current_data.get(CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP)
+        schema_dict[vol.Optional(
+            CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+            default=current_use_hvac_off,
+        )] = selector.BooleanSelector()
+
         return self.async_show_form(
             step_id="room_config",
             data_schema=vol.Schema(schema_dict),
@@ -654,7 +663,8 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     "• PID Ki: Integral gain (compensates for persistent error over time)\n"
                     "• PID Kd: Derivative gain (dampens oscillations, predicts future error)\n"
                     "• Heating Curve: Enable weather-compensated heating to adjust target based on outdoor temperature (opt-in)\n"
-                    "• Heating Curve Slope: How much to reduce indoor target per °C outdoor increase (higher = more aggressive reduction)\n\n"
+                    "• Heating Curve Slope: How much to reduce indoor target per °C outdoor increase (higher = more aggressive reduction)\n"
+                    "• Use HVAC Off for Low Temp: Enable for Moes TRVs - uses HVAC mode 'off' instead of low temperature for frost protection (opt-in)\n\n"
                     f"Hub Defaults: Offset={DEFAULT_EARLY_START_OFFSET}min, Max={DEFAULT_EARLY_START_MAX}min, Timeout={DEFAULT_GLOBAL_OVERRIDE_TIMEOUT}, Hysteresis={DEFAULT_HYSTERESIS}°C"
                 )
             },

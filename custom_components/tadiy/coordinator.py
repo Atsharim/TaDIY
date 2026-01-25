@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant, callback, Event
@@ -1133,8 +1133,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # Only warn after initial updates (sensors need time to initialize)
                 if self._update_count >= 3:
                     _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
-                if self._update_count >= 3:
-                    _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
                 fused_temp = None
 
             # Calculate window state early (needed for target logic)
@@ -1246,6 +1244,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     )
 
                 heating_active = should_heat and hvac_mode == "heat"
+
+                # For Moes TRVs: Apply HVAC mode based on heating decision
+                if self.room_config.use_hvac_off_for_low_temp and enforce_target and current_target is not None:
+                    await self._apply_trv_target(current_target, should_heat=should_heat)
             else:
                 heating_active = False
 
@@ -1396,8 +1398,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 return True
         return False
 
-    async def _apply_trv_target(self, target: float) -> None:
-        """Apply target temperature to all TRVs in the room."""
+    async def _apply_trv_target(self, target: float, should_heat: bool | None = None) -> None:
+        """Apply target temperature to all TRVs in the room.
+
+        Args:
+            target: Target temperature in °C
+            should_heat: Optional heating state from hysteresis/PID controller
+        """
+        # Get frost protection temperature for comparison
+        frost_temp = (
+            self.hub_coordinator.get_frost_protection_temp()
+            if self.hub_coordinator
+            else DEFAULT_FROST_PROTECTION_TEMP
+        )
+
         for trv_id in self.room_config.trv_entity_ids:
             try:
                 state = self.hass.states.get(trv_id)
@@ -1405,26 +1419,62 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     continue
 
                 current_trv_temp = state.attributes.get("temperature")
-                
+                current_hvac_mode = state.state
+
                 # Convert to float for comparison
                 try:
                     current_val = float(current_trv_temp) if current_trv_temp is not None else None
                 except (ValueError, TypeError):
                     current_val = None
 
-                # Only send command if difference is significant or current is unknown
-                if current_val is None or abs(current_val - target) > 0.1:
-                    await self.hass.services.async_call(
-                        "climate",
-                        "set_temperature",
-                        {"entity_id": trv_id, "temperature": target},
-                        blocking=False, # Don't block the coordinator loop
-                    )
-                    _LOGGER.debug("Applied target %.1f°C to TRV %s", target, trv_id)
-                    
-                    # Update local cache to match what we just sent, 
-                    # preventing immediate override detection loop
-                    self._last_trv_targets[trv_id] = target
+                # Moes TRV Mode: Use HVAC mode based on heating state
+                if self.room_config.use_hvac_off_for_low_temp:
+                    # Determine desired HVAC mode
+                    if target <= frost_temp:
+                        # Frost protection: Always off
+                        desired_hvac_mode = "off"
+                    elif should_heat is not None:
+                        # Use hysteresis/PID decision
+                        desired_hvac_mode = "heat" if should_heat else "off"
+                    else:
+                        # Fallback: Keep current mode or heat
+                        desired_hvac_mode = current_hvac_mode if current_hvac_mode in ["heat", "off"] else "heat"
+
+                    # Apply HVAC mode if changed
+                    if current_hvac_mode != desired_hvac_mode:
+                        await self.hass.services.async_call(
+                            "climate",
+                            "set_hvac_mode",
+                            {"entity_id": trv_id, "hvac_mode": desired_hvac_mode},
+                            blocking=False,
+                        )
+                        _LOGGER.debug(
+                            "TRV %s: Set HVAC mode to %s (target=%.1f°C, should_heat=%s)",
+                            trv_id, desired_hvac_mode.upper(), target, should_heat
+                        )
+
+                    # Only set temperature if in heat mode
+                    if desired_hvac_mode == "heat":
+                        if current_val is None or abs(current_val - target) > 0.1:
+                            await self.hass.services.async_call(
+                                "climate",
+                                "set_temperature",
+                                {"entity_id": trv_id, "temperature": target},
+                                blocking=False,
+                            )
+                            _LOGGER.debug("Applied target %.1f°C to TRV %s", target, trv_id)
+                            self._last_trv_targets[trv_id] = target
+                else:
+                    # Normal mode: Always set temperature
+                    if current_val is None or abs(current_val - target) > 0.1:
+                        await self.hass.services.async_call(
+                            "climate",
+                            "set_temperature",
+                            {"entity_id": trv_id, "temperature": target},
+                            blocking=False,
+                        )
+                        _LOGGER.debug("Applied target %.1f°C to TRV %s", target, trv_id)
+                        self._last_trv_targets[trv_id] = target
 
             except Exception as err:
                  _LOGGER.warning("Failed to set TRV %s to %.1f°C: %s", trv_id, target, err)
@@ -1443,5 +1493,5 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             heating_should_stop=True,
             reason="window_open_heating_disabled",
             timeout_active=True,
-            last_change=datetime.now(),
+            last_change=dt_util.utcnow(),
         )
