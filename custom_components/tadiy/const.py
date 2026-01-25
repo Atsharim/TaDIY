@@ -158,6 +158,10 @@ CONF_HEATING_CURVE_SLOPE: Final = "heating_curve_slope"
 DEFAULT_HEATING_CURVE_SLOPE: Final = 0.5
 MIN_HEATING_CURVE_SLOPE: Final = 0.1
 
+# TRV HVAC Mode Control (for Moes and similar TRVs)
+CONF_USE_HVAC_OFF_FOR_LOW_TEMP: Final = "use_hvac_off_for_low_temp"
+DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP: Final = False  # Disabled by default, opt-in for Moes TRVs
+
 # Thermal Mass Learning settings
 CONF_LEARN_COOLING_RATE: Final = "learn_cooling_rate"
 DEFAULT_LEARN_COOLING_RATE: Final = True  # Enabled by default, opt-out available

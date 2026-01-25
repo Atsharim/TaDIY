@@ -13,11 +13,59 @@ class TaDiyPanel extends HTMLElement {
     this._hubModeOptions = [];
     this._hubModeEntityId = null;
     this._hasOpenDialog = false; // Track if schedule editor dialog is open
+    this._unsubscribe = null; // WebSocket subscription cleanup
+  }
+
+  connectedCallback() {
+    // Subscribe to state changes when panel is mounted
+    if (this._hass && this._hass.connection) {
+      this._subscribeUpdates();
+    }
+  }
+
+  disconnectedCallback() {
+    // Clean up subscription when panel is unmounted
+    if (this._unsubscribe) {
+      this._unsubscribe();
+      this._unsubscribe = null;
+    }
+  }
+
+  async _subscribeUpdates() {
+    // Prevent multiple subscriptions
+    if (this._unsubscribe) return;
+
+    try {
+      // Subscribe to state changes for all TaDIY entities
+      this._unsubscribe = await this._hass.connection.subscribeEvents(
+        (event) => {
+          const entityId = event.data.entity_id;
+          if (entityId && (entityId.includes('tadiy') || entityId.includes('hub_mode'))) {
+            // Update local state and re-render if not in dialog
+            if (!this._hasOpenDialog) {
+              this.loadRooms();
+              this.render();
+            }
+          }
+        },
+        'state_changed'
+      );
+      console.log('TaDIY Panel: Subscribed to state changes');
+    } catch (err) {
+      console.error('TaDIY Panel: Failed to subscribe to updates:', err);
+      // Retry after 5 seconds
+      setTimeout(() => this._subscribeUpdates(), 5000);
+    }
   }
 
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
+
+    // Setup subscription on first hass assignment
+    if (!oldHass && hass && hass.connection && !this._unsubscribe) {
+      this._subscribeUpdates();
+    }
 
     // NEVER re-render while dialog is open to prevent dropdown/dialog closure
     if (this._hasOpenDialog) {
