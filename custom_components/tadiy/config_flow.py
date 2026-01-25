@@ -60,6 +60,12 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
         """Get the options flow for this handler."""
         return TaDIYOptionsFlowHandler(config_entry)
 
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle re-configuration."""
+        return await self.async_step_user(user_input)
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:

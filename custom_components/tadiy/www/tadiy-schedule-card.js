@@ -57,8 +57,8 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   initializeDefaults() {
-    // Don't auto-select mode - wait for user to click
-    this._selectedMode = null;
+    // Initialize with a safe default for backend calls
+    this._selectedMode = 'normal';
     this._modeExpanded = false;
 
     // Auto-detect schedule type based on current day (for when mode is selected)
@@ -105,7 +105,7 @@ class TaDiyScheduleCard extends HTMLElement {
         service: 'get_schedule',
         service_data: {
           entity_id: this._config.entity,
-          mode: this._selectedMode,
+          mode: this._selectedMode || 'normal', // Ensure never null
           schedule_type: this._selectedScheduleType,
         },
         return_response: true,
@@ -576,8 +576,8 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .block-editor {
           display: grid;
-          grid-template-columns: 95px 95px 100px 60px;
-          gap: 8px;
+          grid-template-columns: 85px 85px 100px 50px; /* Increased temp column and button column */
+          gap: 16px; /* Increased gap */
           align-items: center;
           margin-bottom: 12px;
           padding: 12px;
