@@ -491,6 +491,15 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        schema_dict[vol.Optional(
+            CONF_WEATHER_ENTITY,
+            default=current_data.get(CONF_WEATHER_ENTITY, ""),
+        )] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="weather",
+            )
+        )
+
         # Early Start Room Overrides (None = use hub setting)
         schema_dict[vol.Optional(
             CONF_EARLY_START_OFFSET,
