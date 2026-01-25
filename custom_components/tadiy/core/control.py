@@ -70,6 +70,12 @@ class HeatingController:
 
         return (self._heating_active, target_temp)
 
+    def set_hysteresis(self, hysteresis: float) -> None:
+        """Update hysteresis value."""
+        self.hysteresis = hysteresis
+        _LOGGER.debug("Hysteresis updated to %.2f°C", hysteresis)
+
+
     def reset(self) -> None:
         """Reset controller state (call when mode changes)."""
         self._heating_active = False

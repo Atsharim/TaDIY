@@ -11,6 +11,7 @@ from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
+from homeassistant.exceptions import ConfigEntryNotReady
 import voluptuous as vol
 
 from .const import (
@@ -241,8 +242,8 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.5)
 
     if not hub_coordinator:
-        _LOGGER.error("Hub coordinator not found for room setup after timeout")
-        return False
+        _LOGGER.warning("Hub coordinator not found for room setup after timeout, retrying later")
+        raise ConfigEntryNotReady("Hub coordinator not found")
 
     room_coordinator = TaDIYRoomCoordinator(hass, entry.entry_id, entry.data, hub_coordinator)
     await room_coordinator.async_load_schedules()
@@ -510,20 +511,38 @@ async def async_register_services(
 
                 # If entity_id specified, only clear that specific override
                 if entity_id:
+                    # Check if it is a TRV
                     if entity_id in room_coord.room_config.trv_entity_ids:
                         if room_coord.override_manager.clear_override(entity_id):
                             cleared_count += 1
                             await room_coord.async_save_overrides()
                             _LOGGER.info("Cleared override for %s", entity_id)
+                    
+                    # Check if it is the Room Climate Entity
+                    else:
+                        entity_registry = er.async_get(hass)
+                        entity_entry = entity_registry.async_get(entity_id)
+                        expected_unique_id = f"{entry_id}_climate"
+                        
+                        if entity_entry and entity_entry.unique_id == expected_unique_id:
+                            # User targeted the Room Entity -> Clear ALL overrides for this room
+                            count = room_coord.override_manager.clear_all_overrides()
+                            if count > 0:
+                                cleared_count += count
+                                await room_coord.async_save_overrides()
+                                _LOGGER.info("Cleared %d override(s) for room %s (via room entity)", count, room_coord.room_config.name)
+                            # If count is 0, we still found the room, so we can stop searching if we want, 
+                            # or just continue. 
+                            return # We found the target
                 else:
-                    # Clear all overrides for this room
+                    # No entity_id, clear all for this room (if room_name matched)
                     count = room_coord.override_manager.clear_all_overrides()
                     if count > 0:
                         cleared_count += count
                         await room_coord.async_save_overrides()
                         _LOGGER.info("Cleared %d override(s) for room %s", count, room_coord.room_config.name)
 
-                # If entity_id was specified and found, stop searching
+                # If entity_id was specified and found (as TRV), stop searching
                 if entity_id and cleared_count > 0:
                     return
 
