@@ -76,15 +76,20 @@ class TaDiyScheduleCard extends HTMLElement {
 
     // Get hub entity to find custom modes - check all select entities
     const hubEntity = Object.values(this._hass.states).find(
-      entity => entity.entity_id.startsWith('select.') &&
-        entity.entity_id.includes('hub_mode')
+      entity => entity.entity_id === 'select.tadiy_hub_hub_mode' ||
+        (entity.entity_id.startsWith('select.') && entity.entity_id.includes('hub_mode'))
     );
 
     console.log('TaDIY: Found hub entity:', hubEntity);
 
-    if (hubEntity && hubEntity.attributes.options) {
+    if (hubEntity && hubEntity.options) {
       this._availableModes = hubEntity.attributes.options;
       console.log('TaDIY: Loaded modes:', this._availableModes);
+
+      // Update selected mode to match current state if not editing
+      if (!this._isEditing && hubEntity.state && this._availableModes.includes(hubEntity.state)) {
+        this._selectedMode = hubEntity.state;
+      }
     } else {
       // Fallback to default modes
       this._availableModes = ['normal', 'homeoffice', 'manual', 'off'];
@@ -576,8 +581,8 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .block-editor {
           display: grid;
-          grid-template-columns: 85px 85px 100px 50px; /* Increased temp column and button column */
-          gap: 16px; /* Increased gap */
+          grid-template-columns: 85px 85px 60px 40px; /* Reduced temp width */
+          gap: 12px;
           align-items: center;
           margin-bottom: 12px;
           padding: 12px;
@@ -967,9 +972,9 @@ class TaDiyScheduleCard extends HTMLElement {
         // Position dropdown below the time part using fixed positioning
         if (!wasOpen) {
           const rect = part.getBoundingClientRect();
-          dropdown.style.top = `${rect.bottom}px`;
-          dropdown.style.left = `${rect.left}px`;
-          dropdown.style.width = `${rect.width}px`;
+          dropdown.style.top = `${Math.round(rect.bottom)}px`;
+          dropdown.style.left = `${Math.round(rect.left)}px`;
+          dropdown.style.width = `${Math.round(rect.width)}px`;
 
           // Scroll selected option into view
           const selected = dropdown.querySelector('.time-option.selected');
@@ -1029,23 +1034,32 @@ class TaDiyScheduleCard extends HTMLElement {
       });
     });
 
-    // Close dropdowns when clicking outside
+    // Close on outside click
     const closeDropdowns = (e) => {
       const isTimePart = e.target.closest('.time-part');
       if (!isTimePart) {
-        this.shadowRoot.querySelectorAll('.time-dropdown').forEach(dd => {
-          dd.classList.remove('open');
-        });
-        this._hasOpenDropdown = false; // Mark dropdown closed
+        this.closeAllDropdowns();
+      }
+    };
+
+    // Close on scroll (anywhere)
+    const onScroll = () => {
+      if (this._hasOpenDropdown) {
+        this.closeAllDropdowns();
       }
     };
 
     // Remove old listener if exists
     if (this._dropdownCloseHandler) {
       document.removeEventListener('click', this._dropdownCloseHandler, true);
+      window.removeEventListener('scroll', this._scrollHandler, true);
     }
+
     document.addEventListener('click', closeDropdowns, true);
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true });
+
     this._dropdownCloseHandler = closeDropdowns;
+    this._scrollHandler = onScroll;
 
     // Delete buttons
     this.shadowRoot.querySelectorAll('.delete-btn').forEach(btn => {
