@@ -503,10 +503,11 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        # Early Start Room Overrides (None = use hub setting)
+        # Early Start Room Overrides
+        early_start_offset_val = current_data.get(CONF_EARLY_START_OFFSET)
         schema_dict[vol.Optional(
             CONF_EARLY_START_OFFSET,
-            description={"suggested_value": current_data.get(CONF_EARLY_START_OFFSET)}
+            description={"suggested_value": early_start_offset_val} if early_start_offset_val is not None else None
         )] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0,
@@ -516,9 +517,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        early_start_max_val = current_data.get(CONF_EARLY_START_MAX)
         schema_dict[vol.Optional(
             CONF_EARLY_START_MAX,
-            description={"suggested_value": current_data.get(CONF_EARLY_START_MAX)}
+            description={"suggested_value": early_start_max_val} if early_start_max_val is not None else None
         )] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0,
