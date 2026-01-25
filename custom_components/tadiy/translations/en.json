@@ -46,14 +46,29 @@
           "trv_entities": "TRV Entities",
           "main_temp_sensor": "Temperature Sensor",
           "window_sensors": "Window Sensors",
-          "outdoor_sensor": "Outdoor Sensor"
+          "outdoor_sensor": "Outdoor Sensor",
+          "weather_entity": "Weather Entity",
+          "early_start_offset": "Early Start Offset (min)",
+          "early_start_max": "Max Early Start Duration (min)",
+          "override_timeout": "Override Timeout",
+          "hysteresis": "Temperature Hysteresis",
+          "use_pid_control": "Enable PID Control",
+          "pid_kp": "PID: Proportional Gain (Kp)",
+          "pid_ki": "PID: Integral Gain (Ki)",
+          "pid_kd": "PID: Derivative Gain (Kd)",
+          "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
+          "heating_curve_slope": "Heating Curve Slope",
+          "person_entities": "Person Entities (for away mode)",
+          "location_mode_enabled": "Enable Location-Based Heating",
+          "global_override_timeout": "Default Override Timeout"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
           "trv_entities": "Select one or more climate entities (TRVs) to control in this room.",
           "main_temp_sensor": "Select the primary temperature sensor for this room (optional).",
           "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
-          "outdoor_sensor": "Select an outdoor temperature sensor (optional)."
+          "outdoor_sensor": "Select an outdoor temperature sensor (optional).",
+          "heating_curve_slope": "Higher value = higher target temp at lower outdoor temps."
         }
       },
       "add_mode": {
@@ -77,6 +92,17 @@
         "title": "All Modes",
         "description": "{modes_info}"
       },
+      "panel_settings": {
+        "title": "Hub Configuration",
+        "description": "{info}",
+        "data": {
+          "show_panel": "Show Schedules Panel in Sidebar",
+          "weather_entity": "Weather Entity (for outdoor temperature)",
+          "person_entities": "Person Entities (for presence detection)",
+          "location_mode_enabled": "Enable Location-Based Heating (Away Mode)",
+          "global_override_timeout": "Default Override Timeout"
+        }
+      },
       "init_hub": {
         "title": "Manage TaDIY Hub Modes",
         "description": "Manage custom operating modes for your heating system. You have {room_count} room(s) configured.",
@@ -84,27 +110,12 @@
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Panel Settings"
-        }
-      },
-      "panel_settings": {
-        "title": "Panel Settings",
-        "description": "{info}",
-        "data": {
-          "show_panel": "Show Schedules Panel in Sidebar"
-        },
-        "data_description": {
-          "show_panel": "Enable or disable the TaDIY panel in the Home Assistant sidebar. When enabled, you can access all room schedules directly from the sidebar. When disabled, schedules are only accessible through room configuration."
+          "panel_settings": "Hub Configuration"
         }
       },
       "init_room": {
         "title": "Configure Room",
-        "description": "Manage settings for this room.",
-        "menu_options": {
-          "room_details": "Room Settings",
-          "schedules": "Edit Schedules",
-          "learning": "Learning Settings"
-        }
+        "description": "Manage room settings and schedules."
       },
       "room_details": {
         "title": "Room Configuration",
@@ -189,7 +200,8 @@
     "abort": {
       "hub_not_configurable": "Hub settings are managed through device entities. Use the Hub device controls to configure global settings.",
       "coordinator_not_found": "Hub coordinator not found. Please reload the integration.",
-      "no_custom_modes": "There are no custom modes configured. Only default modes (Normal, Homeoffice, Manual, Off) exist. You can add custom modes from the Hub Options menu."
+      "no_custom_modes": "There are no custom modes configured. Only default modes (Normal, Homeoffice, Manual, Off) exist. You can add custom modes from the Hub Options menu.",
+      "use_lovelace_card": "{message}"
     }
   },
   "entity": {
