@@ -78,10 +78,14 @@
         "description": "{modes_info}"
       },
       "panel_settings": {
-        "title": "Panel Settings",
+        "title": "Hub Configuration",
         "description": "{info}",
         "data": {
-          "show_panel": "Show Schedules Panel in Sidebar"
+          "show_panel": "Show Schedules Panel in Sidebar",
+          "weather_entity": "Weather Entity (for outdoor temperature)",
+          "person_entities": "Person Entities (for presence detection)",
+          "location_mode_enabled": "Enable Location-Based Heating (Away Mode)",
+          "global_override_timeout": "Default Override Timeout"
         }
       },
       "init_hub": {
@@ -91,7 +95,7 @@
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Panel Settings"
+          "panel_settings": "Hub Configuration"
         }
       },
       "init_room": {
@@ -114,7 +118,16 @@
           "use_early_start": "Early Start (Override)",
           "learn_heating_rate": "Learn Heating Rate (Override)",
           "early_start_offset": "Early Start Buffer (Override)",
-          "early_start_max": "Maximum Pre-heating Time (Override)"
+          "early_start_max": "Maximum Pre-heating Time (Override)",
+          "override_timeout": "Override Timeout (Manual Change)",
+          "hysteresis": "Temperature Hysteresis",
+          "use_pid_control": "Enable PID Control",
+          "pid_kp": "PID: Proportional Gain (Kp)",
+          "pid_ki": "PID: Integral Gain (Ki)",
+          "pid_kd": "PID: Derivative Gain (Kd)",
+          "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
+          "heating_curve_slope": "Heating Curve Slope",
+          "weather_entity": "Weather Entity (Outdoor Temp Source)"
         },
         "data_description": {
           "trv_entities": "One or more climate entities (TRVs) to control.",

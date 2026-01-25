@@ -83,6 +83,20 @@ class OverrideManager:
         """Get override record for a TRV."""
         return self._overrides.get(entity_id)
 
+    def get_active_override(self) -> OverrideRecord | None:
+        """
+        Get any active override for this room.
+        
+        Returns:
+            First found active override record, or None
+        """
+        if not self._overrides:
+            return None
+        
+        # Return the first active override
+        # Use next(iter(dict.values())) for efficiency since we just need any one
+        return next(iter(self._overrides.values()))
+
     def create_override(
         self,
         entity_id: str,
