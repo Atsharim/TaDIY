@@ -77,7 +77,7 @@ class TaDiyScheduleCard extends HTMLElement {
     // Get hub entity to find custom modes - check all select entities
     const hubEntity = Object.values(this._hass.states).find(
       entity => entity.entity_id.startsWith('select.') &&
-                entity.entity_id.includes('hub_mode')
+        entity.entity_id.includes('hub_mode')
     );
 
     console.log('TaDIY: Found hub entity:', hubEntity);
@@ -629,18 +629,19 @@ class TaDiyScheduleCard extends HTMLElement {
           color: var(--primary-text-color);
           font-size: 14px;
           font-family: monospace;
-          min-width: 90px;
+          min-width: 80px;
           justify-content: center;
         }
         .time-separator {
           font-weight: bold;
-          padding: 0 2px;
+          padding: 0 1px;
+          font-size: 12px;
         }
         .time-part {
           position: relative;
           display: inline-flex;
           align-items: center;
-          padding: 4px 6px;
+          padding: 2px 4px;
           cursor: pointer;
           border-radius: 3px;
           transition: background 0.2s;
@@ -665,10 +666,12 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .time-dropdown {
           display: none;
-          position: fixed;
-          margin-top: 4px;
+          position: absolute;
+          top: 100%;
+          left: 0;
+          margin-top: 2px;
           background: var(--card-background-color);
-          border: 2px solid var(--primary-color);
+          border: 1px solid var(--divider-color);
           border-radius: 4px;
           max-height: 200px;
           overflow-y: auto;
