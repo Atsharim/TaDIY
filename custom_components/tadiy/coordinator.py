@@ -1133,7 +1133,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # Only warn after initial updates (sensors need time to initialize)
                 if self._update_count >= 3:
                     _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
+                if self._update_count >= 3:
+                    _LOGGER.warning("No valid temperature for room %s", self.room_config.name)
                 fused_temp = None
+
+            # Calculate window state early (needed for target logic)
+            window_state = self._calculate_window_state(window_open)
 
             # Determine Desired Target Temperature
             # Priority:
@@ -1214,8 +1219,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 if trv_state:
                     hvac_mode = trv_state.state
                     break
-
-            window_state = self._calculate_window_state(window_open)
 
             # Determine heating state with hysteresis and optional PID
             if current_target is not None and fused_temp is not None:
