@@ -1034,17 +1034,17 @@ class TaDiyScheduleCard extends HTMLElement {
       });
     });
 
-    // Close on outside click
+    // Close on outside click (bind this context)
     const closeDropdowns = (e) => {
       const isTimePart = e.target.closest('.time-part');
-      if (!isTimePart) {
+      if (!isTimePart && this.closeAllDropdowns) {
         this.closeAllDropdowns();
       }
     };
 
     // Close on scroll (anywhere)
     const onScroll = () => {
-      if (this._hasOpenDropdown) {
+      if (this._hasOpenDropdown && this.closeAllDropdowns) {
         this.closeAllDropdowns();
       }
     };
