@@ -104,13 +104,13 @@
         }
       },
       "init_hub": {
-        "title": "Manage TaDIY Hub Modes",
+        "title": "Manage TaDIY Hub",
         "description": "Manage custom operating modes for your heating system. You have {room_count} room(s) configured.",
         "menu_options": {
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Hub Configuration"
+          "panel_settings": "Hub Settings"
         }
       },
       "init_room": {
