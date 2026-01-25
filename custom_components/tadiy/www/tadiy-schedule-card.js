@@ -666,8 +666,8 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .time-dropdown {
           display: none;
-          position: absolute;
-          top: 100%;
+          position: fixed; /* Use fixed to escape overflows */
+          top: 0;
           left: 0;
           margin-top: 2px;
           background: var(--card-background-color);
@@ -675,8 +675,8 @@ class TaDiyScheduleCard extends HTMLElement {
           border-radius: 4px;
           max-height: 200px;
           overflow-y: auto;
-          box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-          z-index: 10000;
+          box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+          z-index: 10001; /* Ensure above dialog */
           min-width: 60px;
         }
         .time-dropdown.open {
@@ -967,8 +967,9 @@ class TaDiyScheduleCard extends HTMLElement {
         // Position dropdown below the time part using fixed positioning
         if (!wasOpen) {
           const rect = part.getBoundingClientRect();
-          dropdown.style.top = `${rect.bottom + 4}px`;
+          dropdown.style.top = `${rect.bottom}px`;
           dropdown.style.left = `${rect.left}px`;
+          dropdown.style.width = `${rect.width}px`;
 
           // Scroll selected option into view
           const selected = dropdown.querySelector('.time-option.selected');
