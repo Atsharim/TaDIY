@@ -216,6 +216,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """View all modes."""
+        if user_input is not None:
+            return await self.async_step_init_hub()
+
         # Get coordinator
         entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
         if not entry_data:
@@ -503,9 +506,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         # Early Start Room Overrides (None = use hub setting)
         schema_dict[vol.Optional(
             CONF_EARLY_START_OFFSET,
-            description={
-                "suggested_value": current_data.get(CONF_EARLY_START_OFFSET)
-            },
+            description={"suggested_value": current_data.get(CONF_EARLY_START_OFFSET)}
         )] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0,
@@ -517,9 +518,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         schema_dict[vol.Optional(
             CONF_EARLY_START_MAX,
-            description={
-                "suggested_value": current_data.get(CONF_EARLY_START_MAX)
-            },
+            description={"suggested_value": current_data.get(CONF_EARLY_START_MAX)}
         )] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0,
