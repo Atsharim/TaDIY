@@ -1,4 +1,5 @@
 """Select platform for TaDIY integration."""
+
 from __future__ import annotations
 import logging
 
@@ -103,6 +104,8 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
                 await self.coordinator.async_request_refresh()
                 _LOGGER.info("Hub mode changed to: %s", option)
             else:
-                _LOGGER.error("Invalid hub mode: %s (available: %s)", option, available_modes)
+                _LOGGER.error(
+                    "Invalid hub mode: %s (available: %s)", option, available_modes
+                )
 
         self.async_write_ha_state()

@@ -1,9 +1,14 @@
 """Climate platform for TaDIY integration."""
+
 from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
+from homeassistant.components.climate import (
+    ClimateEntity,
+    ClimateEntityFeature,
+    HVACMode,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
@@ -38,7 +43,11 @@ async def async_setup_entry(
         entities = [TaDIYClimateEntity(coordinator, room_name, trv_entities, entry)]
 
         async_add_entities(entities)
-        _LOGGER.info("Added unified climate entity for room: %s (controlling %d TRVs)", room_name, len(trv_entities))
+        _LOGGER.info(
+            "Added unified climate entity for room: %s (controlling %d TRVs)",
+            room_name,
+            len(trv_entities),
+        )
 
 
 class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
@@ -54,7 +63,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
     _enable_turn_on_off_backwards_compatibility = False
 
-    def __init__(self, coordinator, room_name: str, trv_entity_ids: list[str], entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator, room_name: str, trv_entity_ids: list[str], entry: ConfigEntry
+    ) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._room_name = room_name
@@ -83,7 +94,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         """Return hvac operation mode."""
         if not self.coordinator.data:
             return HVACMode.OFF
-        return HVACMode.HEAT if self.coordinator.data.hvac_mode == "heat" else HVACMode.OFF
+        return (
+            HVACMode.HEAT if self.coordinator.data.hvac_mode == "heat" else HVACMode.OFF
+        )
 
     @property
     def min_temp(self) -> float:
@@ -113,6 +126,39 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         if temperature is None:
             return
 
+        _LOGGER.info(
+            "Room %s: User requested temperature %.1f°C",
+            self._room_name,
+            temperature,
+        )
+
+        # Create override to prevent schedule from overwriting user's choice
+        scheduled_target = self.coordinator.get_scheduled_target()
+        if scheduled_target is not None and abs(temperature - scheduled_target) > 0.2:
+            # User is setting a different temperature than scheduled
+            timeout_mode = self.coordinator.get_override_timeout()
+            next_change = self.coordinator.schedule_engine.get_next_schedule_change(
+                self.coordinator.room_config.name, self.coordinator.get_hub_mode()
+            )
+            next_block_time = next_change[0] if next_change else None
+
+            # Create override for the room (using first TRV as reference)
+            for trv_entity_id in self._trv_entity_ids:
+                self.coordinator.override_manager.create_override(
+                    entity_id=trv_entity_id,
+                    scheduled_temp=scheduled_target,
+                    override_temp=temperature,
+                    timeout_mode=timeout_mode,
+                    next_block_time=next_block_time,
+                )
+            self.hass.async_create_task(self.coordinator.async_save_overrides())
+            _LOGGER.info(
+                "Room %s: Created override for %.1f°C (scheduled was %.1f°C)",
+                self._room_name,
+                temperature,
+                scheduled_target,
+            )
+
         # Get current room temperature for auto-calibration
         room_temp = (
             self.coordinator.current_room_data.current_temperature
@@ -141,8 +187,10 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                     )
 
                 # Get calibrated target
-                calibrated_temp = self.coordinator.calibration_manager.get_calibrated_target(
-                    trv_entity_id, temperature, room_temp, trv_temp
+                calibrated_temp = (
+                    self.coordinator.calibration_manager.get_calibrated_target(
+                        trv_entity_id, temperature, room_temp, trv_temp
+                    )
                 )
 
                 await self.hass.services.async_call(
@@ -152,18 +200,20 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                     blocking=True,
                 )
 
+                # Update last known target to prevent re-detection as manual change
+                self.coordinator._last_trv_targets[trv_entity_id] = calibrated_temp
+
                 # Log calibration info
                 cal_info = self.coordinator.calibration_manager.get_calibration_info(
                     trv_entity_id
                 )
                 if cal_info and cal_info["mode"] != "disabled":
                     _LOGGER.debug(
-                        "TRV %s: Set target %.1f°C (calibrated from %.1f°C, mode=%s, multiplier=%.3f)",
+                        "TRV %s: Set target %.1f°C (calibrated from %.1f°C, mode=%s)",
                         trv_entity_id,
                         calibrated_temp,
                         temperature,
                         cal_info["mode"],
-                        cal_info["multiplier"] if cal_info["mode"] == "auto" else 1.0,
                     )
                 else:
                     _LOGGER.debug(
@@ -173,7 +223,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                     )
 
             except Exception as err:
-                _LOGGER.error("Failed to set temperature for %s: %s", trv_entity_id, err)
+                _LOGGER.error(
+                    "Failed to set temperature for %s: %s", trv_entity_id, err
+                )
 
         await self.coordinator.async_request_refresh()
 

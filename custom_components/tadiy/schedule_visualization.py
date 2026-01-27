@@ -97,28 +97,28 @@ def generate_timeline_html(blocks: list[dict[str, Any]]) -> str:
         # Create block
         html += (
             f'<div style="flex: 0 0 {percentage:.2f}%; background: {color}; '
-            'display: flex; align-items: center; justify-content: center; '
-            'color: white; font-weight: bold; font-size: 12px; '
+            "display: flex; align-items: center; justify-content: center; "
+            "color: white; font-weight: bold; font-size: 12px; "
             'border-right: 1px solid rgba(255,255,255,0.3);">'
         )
         html += '<div style="text-align: center; padding: 5px;">'
         html += f'<div style="font-size: 14px;">{temp_display}</div>'
         html += f'<div style="font-size: 10px; opacity: 0.9;">{start_time_str}-{display_end}</div>'
-        html += '</div>'
-        html += '</div>'
+        html += "</div>"
+        html += "</div>"
 
-    html += '</div>'
+    html += "</div>"
 
     # Add time labels below
     html += '<div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 11px; color: #666;">'
-    html += '<span>00:00</span>'
-    html += '<span>06:00</span>'
-    html += '<span>12:00</span>'
-    html += '<span>18:00</span>'
-    html += '<span>23:59</span>'
-    html += '</div>'
+    html += "<span>00:00</span>"
+    html += "<span>06:00</span>"
+    html += "<span>12:00</span>"
+    html += "<span>18:00</span>"
+    html += "<span>23:59</span>"
+    html += "</div>"
 
-    html += '</div>'
+    html += "</div>"
 
     return html
 
@@ -141,10 +141,10 @@ def generate_color_legend() -> str:
     for label, color in legend_items:
         html += '<div style="display: flex; align-items: center;">'
         html += f'<div style="width: 16px; height: 16px; background: {color}; border-radius: 3px; margin-right: 5px;"></div>'
-        html += f'<span>{label}</span>'
-        html += '</div>'
+        html += f"<span>{label}</span>"
+        html += "</div>"
 
-    html += '</div>'
-    html += '</div>'
+    html += "</div>"
+    html += "</div>"
 
     return html

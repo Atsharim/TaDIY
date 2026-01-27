@@ -1,4 +1,5 @@
 """TRV calibration and offset management for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -244,7 +245,9 @@ class CalibrationManager:
             cal.multiplier = raw_multiplier
         else:
             # Smooth update
-            cal.multiplier = (1 - DAMPENING) * cal.multiplier + DAMPENING * raw_multiplier
+            cal.multiplier = (
+                1 - DAMPENING
+            ) * cal.multiplier + DAMPENING * raw_multiplier
 
         # Clamp to limits
         cal.multiplier = max(
