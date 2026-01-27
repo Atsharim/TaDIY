@@ -541,7 +541,26 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return entity specific state attributes."""
+        # Get current hub mode and scheduled target
+        hub_mode = self.coordinator.get_hub_mode()
+        scheduled_target = self.coordinator.get_scheduled_target()
+        room_data = self.coordinator.current_room_data
+
         attributes = {
+            # Room status info
+            "hub_mode": hub_mode,
+            "scheduled_target": round(scheduled_target, 1)
+            if scheduled_target
+            else None,
+            "current_target": round(room_data.target_temperature, 1)
+            if room_data
+            else None,
+            "current_temperature": round(room_data.current_temperature, 1)
+            if room_data
+            else None,
+            "heating_active": room_data.heating_active if room_data else False,
+            "enforce_schedule": hub_mode not in ("manual", "off"),
+            # Override info
             "override_count": len(self.coordinator.override_manager._overrides),
             "timeout_mode": self.coordinator.get_override_timeout(),
         }
