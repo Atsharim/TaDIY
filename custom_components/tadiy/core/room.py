@@ -45,6 +45,10 @@ class RoomConfig:
     heating_curve_slope: float = 0.5  # Curve slope (°C indoor per °C outdoor)
     use_humidity_compensation: bool = False
     use_hvac_off_for_low_temp: bool = False  # Use HVAC off instead of low temp for Moes TRVs
+    use_weather_prediction: bool = False  # Weather-based predictive heating
+    use_room_coupling: bool = False  # Multi-room heat coupling
+    adjacent_rooms: list[str] = field(default_factory=list)  # Names of adjacent rooms
+    coupling_strength: float = 0.5  # Heat coupling factor (0.0-1.0)
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -52,10 +56,7 @@ class RoomConfig:
             raise ValueError("Room name cannot be empty")
         if not self.trv_entity_ids:
             raise ValueError("Room {} must have at least one TRV".format(self.name))
-        if not self.main_temp_sensor_id:
-            raise ValueError(
-                "Room {} must have a main temperature sensor".format(self.name)
-            )
+        # Note: main_temp_sensor_id is optional - TRVs can report their own temperature
         if self.window_open_timeout < 0:
             raise ValueError(
                 "Room {} window_open_timeout must be >= 0".format(self.name)
@@ -92,6 +93,10 @@ class RoomConfig:
             "heating_curve_slope": self.heating_curve_slope,
             "use_humidity_compensation": self.use_humidity_compensation,
             "use_hvac_off_for_low_temp": self.use_hvac_off_for_low_temp,
+            "use_weather_prediction": self.use_weather_prediction,
+            "use_room_coupling": self.use_room_coupling,
+            "adjacent_rooms": self.adjacent_rooms,
+            "coupling_strength": self.coupling_strength,
         }
 
     @classmethod
@@ -126,6 +131,10 @@ class RoomConfig:
             heating_curve_slope=data.get("heating_curve_slope", 0.5),
             use_humidity_compensation=data.get("use_humidity_compensation", False),
             use_hvac_off_for_low_temp=data.get("use_hvac_off_for_low_temp", False),
+            use_weather_prediction=data.get("use_weather_prediction", False),
+            use_room_coupling=data.get("use_room_coupling", False),
+            adjacent_rooms=data.get("adjacent_rooms", []),
+            coupling_strength=data.get("coupling_strength", 0.5),
         )
 
 

@@ -115,16 +115,6 @@ DEFAULT_HYSTERESIS: Final = 0.3  # °C deadband to prevent rapid cycling
 MIN_HYSTERESIS: Final = 0.1  # Minimum hysteresis
 MAX_HYSTERESIS: Final = 2.0  # Maximum hysteresis
 
-# PID Control (enabled by default as per user preference)
-CONF_USE_PID_CONTROL: Final = "use_pid_control"
-DEFAULT_USE_PID_CONTROL: Final = True  # Enabled by default, opt-out available
-CONF_PID_KP: Final = "pid_kp"
-CONF_PID_KI: Final = "pid_ki"
-CONF_PID_KD: Final = "pid_kd"
-DEFAULT_PID_KP: Final = 0.5
-DEFAULT_PID_KI: Final = 0.01
-DEFAULT_PID_KD: Final = 0.1
-
 # TRV Calibration (automatic by default as per user preference)
 CONF_TRV_CALIBRATION_MODE: Final = "trv_calibration_mode"
 DEFAULT_TRV_CALIBRATION_MODE: Final = "auto"  # auto | manual | disabled
@@ -161,6 +151,17 @@ MIN_HEATING_CURVE_SLOPE: Final = 0.1
 # TRV HVAC Mode Control (for Moes and similar TRVs)
 CONF_USE_HVAC_OFF_FOR_LOW_TEMP: Final = "use_hvac_off_for_low_temp"
 DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP: Final = False  # Disabled by default, opt-in for Moes TRVs
+
+# Weather Prediction (Phase 3.3)
+CONF_USE_WEATHER_PREDICTION: Final = "use_weather_prediction"
+DEFAULT_USE_WEATHER_PREDICTION: Final = False  # Disabled by default, opt-in
+
+# Multi-Room Heat Coupling (Phase 3.2)
+CONF_ADJACENT_ROOMS: Final = "adjacent_rooms"
+CONF_USE_ROOM_COUPLING: Final = "use_room_coupling"
+DEFAULT_USE_ROOM_COUPLING: Final = False  # Disabled by default, opt-in
+CONF_COUPLING_STRENGTH: Final = "coupling_strength"
+DEFAULT_COUPLING_STRENGTH: Final = 0.5  # Temperature adjustment factor (0.0-1.0)
 
 # Thermal Mass Learning settings
 CONF_LEARN_COOLING_RATE: Final = "learn_cooling_rate"
@@ -211,6 +212,7 @@ SERVICE_SET_LOCATION_OVERRIDE: Final = "set_location_override"
 SERVICE_START_PID_AUTOTUNE: Final = "start_pid_autotune"
 SERVICE_STOP_PID_AUTOTUNE: Final = "stop_pid_autotune"
 SERVICE_APPLY_PID_AUTOTUNE: Final = "apply_pid_autotune"
+SERVICE_REFRESH_WEATHER_FORECAST: Final = "refresh_weather_forecast"
 
 # Service attributes
 ATTR_ROOM: Final = "room"
