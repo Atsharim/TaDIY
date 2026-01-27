@@ -34,7 +34,12 @@ from .const import (
     CONF_ROOM_NAME,
     CONF_TRV_ENTITIES,
     CONF_USE_HEATING_CURVE,
+    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
+    CONF_USE_WEATHER_PREDICTION,
+    CONF_ADJACENT_ROOMS,
+    CONF_USE_ROOM_COUPLING,
+    CONF_COUPLING_STRENGTH,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_DONT_HEAT_BELOW,
@@ -52,7 +57,11 @@ from .const import (
     DEFAULT_PID_KP,
     DEFAULT_USE_EARLY_START,
     DEFAULT_USE_HEATING_CURVE,
+    DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
+    DEFAULT_USE_WEATHER_PREDICTION,
+    DEFAULT_USE_ROOM_COUPLING,
+    DEFAULT_COUPLING_STRENGTH,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
@@ -72,6 +81,8 @@ from .core.override import OverrideManager
 from .core.room import RoomConfig, RoomData
 from .core.schedule import ScheduleEngine
 from .core.temperature import SensorReading, calculate_fused_temperature
+from .core.weather_predictor import WeatherPredictor
+from .core.room_coupling import RoomCouplingManager
 from .core.window import WindowState
 
 _LOGGER = logging.getLogger(__name__)
@@ -172,6 +183,21 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             "frost_protection_temp": self.frost_protection_temp,
         }
 
+        # Weather Predictor (Phase 3.3)
+        weather_entity = config_data.get(CONF_WEATHER_ENTITY)
+        if weather_entity:
+            self.weather_predictor = WeatherPredictor(hass, weather_entity)
+            _LOGGER.info("Weather predictor initialized with entity: %s", weather_entity)
+        else:
+            self.weather_predictor: WeatherPredictor | None = None
+
+        # Weather update tracking
+        self._last_weather_update: dt_util.dt.datetime | None = None
+        self._weather_update_interval = timedelta(minutes=30)
+
+        # Room Coupling Manager (Phase 3.2)
+        self.room_coupling_manager = RoomCouplingManager()
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from coordinator."""
         try:
@@ -188,6 +214,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     location_state.person_count_total,
                 )
             self._update_global_settings()
+
+            # Update weather forecast periodically (every 30 min)
+            await self._update_weather_forecast()
 
             # Build data dict
             data_dict = {
@@ -219,6 +248,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 data_dict["location_attributes"] = {}
 
             self.data.update(data_dict)
+
+            # Add weather prediction data if available
+            if self.weather_predictor:
+                weather_summary = self.weather_predictor.get_forecast_summary()
+                self.data["weather_prediction"] = weather_summary
 
             return self.data
         except Exception as err:
@@ -488,6 +522,82 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         """Get heat model for a room."""
         return self.heat_models.get(room_name)
 
+    async def _update_weather_forecast(self) -> None:
+        """Update weather forecast if interval has passed."""
+        if not self.weather_predictor:
+            return
+
+        now = dt_util.utcnow()
+        if (
+            self._last_weather_update is None
+            or (now - self._last_weather_update) >= self._weather_update_interval
+        ):
+            success = await self.weather_predictor.async_update_forecast()
+            if success:
+                self._last_weather_update = now
+                _LOGGER.debug("Weather forecast updated successfully")
+
+    async def async_refresh_weather_forecast(self) -> bool:
+        """Manually refresh weather forecast (for service call)."""
+        if not self.weather_predictor:
+            _LOGGER.warning("No weather entity configured for weather prediction")
+            return False
+
+        success = await self.weather_predictor.async_update_forecast()
+        if success:
+            self._last_weather_update = dt_util.utcnow()
+            _LOGGER.info("Weather forecast manually refreshed")
+        return success
+
+    def get_weather_adjustment(self, outdoor_temp: float) -> float:
+        """
+        Get weather-based temperature adjustment.
+
+        Args:
+            outdoor_temp: Current outdoor temperature in °C
+
+        Returns:
+            Temperature adjustment in °C (positive = increase target, negative = decrease)
+        """
+        if not self.weather_predictor:
+            return 0.0
+
+        prediction = self.weather_predictor.predict_heating_adjustment(outdoor_temp)
+        return prediction.adjustment_celsius
+
+    def get_weather_prediction_status(self) -> dict[str, Any]:
+        """Get current weather prediction status for sensors."""
+        if not self.weather_predictor:
+            return {
+                "available": False,
+                "event": "unknown",
+                "adjustment": 0.0,
+                "recommendation": "maintain",
+            }
+
+        # Get outdoor temp from cached data if available
+        outdoor_temp = 10.0  # Default fallback
+        weather_state = self.hass.states.get(self.weather_predictor.weather_entity_id)
+        if weather_state:
+            try:
+                outdoor_temp = float(weather_state.attributes.get("temperature", 10.0))
+            except (ValueError, TypeError):
+                pass
+
+        prediction = self.weather_predictor.predict_heating_adjustment(outdoor_temp)
+        summary = self.weather_predictor.get_forecast_summary()
+
+        return {
+            "available": summary.get("available", False),
+            "event": prediction.predicted_event,
+            "adjustment": prediction.adjustment_celsius,
+            "recommendation": prediction.recommendation,
+            "temperature_change": prediction.temperature_change,
+            "event_time": prediction.event_time.isoformat() if prediction.event_time else None,
+            "trend": summary.get("trend", "stable"),
+            "forecast_points": summary.get("forecast_points", 0),
+        }
+
 
 class TaDIYRoomCoordinator(DataUpdateCoordinator):
     """Room Coordinator for individual room management."""
@@ -617,6 +727,18 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=UPDATE_INTERVAL),
         )
 
+        # Register with room coupling manager (Phase 3.2)
+        if (
+            self.hub_coordinator
+            and self.room_config.use_room_coupling
+            and self.room_config.adjacent_rooms
+        ):
+            self.hub_coordinator.room_coupling_manager.register_room(
+                room_name=self.room_config.name,
+                adjacent_rooms=self.room_config.adjacent_rooms,
+                coupling_strength=self.room_config.coupling_strength,
+            )
+
     def _transform_config_data(self, room_data: dict[str, Any]) -> dict[str, Any]:
         """Transform config flow data to RoomConfig expected format."""
         return {
@@ -645,7 +767,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "use_humidity_compensation": room_data.get(
                 "use_humidity_compensation", False
             ),
+            "use_hvac_off_for_low_temp": room_data.get(CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP),
+            "use_weather_prediction": room_data.get(CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION),
+            "use_room_coupling": room_data.get(CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING),
+            "adjacent_rooms": room_data.get(CONF_ADJACENT_ROOMS, []),
+            "coupling_strength": room_data.get(CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH),
         }
+
 
     async def async_load_schedules(self) -> None:
         """Load room schedules from storage."""
@@ -958,7 +1086,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         )
 
     def get_scheduled_target(self) -> float | None:
-        """Get scheduled target temperature for this room (with optional heating curve)."""
+        """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
         mode = self.get_hub_mode()
         base_target = self.schedule_engine.get_target_temperature(self.room_config.name, mode)
 
@@ -978,9 +1106,52 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 self._cached_outdoor_temp,
                 adjusted_target,
             )
-            return adjusted_target
+            base_target = adjusted_target
+
+        # Apply weather prediction adjustment if enabled (Phase 3.3)
+        if (
+            base_target is not None
+            and self.room_config.use_weather_prediction
+            and self.hub_coordinator
+            and self._cached_outdoor_temp is not None
+        ):
+            weather_adjustment = self.hub_coordinator.get_weather_adjustment(
+                self._cached_outdoor_temp
+            )
+            if abs(weather_adjustment) > 0.1:  # Only apply meaningful adjustments
+                adjusted = base_target + weather_adjustment
+                _LOGGER.debug(
+                    "Room %s: Weather prediction applied: base=%.1f°C, adj=%.1f°C, result=%.1f°C",
+                    self.room_config.name,
+                    base_target,
+                    weather_adjustment,
+                    adjusted,
+                )
+                base_target = adjusted
+
+        # Apply room coupling adjustment if enabled (Phase 3.2)
+        if (
+            base_target is not None
+            and self.room_config.use_room_coupling
+            and self.hub_coordinator
+            and self.room_config.adjacent_rooms
+        ):
+            coupling_adjustment = self.hub_coordinator.room_coupling_manager.get_coupling_adjustment(
+                self.room_config.name
+            )
+            if abs(coupling_adjustment) > 0.05:  # Only apply meaningful adjustments
+                adjusted = base_target + coupling_adjustment
+                _LOGGER.debug(
+                    "Room %s: Room coupling applied: base=%.1f°C, adj=%.1f°C, result=%.1f°C",
+                    self.room_config.name,
+                    base_target,
+                    coupling_adjustment,
+                    adjusted,
+                )
+                base_target = adjusted
 
         return base_target
+
 
     def setup_state_listeners(self) -> None:
         """Set up state listeners for TRV entities to detect manual overrides."""
@@ -1231,25 +1402,45 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     # Positive output = heating needed, negative = no heating
                     should_heat = pid_adjustment > 0
                     _LOGGER.debug(
-                        "Room %s: PID adjustment=%.2f°C (current=%.1f°C, target=%.1f°C)",
+                        "Room %s: PID adjustment=%.2f°C (current=%.1f°C, target=%.1f°C, should_heat=%s)",
                         self.room_config.name,
                         pid_adjustment,
                         fused_temp,
                         current_target,
+                        should_heat,
                     )
                 else:
                     # Basic hysteresis-based control
                     should_heat, _ = self.heating_controller.should_heat(
                         fused_temp, current_target
                     )
+                    _LOGGER.debug(
+                        "Room %s: Hysteresis control (current=%.1f°C, target=%.1f°C, should_heat=%s)",
+                        self.room_config.name,
+                        fused_temp,
+                        current_target,
+                        should_heat,
+                    )
 
-                heating_active = should_heat and hvac_mode == "heat"
+                # heating_active reflects TaDIY's decision, not just HVAC mode
+                # HVAC mode "heat" means TRV is configured to heat, not that it's actively heating
+                heating_active = should_heat and hvac_mode != "off"
 
                 # For Moes TRVs: Apply HVAC mode based on heating decision
                 if self.room_config.use_hvac_off_for_low_temp and enforce_target and current_target is not None:
                     await self._apply_trv_target(current_target, should_heat=should_heat)
             else:
                 heating_active = False
+
+            # Update coupling manager with heating status (Phase 3.2)
+            if self.hub_coordinator and self.room_config.use_room_coupling:
+                self.hub_coordinator.room_coupling_manager.update_room_heating_status(
+                    room_name=self.room_config.name,
+                    is_heating=heating_active,
+                    current_temp=fused_temp,
+                    target_temp=current_target,
+                )
+
 
             if heating_active and self.current_room_data:
                 # Check if we have previous data to calculate heating rate
@@ -1269,17 +1460,17 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                         if temp_increase > 0.01:  # Minimum 0.01°C increase
                             try:
                                 self._heat_model.update_with_measurement(
-                                    start_temp=prev_temp,
-                                    end_temp=fused_temp,
+                                    temp_increase=temp_increase,
                                     time_minutes=time_delta,
                                 )
                                 _LOGGER.debug(
                                     "Room %s: Updated heating rate measurement "
-                                    "(%.2f°C -> %.2f°C over %.1f min)",
+                                    "(%.2f°C -> %.2f°C over %.1f min, rate=%.2f°C/h)",
                                     self.room_config.name,
                                     prev_temp,
                                     fused_temp,
                                     time_delta,
+                                    self._heat_model.get_heating_rate(),
                                 )
                                 # Reset measurement time after successful update
                                 self._last_temp_measurement_time = now
@@ -1495,3 +1686,17 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             timeout_active=True,
             last_change=dt_util.utcnow(),
         )
+    async def async_shutdown(self) -> None:
+        """Shutdown the coordinator and cleanup."""
+        # Unregister from room coupling manager
+        if (
+            self.hub_coordinator
+            and self.room_config.use_room_coupling
+        ):
+            self.hub_coordinator.room_coupling_manager.unregister_room(self.room_config.name)
+            _LOGGER.debug("Unregistered room %s from coupling manager", self.room_config.name)
+
+        # Remove state listeners
+        for remove_listener in self._state_listeners:
+            remove_listener()
+        self._state_listeners.clear()

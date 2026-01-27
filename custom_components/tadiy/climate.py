@@ -24,11 +24,11 @@ async def async_setup_entry(
     """Set up TaDIY climate entities."""
     entry_data = hass.data[DOMAIN][entry.entry_id]
     entry_type = entry_data.get("type")
-    
+
     if entry_type == "hub":
         _LOGGER.debug("Hub entry - no climate entities")
         return
-    
+
     if entry_type == "room":
         coordinator = entry_data["coordinator"]
         room_name = coordinator.room_config.name
