@@ -1366,7 +1366,15 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # Sync frost protection temp from hub to room schedule engine
             if self.hub_coordinator:
                 frost_temp = self.hub_coordinator.get_frost_protection_temp()
+                hub_mode = self.hub_coordinator.get_hub_mode()
                 self.schedule_engine.set_frost_protection_temp(frost_temp)
+                _LOGGER.info(
+                    "Room %s: Hub sync - mode=%s, frost_temp=%.1f, schedule_rooms=%s",
+                    self.room_config.name,
+                    hub_mode,
+                    frost_temp,
+                    list(self.schedule_engine._room_schedules.keys()),
+                )
 
             main_temp = self._get_sensor_value(self.room_config.main_temp_sensor_id)
             humidity = self._get_sensor_value(self.room_config.humidity_sensor_id)
@@ -1529,6 +1537,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 )
 
             current_target = desired_target
+
+            _LOGGER.info(
+                "Room %s: FINAL TARGET DECISION - current_target=%.1f, enforce_target=%s",
+                self.room_config.name,
+                current_target if current_target else 0,
+                enforce_target,
+            )
 
             # Apply target to TRVs if needed
             if enforce_target and current_target is not None:
