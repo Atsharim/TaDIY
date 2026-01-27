@@ -87,6 +87,14 @@ class ScheduleEngine:
             )
             return None
 
+        _LOGGER.info(
+            "Schedule lookup: room=%s, mode=%s, weekday=%s, is_weekday=%s",
+            room_name,
+            mode,
+            dt.strftime("%A"),
+            dt.weekday() < 5,
+        )
+
         day_schedule = room_schedule.get_schedule_for_mode(mode, dt)
         if not day_schedule:
             # Custom mode without own schedule: Fall back to normal schedule
