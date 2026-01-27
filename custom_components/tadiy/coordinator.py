@@ -1129,7 +1129,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
     def get_hub_mode(self) -> str:
         """Get current hub mode."""
         if self.hub_coordinator:
-            return self.hub_coordinator.hub_mode
+            # IMPORTANT: Call get_hub_mode() to trigger _update_hub_mode()
+            # which reads the current state from the Select entity
+            return self.hub_coordinator.get_hub_mode()
         return "normal"
 
     def get_early_start_offset(self) -> int:
@@ -1361,6 +1363,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> RoomData | None:
         """Fetch and process room data."""
         try:
+            # Sync frost protection temp from hub to room schedule engine
+            if self.hub_coordinator:
+                frost_temp = self.hub_coordinator.get_frost_protection_temp()
+                self.schedule_engine.set_frost_protection_temp(frost_temp)
+
             main_temp = self._get_sensor_value(self.room_config.main_temp_sensor_id)
             humidity = self._get_sensor_value(self.room_config.humidity_sensor_id)
             outdoor_temp = self._get_sensor_value(self.room_config.outdoor_sensor_id)
