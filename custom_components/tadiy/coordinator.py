@@ -1186,14 +1186,22 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
     def get_scheduled_target(self) -> float | None:
         """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
         mode = self.get_hub_mode()
+
+        # Debug: Log schedule engine state
+        _LOGGER.warning(
+            "Room %s: get_scheduled_target() - mode=%s, schedule_rooms=%s",
+            self.room_config.name,
+            mode,
+            list(self.schedule_engine._room_schedules.keys()),
+        )
+
         base_target = self.schedule_engine.get_target_temperature(
             self.room_config.name, mode
         )
 
-        _LOGGER.debug(
-            "Room %s: get_scheduled_target() called - mode=%s, base_target=%s",
+        _LOGGER.warning(
+            "Room %s: get_scheduled_target() result - base_target=%s",
             self.room_config.name,
-            mode,
             base_target,
         )
 
