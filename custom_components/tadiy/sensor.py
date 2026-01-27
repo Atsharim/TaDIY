@@ -19,7 +19,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ICON_TEMPERATURE, ICON_LEARNING, ICON_MODE
+from .const import DOMAIN, ICON_TEMPERATURE, ICON_LEARNING
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -152,12 +152,8 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
 )
 
 HUB_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
-    TaDIYSensorEntityDescription(
-        key="hub_mode",
-        name="Hub Mode",
-        icon=ICON_MODE,
-        value_fn=lambda data: data.get("hub_mode", "unknown") if data else "unknown",
-    ),
+    # Note: hub_mode is provided by select.py (TaDIYHubSelect), not as a sensor
+    # to avoid redundancy - the Select entity both shows and allows changing the mode
     TaDIYSensorEntityDescription(
         key="location_status",
         name="Location Status",
