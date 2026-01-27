@@ -297,14 +297,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         select_entity_id = "select.{}_hub_mode".format(DOMAIN)
         select_state = self.hass.states.get(select_entity_id)
 
-        if select_state and select_state.state in (
-            "normal",
-            "homeoffice",
-            "vacation",
-            "party",
-        ):
-            self.hub_mode = select_state.state
-            _LOGGER.debug("Hub mode updated to: %s", self.hub_mode)
+        if select_state and select_state.state not in ("unknown", "unavailable"):
+            # Accept any mode that's in the custom_modes list (includes manual, off)
+            if select_state.state in self.custom_modes:
+                self.hub_mode = select_state.state
+                _LOGGER.debug("Hub mode updated to: %s", self.hub_mode)
 
     def _update_frost_protection_temp(self) -> None:
         """Update frost protection temperature from number entity if available."""
