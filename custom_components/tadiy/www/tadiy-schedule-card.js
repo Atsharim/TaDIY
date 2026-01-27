@@ -581,8 +581,8 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .block-editor {
           display: grid;
-          grid-template-columns: 85px 85px 85px 50px; /* Equal width for inputs */
-          gap: 16px; /* User requested more distance */
+          grid-template-columns: 70px 70px 55px 40px; /* Time pickers smaller, temp centered, delete button */
+          gap: 8px 12px; /* row-gap column-gap: more space between temp and delete */
           align-items: center;
           margin-bottom: 12px;
           padding: 12px;
@@ -626,27 +626,29 @@ class TaDiyScheduleCard extends HTMLElement {
         .time-input-inline {
           display: flex;
           align-items: center;
-          gap: 2px;
-          padding: 8px;
+          gap: 1px;
+          padding: 6px 4px;
           border: 1px solid var(--divider-color);
           border-radius: 4px;
           background: var(--card-background-color);
           color: var(--primary-text-color);
-          font-size: 14px;
+          font-size: 12px;
           font-family: monospace;
-          min-width: 80px;
+          min-width: 60px;
           justify-content: center;
+          height: 32px;
+          box-sizing: border-box;
         }
         .time-separator {
           font-weight: bold;
-          padding: 0 1px;
-          font-size: 12px;
+          padding: 0;
+          font-size: 10px;
         }
         .time-part {
           position: relative;
           display: inline-flex;
           align-items: center;
-          padding: 2px 4px;
+          padding: 2px 2px;
           cursor: pointer;
           border-radius: 3px;
           transition: background 0.2s;
@@ -661,28 +663,30 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .time-value {
           font-weight: bold;
-          min-width: 22px;
+          min-width: 18px;
           text-align: center;
+          font-size: 11px;
         }
         .dropdown-arrow {
-          font-size: 8px;
-          margin-left: 2px;
+          font-size: 6px;
+          margin-left: 1px;
           opacity: 0.6;
         }
         .time-dropdown {
           display: none;
-          position: fixed; /* Use fixed to escape overflows */
-          top: 0;
-          left: 0;
-          margin-top: 2px;
+          position: absolute; /* Use absolute within the time-part */
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          margin-top: 4px;
           background: var(--card-background-color);
           border: 1px solid var(--divider-color);
           border-radius: 4px;
-          max-height: 200px;
+          max-height: 150px;
           overflow-y: auto;
           box-shadow: 0 4px 8px rgba(0,0,0,0.3);
           z-index: 10001; /* Ensure above dialog */
-          min-width: 60px;
+          min-width: 50px;
         }
         .time-dropdown.open {
           display: block;
@@ -707,24 +711,32 @@ class TaDiyScheduleCard extends HTMLElement {
           text-decoration: line-through;
         }
         input[type="number"] {
-          padding: 8px;
+          padding: 6px 4px;
           border: 1px solid var(--divider-color);
           border-radius: 4px;
           background: var(--card-background-color);
           color: var(--primary-text-color);
-          font-size: 14px;
+          font-size: 12px;
           width: 100%;
+          height: 32px;
+          box-sizing: border-box;
+          text-align: center;
         }
         .delete-btn {
-          padding: 8px;
+          padding: 4px;
           background: #dc3545;
           color: white;
           border: none;
           border-radius: 4px;
           cursor: pointer;
-          font-size: 20px;
-          height: 40px;
-          margin-top: 20px;
+          font-size: 16px;
+          height: 32px;
+          width: 32px;
+          margin-top: 18px;
+          margin-left: 4px; /* Extra spacing from temp picker */
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
         .delete-btn:hover {
           background: #c82333;
@@ -969,18 +981,15 @@ class TaDiyScheduleCard extends HTMLElement {
         dropdown.classList.toggle('open');
         this._hasOpenDropdown = !wasOpen; // Track dropdown state
 
-        // Position dropdown below the time part using fixed positioning
+        // Scroll selected option into view when opening
         if (!wasOpen) {
-          const rect = part.getBoundingClientRect();
-          dropdown.style.top = `${Math.round(rect.bottom)}px`;
-          dropdown.style.left = `${Math.round(rect.left)}px`;
-          dropdown.style.width = `${Math.round(rect.width)}px`;
-
-          // Scroll selected option into view
-          const selected = dropdown.querySelector('.time-option.selected');
-          if (selected) {
-            selected.scrollIntoView({ block: 'nearest' });
-          }
+          // Use setTimeout to ensure dropdown is visible before scrolling
+          setTimeout(() => {
+            const selected = dropdown.querySelector('.time-option.selected');
+            if (selected) {
+              selected.scrollIntoView({ block: 'nearest' });
+            }
+          }, 10);
         }
       });
 

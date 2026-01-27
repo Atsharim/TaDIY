@@ -113,5 +113,5 @@ class TaDIYHubNumber(CoordinatorEntity, NumberEntity):
             self.coordinator.config_data["boost_temperature"] = value
         elif self.entity_description.key == "boost_duration":
             self.coordinator.config_data["boost_duration_minutes"] = int(value)
-        
+
         self.async_write_ha_state()

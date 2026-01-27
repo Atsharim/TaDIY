@@ -46,6 +46,7 @@ from .const import (
     SERVICE_CLEAR_OVERRIDE,
     SERVICE_FORCE_REFRESH,
     SERVICE_GET_SCHEDULE,
+    SERVICE_REFRESH_WEATHER_FORECAST,
     SERVICE_RESET_LEARNING,
     SERVICE_SET_HEATING_CURVE,
     SERVICE_SET_HUB_MODE,
@@ -124,11 +125,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     # Register static path for Lovelace card
+    # cache_headers=False ensures fresh content during development
     files_path = Path(__file__).parent / "www"
-    await hass.http.async_register_static_paths([
-        StaticPathConfig("/tadiy", str(files_path), False),
-    ])
-    _LOGGER.info("TaDIY: Registered static path /tadiy for Lovelace card")
+    try:
+        await hass.http.async_register_static_paths([
+            StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
+        ])
+        _LOGGER.info("TaDIY: Registered static path /tadiy for Lovelace cards")
+    except ValueError as err:
+        # Path already registered (can happen during reload)
+        _LOGGER.debug("TaDIY: Static path /tadiy already registered: %s", err)
 
     return True
 
@@ -191,6 +197,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY Hub."""
     _LOGGER.info("Setting up TaDIY Hub: %s", entry.data.get(CONF_NAME))
+
+    # Ensure static path is registered (in case async_setup wasn't called)
+    files_path = Path(__file__).parent / "www"
+    try:
+        await hass.http.async_register_static_paths([
+            StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
+        ])
+        _LOGGER.debug("TaDIY: Static path /tadiy ensured during hub setup")
+    except ValueError:
+        # Path already registered, that's fine
+        pass
 
     hub_coordinator = TaDIYHubCoordinator(hass, entry.entry_id, entry.data)
     await hub_coordinator.async_load_learning_data()
@@ -517,13 +534,13 @@ async def async_register_services(
                             cleared_count += 1
                             await room_coord.async_save_overrides()
                             _LOGGER.info("Cleared override for %s", entity_id)
-                    
+
                     # Check if it is the Room Climate Entity
                     else:
                         entity_registry = er.async_get(hass)
                         entity_entry = entity_registry.async_get(entity_id)
                         expected_unique_id = f"{entry_id}_climate"
-                        
+
                         if entity_entry and entity_entry.unique_id == expected_unique_id:
                             # User targeted the Room Entity -> Clear ALL overrides for this room
                             count = room_coord.override_manager.clear_all_overrides()
@@ -687,6 +704,17 @@ async def async_register_services(
     hass.services.async_register(DOMAIN, SERVICE_STOP_PID_AUTOTUNE, handle_stop_pid_autotune, schema=SERVICE_STOP_PID_AUTOTUNE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_APPLY_PID_AUTOTUNE, handle_apply_pid_autotune, schema=SERVICE_APPLY_PID_AUTOTUNE_SCHEMA)
 
+    # Weather Prediction service
+    async def handle_refresh_weather_forecast(call: ServiceCall) -> None:
+        """Refresh weather forecast manually."""
+        success = await hub_coordinator.async_refresh_weather_forecast()
+        if success:
+            _LOGGER.info("Weather forecast refreshed successfully")
+        else:
+            _LOGGER.warning("Weather forecast refresh failed or no weather entity configured")
+
+    hass.services.async_register(DOMAIN, SERVICE_REFRESH_WEATHER_FORECAST, handle_refresh_weather_forecast)
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -703,6 +731,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_save_schedules()
         await coordinator.async_save_calibrations()
         await coordinator.async_save_overrides()
+        await coordinator.async_shutdown()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 

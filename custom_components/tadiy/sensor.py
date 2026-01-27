@@ -131,6 +131,15 @@ HUB_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         value_fn=lambda data: data.get("location_status", "unknown") if data else "unknown",
         attr_fn=lambda data: data.get("location_attributes", {}) if data else {},
     ),
+    TaDIYSensorEntityDescription(
+        key="weather_prediction",
+        name="Weather Prediction",
+        icon="mdi:weather-partly-cloudy",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.get("weather_prediction", {}).get("trend", "unknown") if data else "unknown",
+        available_fn=lambda data: data is not None and data.get("weather_prediction", {}).get("available", False),
+        attr_fn=lambda data: data.get("weather_prediction", {}) if data else {},
+    ),
 )
 
 

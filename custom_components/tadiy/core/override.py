@@ -92,7 +92,7 @@ class OverrideManager:
         """
         if not self._overrides:
             return None
-        
+
         # Return the first active override
         # Use next(iter(dict.values())) for efficiency since we just need any one
         return next(iter(self._overrides.values()))

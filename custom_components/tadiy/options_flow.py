@@ -11,6 +11,8 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_ADJACENT_ROOMS,
+    CONF_COUPLING_STRENGTH,
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
@@ -32,8 +34,11 @@ from .const import (
     CONF_USE_HEATING_CURVE,
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
+    CONF_USE_ROOM_COUPLING,
+    CONF_USE_WEATHER_PREDICTION,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
+    DEFAULT_COUPLING_STRENGTH,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
@@ -46,6 +51,8 @@ from .const import (
     DEFAULT_USE_HEATING_CURVE,
     DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
+    DEFAULT_USE_ROOM_COUPLING,
+    DEFAULT_USE_WEATHER_PREDICTION,
     DOMAIN,
     MAX_CUSTOM_MODES,
     MAX_HEATING_CURVE_SLOPE,
@@ -119,7 +126,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 "add_mode": "Add Custom Mode",
                 "remove_mode": "Remove Custom Mode",
                 "view_modes": "View All Modes",
-                "panel_settings": "Panel Settings",
+                "panel_settings": "Hub Configuration",
             },
             description_placeholders={"room_count": str(room_count)},
         )
@@ -251,7 +258,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
     async def async_step_panel_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Configure panel visibility and hub-level entities."""
+        """Configure hub-level settings including panel, weather, early start, and heating curve."""
         if user_input is not None:
             # Update config entry with new settings
             new_data = dict(self.config_entry.data)
@@ -275,6 +282,23 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             else:
                 new_data.pop(CONF_GLOBAL_OVERRIDE_TIMEOUT, None)
 
+            # Early Start settings (Hub-level)
+            early_start_offset = user_input.get(CONF_EARLY_START_OFFSET)
+            if early_start_offset is not None:
+                new_data[CONF_EARLY_START_OFFSET] = early_start_offset
+            early_start_max = user_input.get(CONF_EARLY_START_MAX)
+            if early_start_max is not None:
+                new_data[CONF_EARLY_START_MAX] = early_start_max
+
+            # Weather Compensation / Heating Curve settings (Hub-level)
+            new_data[CONF_USE_HEATING_CURVE] = user_input.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
+            heating_curve_slope = user_input.get(CONF_HEATING_CURVE_SLOPE)
+            if heating_curve_slope is not None:
+                new_data[CONF_HEATING_CURVE_SLOPE] = heating_curve_slope
+
+            # Weather Prediction (Hub-level)
+            new_data[CONF_USE_WEATHER_PREDICTION] = user_input.get(CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION)
+
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
@@ -291,6 +315,11 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         current_persons = current_data.get(CONF_PERSON_ENTITIES, [])
         current_location_mode = current_data.get(CONF_LOCATION_MODE_ENABLED, False)
         current_override_timeout = current_data.get(CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT)
+        current_early_start_offset = current_data.get(CONF_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET)
+        current_early_start_max = current_data.get(CONF_EARLY_START_MAX, DEFAULT_EARLY_START_MAX)
+        current_use_heating_curve = current_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
+        current_heating_curve_slope = current_data.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE)
+        current_use_weather_prediction = current_data.get(CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION)
 
         # Build schema step-by-step
         schema_dict = {
@@ -339,6 +368,55 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        # Early Start settings
+        schema_dict[vol.Optional(
+            CONF_EARLY_START_OFFSET,
+            default=current_early_start_offset,
+        )] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=60,
+                unit_of_measurement="min",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        schema_dict[vol.Optional(
+            CONF_EARLY_START_MAX,
+            default=current_early_start_max,
+        )] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=360,
+                unit_of_measurement="min",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        # Weather Compensation / Heating Curve
+        schema_dict[vol.Optional(
+            CONF_USE_HEATING_CURVE,
+            default=current_use_heating_curve,
+        )] = selector.BooleanSelector()
+
+        schema_dict[vol.Optional(
+            CONF_HEATING_CURVE_SLOPE,
+            default=current_heating_curve_slope,
+        )] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_HEATING_CURVE_SLOPE,
+                max=MAX_HEATING_CURVE_SLOPE,
+                step=0.1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        # Weather Prediction
+        schema_dict[vol.Optional(
+            CONF_USE_WEATHER_PREDICTION,
+            default=current_use_weather_prediction,
+        )] = selector.BooleanSelector()
+
         return self.async_show_form(
             step_id="panel_settings",
             data_schema=vol.Schema(schema_dict),
@@ -346,10 +424,15 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 "info": (
                     "Hub Configuration:\n\n"
                     "• Panel: Show TaDIY Schedules in sidebar\n"
-                    "• Weather Entity: Optional weather entity for outdoor temperature fallback and future forecast support\n"
-                    "• Person Entities: Optional person tracking for location-based heating control\n"
-                    "• Location Mode: Enable automatic heating reduction when nobody is home\n"
-                    "• Override Timeout: How long manual TRV changes override schedules (applies to all rooms by default)"
+                    "• Weather Entity: Weather entity for outdoor temperature and forecast\n"
+                    "• Person Entities: Person tracking for location-based heating\n"
+                    "• Location Mode: Automatic heating reduction when nobody is home\n"
+                    "• Override Timeout: How long manual TRV changes override schedules\n"
+                    "• Early Start Offset: Additional minutes to start heating early\n"
+                    "• Early Start Max: Maximum pre-heating duration\n"
+                    "• Heating Curve: Adjust target temperature based on outdoor temperature\n"
+                    "• Heating Curve Slope: Higher = stronger adjustment at low outdoor temps\n"
+                    "• Weather Prediction: Pre-heat before cold fronts, reduce before warm fronts"
                 )
             },
         )
@@ -499,43 +582,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        weather_entity = current_data.get(CONF_WEATHER_ENTITY)
-        schema_dict[vol.Optional(
-            CONF_WEATHER_ENTITY,
-            description={"suggested_value": weather_entity} if weather_entity else None,
-        )] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="weather",
-            )
-        )
-
-        # Early Start Room Overrides
-        early_start_offset_val = current_data.get(CONF_EARLY_START_OFFSET)
-        schema_dict[vol.Optional(
-            CONF_EARLY_START_OFFSET,
-            description={"suggested_value": early_start_offset_val} if early_start_offset_val is not None else None
-        )] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=60,
-                unit_of_measurement="min",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        early_start_max_val = current_data.get(CONF_EARLY_START_MAX)
-        schema_dict[vol.Optional(
-            CONF_EARLY_START_MAX,
-            description={"suggested_value": early_start_max_val} if early_start_max_val is not None else None
-        )] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=360,
-                unit_of_measurement="min",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
         # Override Timeout (Room level, includes "always" option)
         current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "")
         schema_dict[vol.Optional(
@@ -620,27 +666,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        # Heating Curve (Weather-Compensated Heating)
-        current_use_heating_curve = current_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
-        schema_dict[vol.Optional(
-            CONF_USE_HEATING_CURVE,
-            default=current_use_heating_curve,
-        )] = selector.BooleanSelector()
-
-        # Heating Curve Slope
-        current_heating_curve_slope = current_data.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE)
-        schema_dict[vol.Optional(
-            CONF_HEATING_CURVE_SLOPE,
-            default=current_heating_curve_slope,
-        )] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=MIN_HEATING_CURVE_SLOPE,
-                max=MAX_HEATING_CURVE_SLOPE,
-                step=0.1,
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
         # Moes TRV Mode (Use HVAC Off for Low Temperatures)
         current_use_hvac_off = current_data.get(CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP)
         schema_dict[vol.Optional(
@@ -648,24 +673,69 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             default=current_use_hvac_off,
         )] = selector.BooleanSelector()
 
+        # Multi-Room Heat Coupling (Phase 3.2)
+        current_use_coupling = current_data.get(CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING)
+        schema_dict[vol.Optional(
+            CONF_USE_ROOM_COUPLING,
+            default=current_use_coupling,
+        )] = selector.BooleanSelector()
+
+        # Adjacent Rooms (for coupling)
+        current_adjacent = current_data.get(CONF_ADJACENT_ROOMS, [])
+        # Get list of other rooms for selection
+        other_rooms = self._get_other_room_names()
+        if other_rooms:
+            schema_dict[vol.Optional(
+                CONF_ADJACENT_ROOMS,
+                default=current_adjacent,
+            )] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=other_rooms,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        # Coupling Strength
+        current_coupling_strength = current_data.get(CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH)
+        schema_dict[vol.Optional(
+            CONF_COUPLING_STRENGTH,
+            default=current_coupling_strength,
+        )] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0.1,
+                max=1.0,
+                step=0.1,
+                mode=selector.NumberSelectorMode.SLIDER,
+            )
+        )
+
         return self.async_show_form(
             step_id="room_config",
             data_schema=vol.Schema(schema_dict),
             description_placeholders={
                 "info": (
                     "Room Configuration:\n\n"
-                    "• Early Start Offset: Additional minutes to start early (leave empty to use hub setting)\n"
-                    "• Early Start Max: Maximum early start time in minutes (leave empty to use hub setting)\n"
                     "• Override Timeout: How long manual TRV changes override schedules (leave empty to use hub setting)\n"
                     "• Hysteresis: Temperature deadband to prevent rapid cycling (°C)\n"
-                    "• PID Control: Enable advanced PID controller for smoother temperature regulation (opt-in)\n"
-                    "• PID Kp: Proportional gain (higher = more aggressive response to temperature error)\n"
-                    "• PID Ki: Integral gain (compensates for persistent error over time)\n"
-                    "• PID Kd: Derivative gain (dampens oscillations, predicts future error)\n"
-                    "• Heating Curve: Enable weather-compensated heating to adjust target based on outdoor temperature (opt-in)\n"
-                    "• Heating Curve Slope: How much to reduce indoor target per °C outdoor increase (higher = more aggressive reduction)\n"
-                    "• Use HVAC Off for Low Temp: Enable for Moes TRVs - uses HVAC mode 'off' instead of low temperature for frost protection (opt-in)\n\n"
-                    f"Hub Defaults: Offset={DEFAULT_EARLY_START_OFFSET}min, Max={DEFAULT_EARLY_START_MAX}min, Timeout={DEFAULT_GLOBAL_OVERRIDE_TIMEOUT}, Hysteresis={DEFAULT_HYSTERESIS}°C"
+                    "• PID Control: Enable advanced PID controller for smoother temperature regulation\n"
+                    "• Use HVAC Off for Low Temp: Enable for Moes TRVs - uses HVAC mode 'off' instead of low temperature\n"
+                    "• Room Coupling: Reduce heating when neighbors are actively heating\n"
+                    "• Adjacent Rooms: Select rooms that share walls with this room\n"
+                    "• Coupling Strength: How much to adjust for neighbor heating (0.1 = subtle, 1.0 = strong)\n\n"
+                    f"Hub Defaults: Hysteresis={DEFAULT_HYSTERESIS}°C"
                 )
             },
         )
+
+    def _get_other_room_names(self) -> list[str]:
+        """Get list of other room names for adjacent room selection."""
+        current_room = self.config_entry.data.get(CONF_ROOM_NAME, "")
+        rooms = []
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get(CONF_HUB, False):
+                continue  # Skip hub
+            room_name = entry.data.get(CONF_ROOM_NAME, "")
+            if room_name and room_name != current_room:
+                rooms.append(room_name)
+        return sorted(rooms)
