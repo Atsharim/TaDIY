@@ -63,15 +63,19 @@
           "room_name": "Choose a unique name for this room.",
           "trv_entities": "Select one or more climate entities (TRVs) to control in this room.",
           "main_temp_sensor": "Select the primary temperature sensor for this room (optional).",
+          "humidity_sensor": "Select a humidity sensor for this room (optional).",
           "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
           "outdoor_sensor": "Select an outdoor temperature sensor (optional).",
-          "use_hvac_off_for_low_temp": "Enable for Moes TRVs that don't support low temperatures - uses HVAC 'off' mode instead.",
+          "override_timeout": "How long manual TRV changes override schedules (empty = use hub setting).",
+          "hysteresis": "Temperature deadband to prevent rapid on/off cycling.",
+          "use_pid_control": "Enable PID controller for smoother temperature regulation.",
+          "use_hvac_off_for_low_temp": "Enable for Moes TRVs that don't support low temperatures.",
           "use_room_coupling": "Enable heat transfer awareness between adjacent rooms.",
           "adjacent_rooms": "Select rooms that share walls with this room.",
           "coupling_strength": "How much to adjust for neighbor heating (0.1=subtle, 1.0=strong).",
-          "pid_kp": "Proportional gain: Reacts to current error. Higher = faster response but may overshoot.",
-          "pid_ki": "Integral gain: Eliminates steady-state error. Higher = faster correction but may oscillate.",
-          "pid_kd": "Derivative gain: Dampens oscillations. Higher = smoother but slower response."
+          "pid_kp": "Proportional: Reacts to current error. Higher = faster but may overshoot.",
+          "pid_ki": "Integral: Eliminates steady error. Higher = faster but may oscillate.",
+          "pid_kd": "Derivative: Dampens oscillations. Higher = smoother but slower."
         }
       },
       "add_mode": {
