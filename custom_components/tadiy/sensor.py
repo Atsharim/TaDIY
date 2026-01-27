@@ -532,11 +532,16 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> str:
-        """Return the state of the sensor."""
+        """Return the state of the sensor showing current mode and target."""
+        hub_mode = self.coordinator.get_hub_mode()
+        scheduled_target = self.coordinator.get_scheduled_target()
         override_count = len(self.coordinator.override_manager._overrides)
-        if override_count == 0:
-            return "No active overrides"
-        return f"{override_count} active override(s)"
+
+        # Format: "mode: Xoverrides, target°C" or "mode: target°C"
+        target_str = f"{scheduled_target:.1f}°C" if scheduled_target else "None"
+        if override_count > 0:
+            return f"{hub_mode}: {override_count} override(s), {target_str}"
+        return f"{hub_mode}: {target_str}"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
