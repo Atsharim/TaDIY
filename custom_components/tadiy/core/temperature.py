@@ -1,4 +1,5 @@
 """Temperature sensor fusion for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -47,11 +48,11 @@ def calculate_fused_temperature(
 ) -> float | None:
     """
     Calculate fused temperature from multiple sensors using weighted average.
-    
+
     Args:
         readings: List of sensor readings
         outlier_detection: Enable outlier detection and removal
-        
+
     Returns:
         Fused temperature or None if no valid readings
     """
@@ -60,8 +61,7 @@ def calculate_fused_temperature(
         return None
 
     valid_readings = [
-        r for r in readings
-        if MIN_VALID_TEMP <= r.temperature <= MAX_VALID_TEMP
+        r for r in readings if MIN_VALID_TEMP <= r.temperature <= MAX_VALID_TEMP
     ]
 
     if not valid_readings:
@@ -97,10 +97,10 @@ def calculate_fused_temperature(
 def _remove_outliers(readings: list[SensorReading]) -> list[SensorReading]:
     """
     Remove outlier readings using median absolute deviation.
-    
+
     Args:
         readings: List of sensor readings
-        
+
     Returns:
         Filtered list without outliers
     """
@@ -110,10 +110,7 @@ def _remove_outliers(readings: list[SensorReading]) -> list[SensorReading]:
     temps = [r.temperature for r in readings]
     median = sorted(temps)[len(temps) // 2]
 
-    filtered = [
-        r for r in readings
-        if abs(r.temperature - median) <= OUTLIER_THRESHOLD
-    ]
+    filtered = [r for r in readings if abs(r.temperature - median) <= OUTLIER_THRESHOLD]
 
     if len(filtered) < len(readings):
         removed = len(readings) - len(filtered)
@@ -133,11 +130,11 @@ def calculate_weighted_average_history(
 ) -> float | None:
     """
     Calculate exponentially weighted moving average.
-    
+
     Args:
         readings: List of historical sensor readings (newest first)
         alpha: Smoothing factor (0-1), higher = more weight on recent values
-        
+
     Returns:
         Smoothed temperature or None
     """

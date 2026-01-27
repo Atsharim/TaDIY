@@ -1,4 +1,5 @@
 """Sensor platform for TaDIY integration."""
+
 from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass
 class TaDIYSensorEntityDescription(SensorEntityDescription):
     """Describes TaDIY sensor entity."""
+
     value_fn: Callable[[Any], Any] | None = None
     available_fn: Callable[[Any], bool] | None = None
     attr_fn: Callable[[Any], dict[str, Any]] | None = None
@@ -41,7 +43,8 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon=ICON_TEMPERATURE,
         value_fn=lambda data: data.current_temperature if data else None,
-        available_fn=lambda data: data is not None and data.current_temperature is not None,
+        available_fn=lambda data: data is not None
+        and data.current_temperature is not None,
     ),
     TaDIYSensorEntityDescription(
         key="target_temperature",
@@ -51,7 +54,8 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon=ICON_TEMPERATURE,
         value_fn=lambda data: data.target_temperature if data else None,
-        available_fn=lambda data: data is not None and data.target_temperature is not None,
+        available_fn=lambda data: data is not None
+        and data.target_temperature is not None,
     ),
     TaDIYSensorEntityDescription(
         key="humidity",
@@ -59,7 +63,9 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         native_unit_of_measurement="%",
         device_class=SensorDeviceClass.HUMIDITY,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: round(data.humidity, 1) if data and data.humidity is not None else None,
+        value_fn=lambda data: round(data.humidity, 1)
+        if data and data.humidity is not None
+        else None,
         available_fn=lambda data: data is not None and data.humidity is not None,
     ),
     TaDIYSensorEntityDescription(
@@ -68,12 +74,20 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         native_unit_of_measurement="°C/h",
         icon=ICON_LEARNING,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda data: round(data.heating_rate, 2) if data and data.heating_rate else None,
+        value_fn=lambda data: round(data.heating_rate, 2)
+        if data and data.heating_rate
+        else None,
         available_fn=lambda data: data is not None and data.heating_rate is not None,
         attr_fn=lambda data: {
-            "sample_count": data.heating_rate_sample_count if hasattr(data, "heating_rate_sample_count") else 0,
-            "confidence": round(data.heating_rate_confidence, 2) if hasattr(data, "heating_rate_confidence") else 0.0,
-        } if data else {},
+            "sample_count": data.heating_rate_sample_count
+            if hasattr(data, "heating_rate_sample_count")
+            else 0,
+            "confidence": round(data.heating_rate_confidence, 2)
+            if hasattr(data, "heating_rate_confidence")
+            else 0.0,
+        }
+        if data
+        else {},
     ),
     TaDIYSensorEntityDescription(
         key="main_sensor_temperature",
@@ -83,8 +97,11 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon=ICON_TEMPERATURE,
-        value_fn=lambda data: round(data.main_sensor_temperature, 2) if data and data.main_sensor_temperature else None,
-        available_fn=lambda data: data is not None and data.main_sensor_temperature is not None,
+        value_fn=lambda data: round(data.main_sensor_temperature, 2)
+        if data and data.main_sensor_temperature
+        else None,
+        available_fn=lambda data: data is not None
+        and data.main_sensor_temperature is not None,
     ),
     TaDIYSensorEntityDescription(
         key="trv_temperatures",
@@ -94,14 +111,28 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon=ICON_TEMPERATURE,
-        value_fn=lambda data: round(sum(data.trv_temperatures) / len(data.trv_temperatures), 2) if data and data.trv_temperatures else None,
+        value_fn=lambda data: round(
+            sum(data.trv_temperatures) / len(data.trv_temperatures), 2
+        )
+        if data and data.trv_temperatures
+        else None,
         available_fn=lambda data: data is not None and data.trv_temperatures,
         attr_fn=lambda data: {
-            "trv_count": len(data.trv_temperatures) if data and data.trv_temperatures else 0,
-            "trv_values": [round(t, 2) for t in data.trv_temperatures] if data and data.trv_temperatures else [],
-            "min_trv_temp": round(min(data.trv_temperatures), 2) if data and data.trv_temperatures else None,
-            "max_trv_temp": round(max(data.trv_temperatures), 2) if data and data.trv_temperatures else None,
-        } if data else {},
+            "trv_count": len(data.trv_temperatures)
+            if data and data.trv_temperatures
+            else 0,
+            "trv_values": [round(t, 2) for t in data.trv_temperatures]
+            if data and data.trv_temperatures
+            else [],
+            "min_trv_temp": round(min(data.trv_temperatures), 2)
+            if data and data.trv_temperatures
+            else None,
+            "max_trv_temp": round(max(data.trv_temperatures), 2)
+            if data and data.trv_temperatures
+            else None,
+        }
+        if data
+        else {},
     ),
     TaDIYSensorEntityDescription(
         key="override_status",
@@ -111,8 +142,12 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         value_fn=lambda data: "Active" if data and data.override_active else "None",
         available_fn=lambda data: data is not None,
         attr_fn=lambda data: {
-            "override_count": data.override_count if hasattr(data, "override_count") else 0,
-        } if data else {},
+            "override_count": data.override_count
+            if hasattr(data, "override_count")
+            else 0,
+        }
+        if data
+        else {},
     ),
 )
 
@@ -128,7 +163,9 @@ HUB_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         name="Location Status",
         icon="mdi:home-account",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data: data.get("location_status", "unknown") if data else "unknown",
+        value_fn=lambda data: data.get("location_status", "unknown")
+        if data
+        else "unknown",
         attr_fn=lambda data: data.get("location_attributes", {}) if data else {},
     ),
     TaDIYSensorEntityDescription(
@@ -136,8 +173,11 @@ HUB_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         name="Weather Prediction",
         icon="mdi:weather-partly-cloudy",
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda data: data.get("weather_prediction", {}).get("trend", "unknown") if data else "unknown",
-        available_fn=lambda data: data is not None and data.get("weather_prediction", {}).get("available", False),
+        value_fn=lambda data: data.get("weather_prediction", {}).get("trend", "unknown")
+        if data
+        else "unknown",
+        available_fn=lambda data: data is not None
+        and data.get("weather_prediction", {}).get("available", False),
         attr_fn=lambda data: data.get("weather_prediction", {}) if data else {},
     ),
 )
@@ -183,7 +223,9 @@ class TaDIYRoomSensor(CoordinatorEntity, SensorEntity):
     entity_description: TaDIYSensorEntityDescription
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, description: TaDIYSensorEntityDescription, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator, description: TaDIYSensorEntityDescription, entry: ConfigEntry
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
@@ -225,7 +267,9 @@ class TaDIYHubSensor(CoordinatorEntity, SensorEntity):
     entity_description: TaDIYSensorEntityDescription
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, description: TaDIYSensorEntityDescription, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator, description: TaDIYSensorEntityDescription, entry: ConfigEntry
+    ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
         self.entity_description = description
@@ -275,8 +319,12 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
         room_data = self.coordinator.current_room_data
 
         attributes = {
-            "main_sensor_temp": round(room_data.main_sensor_temperature, 2) if room_data else None,
-            "fused_temp": round(room_data.current_temperature, 2) if room_data else None,
+            "main_sensor_temp": round(room_data.main_sensor_temperature, 2)
+            if room_data
+            else None,
+            "fused_temp": round(room_data.current_temperature, 2)
+            if room_data
+            else None,
             "trv_entity_ids": list(self.coordinator.room_config.trv_entity_ids),
         }
 
@@ -300,12 +348,18 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
                 attributes[f"{trv_key}_mode"] = cal_info["mode"]
                 attributes[f"{trv_key}_multiplier"] = round(cal_info["multiplier"], 3)
                 attributes[f"{trv_key}_offset"] = round(cal_info["offset"], 1)
-                attributes[f"{trv_key}_current_temp"] = round(trv_temp, 2) if trv_temp else None
+                attributes[f"{trv_key}_current_temp"] = (
+                    round(trv_temp, 2) if trv_temp else None
+                )
                 attributes[f"{trv_key}_last_room_temp"] = (
-                    round(cal_info["last_room_temp"], 2) if cal_info["last_room_temp"] else None
+                    round(cal_info["last_room_temp"], 2)
+                    if cal_info["last_room_temp"]
+                    else None
                 )
                 attributes[f"{trv_key}_last_trv_temp"] = (
-                    round(cal_info["last_trv_temp"], 2) if cal_info["last_trv_temp"] else None
+                    round(cal_info["last_trv_temp"], 2)
+                    if cal_info["last_trv_temp"]
+                    else None
                 )
                 attributes[f"{trv_key}_last_calibrated"] = cal_info["last_calibrated"]
             else:
@@ -313,7 +367,9 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
                 attributes[f"{trv_key}_mode"] = "auto"
                 attributes[f"{trv_key}_multiplier"] = 1.0
                 attributes[f"{trv_key}_offset"] = 0.0
-                attributes[f"{trv_key}_current_temp"] = round(trv_temp, 2) if trv_temp else None
+                attributes[f"{trv_key}_current_temp"] = (
+                    round(trv_temp, 2) if trv_temp else None
+                )
 
         return attributes
 
@@ -359,7 +415,9 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
 
         # Check main temperature sensor
         if self.coordinator.room_config.main_temp_sensor_id:
-            state = self.hass.states.get(self.coordinator.room_config.main_temp_sensor_id)
+            state = self.hass.states.get(
+                self.coordinator.room_config.main_temp_sensor_id
+            )
             if state:
                 battery = state.attributes.get("battery")
                 if battery is not None:
@@ -373,7 +431,9 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
 
         # Check humidity sensor
         if self.coordinator.room_config.humidity_sensor_id:
-            state = self.hass.states.get(self.coordinator.room_config.humidity_sensor_id)
+            state = self.hass.states.get(
+                self.coordinator.room_config.humidity_sensor_id
+            )
             if state:
                 battery = state.attributes.get("battery")
                 if battery is not None:
@@ -414,12 +474,16 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
 
         # Check main temperature sensor
         if self.coordinator.room_config.main_temp_sensor_id:
-            state = self.hass.states.get(self.coordinator.room_config.main_temp_sensor_id)
+            state = self.hass.states.get(
+                self.coordinator.room_config.main_temp_sensor_id
+            )
             if state:
                 battery = state.attributes.get("battery")
                 battery_low = state.attributes.get("battery_low")
 
-                sensor_key = self.coordinator.room_config.main_temp_sensor_id.replace("sensor.", "").replace(".", "_")
+                sensor_key = self.coordinator.room_config.main_temp_sensor_id.replace(
+                    "sensor.", ""
+                ).replace(".", "_")
                 if battery is not None:
                     try:
                         attributes[f"{sensor_key}_battery"] = float(battery)
@@ -430,12 +494,16 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
 
         # Check humidity sensor
         if self.coordinator.room_config.humidity_sensor_id:
-            state = self.hass.states.get(self.coordinator.room_config.humidity_sensor_id)
+            state = self.hass.states.get(
+                self.coordinator.room_config.humidity_sensor_id
+            )
             if state:
                 battery = state.attributes.get("battery")
                 battery_low = state.attributes.get("battery_low")
 
-                sensor_key = self.coordinator.room_config.humidity_sensor_id.replace("sensor.", "").replace(".", "_")
+                sensor_key = self.coordinator.room_config.humidity_sensor_id.replace(
+                    "sensor.", ""
+                ).replace(".", "_")
                 if battery is not None:
                     try:
                         attributes[f"{sensor_key}_battery"] = float(battery)

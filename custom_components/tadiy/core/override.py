@@ -1,4 +1,5 @@
 """Override tracking for TaDIY integration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,6 +30,11 @@ class OverrideRecord:
     override_temp: float  # Manual override temperature
     timeout_mode: str  # Timeout mode being used
     expires_at: datetime | None  # When override expires (None = never)
+
+    @property
+    def temperature(self) -> float:
+        """Alias for override_temp for compatibility."""
+        return self.override_temp
 
     def is_expired(self, current_time: datetime | None = None) -> bool:
         """Check if override has expired."""
@@ -86,7 +92,7 @@ class OverrideManager:
     def get_active_override(self) -> OverrideRecord | None:
         """
         Get any active override for this room.
-        
+
         Returns:
             First found active override record, or None
         """
@@ -232,9 +238,7 @@ class OverrideManager:
                 return next_block_time
             else:
                 # Fallback: 2 hours if next block time not available
-                _LOGGER.warning(
-                    "Next block time not available, using 2h fallback"
-                )
+                _LOGGER.warning("Next block time not available, using 2h fallback")
                 return start_time + timedelta(hours=2)
 
         if timeout_mode == OVERRIDE_TIMEOUT_NEXT_DAY:
@@ -245,9 +249,7 @@ class OverrideManager:
             return next_day
 
         # Unknown mode, use default 2 hours
-        _LOGGER.warning(
-            "Unknown timeout mode %s, using 2h default", timeout_mode
-        )
+        _LOGGER.warning("Unknown timeout mode %s, using 2h default", timeout_mode)
         return start_time + timedelta(hours=2)
 
     def to_dict(self) -> dict[str, Any]:
@@ -266,7 +268,5 @@ class OverrideManager:
                 override = OverrideRecord.from_dict(override_data)
                 manager._overrides[entity_id] = override
             except (KeyError, ValueError) as err:
-                _LOGGER.warning(
-                    "Failed to load override for %s: %s", entity_id, err
-                )
+                _LOGGER.warning("Failed to load override for %s: %s", entity_id, err)
         return manager

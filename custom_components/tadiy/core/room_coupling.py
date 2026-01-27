@@ -4,6 +4,7 @@ Phase 3.2: Models heat transfer awareness between adjacent rooms.
 When a neighboring room is actively heating, reduces the target temp
 slightly to account for heat transfer through shared walls.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -53,7 +54,7 @@ class RoomCouplingState:
 class RoomCouplingManager:
     """
     Manages heat coupling between adjacent rooms.
-    
+
     When adjacent rooms are actively heating, reduces the target temperature
     to account for heat transfer through shared walls, saving energy.
     """
@@ -70,7 +71,7 @@ class RoomCouplingManager:
     ) -> None:
         """
         Register a room for coupling calculations.
-        
+
         Args:
             room_name: Name of the room
             adjacent_rooms: List of adjacent room names
@@ -97,10 +98,10 @@ class RoomCouplingManager:
     ) -> None:
         """
         Update the heating status of a room.
-        
+
         Called by room coordinators to report their current state.
         This information is used to determine if heat is flowing from neighbors.
-        
+
         Args:
             room_name: Name of the room
             is_heating: Whether the room's heating system is active
@@ -124,10 +125,10 @@ class RoomCouplingManager:
     def get_coupling_adjustment(self, room_name: str) -> float:
         """
         Get the temperature adjustment due to neighboring room heating.
-        
+
         Args:
             room_name: Name of the room
-            
+
         Returns:
             Temperature adjustment (negative value = reduce target)
         """

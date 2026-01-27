@@ -1,4 +1,5 @@
 """Thermal mass learning and cooling rate analysis for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -132,10 +133,7 @@ class ThermalMassModel:
         now = dt_util.utcnow()
 
         # Check if we have an ongoing measurement
-        if (
-            self._measurement_start_time is None
-            or self._measurement_start_temp is None
-        ):
+        if self._measurement_start_time is None or self._measurement_start_temp is None:
             return False
 
         # Calculate duration
@@ -182,9 +180,8 @@ class ThermalMassModel:
         else:
             # Smooth update with dampening
             self.cooling_rate = (
-                (1 - COOLING_DAMPENING) * self.cooling_rate
-                + COOLING_DAMPENING * raw_cooling_rate
-            )
+                1 - COOLING_DAMPENING
+            ) * self.cooling_rate + COOLING_DAMPENING * raw_cooling_rate
 
         # Clamp to limits
         self.cooling_rate = max(

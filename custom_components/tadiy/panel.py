@@ -1,4 +1,5 @@
 """Panel for TaDIY integration."""
+
 from __future__ import annotations
 
 import logging
@@ -7,7 +8,7 @@ from homeassistant.components import panel_custom
 from homeassistant.components.frontend import async_remove_panel
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,21 +22,21 @@ async def async_register_panel(hass: HomeAssistant) -> None:
             _LOGGER.debug("Removed existing TaDIY panel before re-registering")
 
         # Register the panel using the panel_custom component
-        # Note: No version parameter needed - cache busting handled by browser
+        # Add version for cache busting
         await panel_custom.async_register_panel(
             hass=hass,
             frontend_url_path="tadiy",
             webcomponent_name="tadiy-panel",
             sidebar_title="TaDIY",
             sidebar_icon="mdi:home-thermometer",
-            module_url="/tadiy/tadiy-panel.js",
+            module_url=f"/tadiy/tadiy-panel.js?v={VERSION}",
             embed_iframe=False,
             require_admin=False,
             config={
                 "domain": DOMAIN,
             },
         )
-        _LOGGER.info("TaDIY panel registered successfully")
+        _LOGGER.info("TaDIY panel registered successfully (v%s)", VERSION)
     except Exception as err:
         _LOGGER.error("Failed to register TaDIY panel: %s", err)
 

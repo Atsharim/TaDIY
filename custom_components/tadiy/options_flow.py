@@ -1,4 +1,5 @@
 """Options flow for TaDIY integration."""
+
 from __future__ import annotations
 
 import logging
@@ -115,7 +116,8 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         """Hub initial configuration menu."""
         # Count rooms for display
         room_count = sum(
-            1 for entry in self.hass.config_entries.async_entries(DOMAIN)
+            1
+            for entry in self.hass.config_entries.async_entries(DOMAIN)
             if not entry.data.get(CONF_HUB, False)
         )
 
@@ -273,7 +275,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     new_data[key] = value
 
             # Location mode enabled
-            new_data[CONF_LOCATION_MODE_ENABLED] = user_input.get(CONF_LOCATION_MODE_ENABLED, False)
+            new_data[CONF_LOCATION_MODE_ENABLED] = user_input.get(
+                CONF_LOCATION_MODE_ENABLED, False
+            )
 
             # Override timeout (Hub setting)
             override_timeout = user_input.get(CONF_GLOBAL_OVERRIDE_TIMEOUT)
@@ -291,13 +295,17 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 new_data[CONF_EARLY_START_MAX] = early_start_max
 
             # Weather Compensation / Heating Curve settings (Hub-level)
-            new_data[CONF_USE_HEATING_CURVE] = user_input.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
+            new_data[CONF_USE_HEATING_CURVE] = user_input.get(
+                CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
+            )
             heating_curve_slope = user_input.get(CONF_HEATING_CURVE_SLOPE)
             if heating_curve_slope is not None:
                 new_data[CONF_HEATING_CURVE_SLOPE] = heating_curve_slope
 
             # Weather Prediction (Hub-level)
-            new_data[CONF_USE_WEATHER_PREDICTION] = user_input.get(CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION)
+            new_data[CONF_USE_WEATHER_PREDICTION] = user_input.get(
+                CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
+            )
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
@@ -314,65 +322,102 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         current_weather = current_data.get(CONF_WEATHER_ENTITY, "")
         current_persons = current_data.get(CONF_PERSON_ENTITIES, [])
         current_location_mode = current_data.get(CONF_LOCATION_MODE_ENABLED, False)
-        current_override_timeout = current_data.get(CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT)
-        current_early_start_offset = current_data.get(CONF_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET)
-        current_early_start_max = current_data.get(CONF_EARLY_START_MAX, DEFAULT_EARLY_START_MAX)
-        current_use_heating_curve = current_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
-        current_heating_curve_slope = current_data.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE)
-        current_use_weather_prediction = current_data.get(CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION)
+        current_override_timeout = current_data.get(
+            CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
+        )
+        current_early_start_offset = current_data.get(
+            CONF_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET
+        )
+        current_early_start_max = current_data.get(
+            CONF_EARLY_START_MAX, DEFAULT_EARLY_START_MAX
+        )
+        current_use_heating_curve = current_data.get(
+            CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
+        )
+        current_heating_curve_slope = current_data.get(
+            CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
+        )
+        current_use_weather_prediction = current_data.get(
+            CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
+        )
 
         # Build schema step-by-step
-        schema_dict = {
-            vol.Required(CONF_SHOW_PANEL, default=current_show_panel): bool
-        }
+        schema_dict = {vol.Required(CONF_SHOW_PANEL, default=current_show_panel): bool}
 
-        schema_dict[vol.Optional(
-            CONF_WEATHER_ENTITY,
-            default=current_weather,
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Optional(
+                CONF_WEATHER_ENTITY,
+                default=current_weather,
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="weather",
             )
         )
 
-        schema_dict[vol.Optional(
-            CONF_PERSON_ENTITIES,
-            default=current_persons,
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Optional(
+                CONF_PERSON_ENTITIES,
+                default=current_persons,
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="person",
                 multiple=True,
             )
         )
 
-        schema_dict[vol.Required(
-            CONF_LOCATION_MODE_ENABLED,
-            default=current_location_mode,
-        )] = bool
+        schema_dict[
+            vol.Required(
+                CONF_LOCATION_MODE_ENABLED,
+                default=current_location_mode,
+            )
+        ] = bool
 
-        schema_dict[vol.Optional(
-            CONF_GLOBAL_OVERRIDE_TIMEOUT,
-            default=current_override_timeout,
-        )] = selector.SelectSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_GLOBAL_OVERRIDE_TIMEOUT,
+                default=current_override_timeout,
+            )
+        ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_NEVER, label="Never (manual changes stay forever)"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_1H, label="1 hour"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_2H, label="2 hours"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_3H, label="3 hours"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_4H, label="4 hours"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_NEXT_BLOCK, label="Until next schedule block (Recommended)"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_NEXT_DAY, label="Until next day (midnight)"),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_NEVER,
+                        label="Never (manual changes stay forever)",
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_1H, label="1 hour"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_2H, label="2 hours"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_3H, label="3 hours"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_4H, label="4 hours"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_NEXT_BLOCK,
+                        label="Until next schedule block (Recommended)",
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_NEXT_DAY,
+                        label="Until next day (midnight)",
+                    ),
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
         )
 
         # Early Start settings
-        schema_dict[vol.Optional(
-            CONF_EARLY_START_OFFSET,
-            default=current_early_start_offset,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_EARLY_START_OFFSET,
+                default=current_early_start_offset,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0,
                 max=60,
@@ -381,10 +426,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        schema_dict[vol.Optional(
-            CONF_EARLY_START_MAX,
-            default=current_early_start_max,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_EARLY_START_MAX,
+                default=current_early_start_max,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0,
                 max=360,
@@ -394,15 +441,19 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         # Weather Compensation / Heating Curve
-        schema_dict[vol.Optional(
-            CONF_USE_HEATING_CURVE,
-            default=current_use_heating_curve,
-        )] = selector.BooleanSelector()
+        schema_dict[
+            vol.Optional(
+                CONF_USE_HEATING_CURVE,
+                default=current_use_heating_curve,
+            )
+        ] = selector.BooleanSelector()
 
-        schema_dict[vol.Optional(
-            CONF_HEATING_CURVE_SLOPE,
-            default=current_heating_curve_slope,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_HEATING_CURVE_SLOPE,
+                default=current_heating_curve_slope,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=MIN_HEATING_CURVE_SLOPE,
                 max=MAX_HEATING_CURVE_SLOPE,
@@ -412,10 +463,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         # Weather Prediction
-        schema_dict[vol.Optional(
-            CONF_USE_WEATHER_PREDICTION,
-            default=current_use_weather_prediction,
-        )] = selector.BooleanSelector()
+        schema_dict[
+            vol.Optional(
+                CONF_USE_WEATHER_PREDICTION,
+                default=current_use_weather_prediction,
+            )
+        ] = selector.BooleanSelector()
 
         return self.async_show_form(
             step_id="panel_settings",
@@ -457,19 +510,35 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
 
             # Save feature settings if hysteresis, PID, or heating curve changed
-            if CONF_HYSTERESIS in user_input or CONF_USE_PID_CONTROL in user_input or CONF_USE_HEATING_CURVE in user_input:
-                coordinator = self.hass.data[DOMAIN].get(self.config_entry.entry_id, {}).get("coordinator")
+            if (
+                CONF_HYSTERESIS in user_input
+                or CONF_USE_PID_CONTROL in user_input
+                or CONF_USE_HEATING_CURVE in user_input
+            ):
+                coordinator = (
+                    self.hass.data[DOMAIN]
+                    .get(self.config_entry.entry_id, {})
+                    .get("coordinator")
+                )
                 if coordinator and hasattr(coordinator, "async_save_feature_settings"):
                     # Update hysteresis in controller
                     if CONF_HYSTERESIS in user_input:
-                        coordinator.heating_controller.set_hysteresis(user_input[CONF_HYSTERESIS])
+                        coordinator.heating_controller.set_hysteresis(
+                            user_input[CONF_HYSTERESIS]
+                        )
 
                     # Update PID settings if changed
                     if CONF_USE_PID_CONTROL in user_input:
-                        from .core.control import PIDConfig, PIDHeatingController, HeatingController
+                        from .core.control import (
+                            PIDConfig,
+                            PIDHeatingController,
+                            HeatingController,
+                        )
 
                         use_pid = user_input[CONF_USE_PID_CONTROL]
-                        current_is_pid = isinstance(coordinator.heating_controller, PIDHeatingController)
+                        current_is_pid = isinstance(
+                            coordinator.heating_controller, PIDHeatingController
+                        )
 
                         if use_pid and not current_is_pid:
                             # Switch to PID controller
@@ -478,17 +547,29 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                                 ki=user_input.get(CONF_PID_KI, DEFAULT_PID_KI),
                                 kd=user_input.get(CONF_PID_KD, DEFAULT_PID_KD),
                             )
-                            coordinator.heating_controller = PIDHeatingController(pid_config)
-                            coordinator.heating_controller.set_hysteresis(user_input.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS))
+                            coordinator.heating_controller = PIDHeatingController(
+                                pid_config
+                            )
+                            coordinator.heating_controller.set_hysteresis(
+                                user_input.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
+                            )
                         elif not use_pid and current_is_pid:
                             # Switch to basic controller
                             hysteresis = coordinator.heating_controller.hysteresis
-                            coordinator.heating_controller = HeatingController(hysteresis=hysteresis)
+                            coordinator.heating_controller = HeatingController(
+                                hysteresis=hysteresis
+                            )
                         elif use_pid and current_is_pid:
                             # Update PID parameters
-                            coordinator.heating_controller.config.kp = user_input.get(CONF_PID_KP, DEFAULT_PID_KP)
-                            coordinator.heating_controller.config.ki = user_input.get(CONF_PID_KI, DEFAULT_PID_KI)
-                            coordinator.heating_controller.config.kd = user_input.get(CONF_PID_KD, DEFAULT_PID_KD)
+                            coordinator.heating_controller.config.kp = user_input.get(
+                                CONF_PID_KP, DEFAULT_PID_KP
+                            )
+                            coordinator.heating_controller.config.ki = user_input.get(
+                                CONF_PID_KI, DEFAULT_PID_KI
+                            )
+                            coordinator.heating_controller.config.kd = user_input.get(
+                                CONF_PID_KD, DEFAULT_PID_KD
+                            )
 
                     # Update heating curve settings if changed
                     if CONF_USE_HEATING_CURVE in user_input:
@@ -499,7 +580,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                         if use_curve and coordinator.heating_curve is None:
                             # Enable heating curve
                             curve_config = HeatingCurveConfig(
-                                curve_slope=user_input.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE),
+                                curve_slope=user_input.get(
+                                    CONF_HEATING_CURVE_SLOPE,
+                                    DEFAULT_HEATING_CURVE_SLOPE,
+                                ),
                             )
                             coordinator.heating_curve = HeatingCurve(curve_config)
                         elif not use_curve and coordinator.heating_curve is not None:
@@ -507,7 +591,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                             coordinator.heating_curve = None
                         elif use_curve and coordinator.heating_curve is not None:
                             # Update heating curve slope
-                            coordinator.heating_curve.config.curve_slope = user_input.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE)
+                            coordinator.heating_curve.config.curve_slope = (
+                                user_input.get(
+                                    CONF_HEATING_CURVE_SLOPE,
+                                    DEFAULT_HEATING_CURVE_SLOPE,
+                                )
+                            )
 
                     # Save to storage
                     await coordinator.async_save_feature_settings()
@@ -527,10 +616,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         }
 
         # Add TRV entities (required field)
-        schema_dict[vol.Required(
-            CONF_TRV_ENTITIES,
-            default=current_data.get(CONF_TRV_ENTITIES, []),
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Required(
+                CONF_TRV_ENTITIES,
+                default=current_data.get(CONF_TRV_ENTITIES, []),
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="climate",
                 multiple=True,
@@ -539,10 +630,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Add optional fields with conditional defaults
         main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR)
-        schema_dict[vol.Optional(
-            CONF_MAIN_TEMP_SENSOR,
-            description={"suggested_value": main_temp} if main_temp else None,
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Optional(
+                CONF_MAIN_TEMP_SENSOR,
+                description={"suggested_value": main_temp} if main_temp else None,
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
@@ -550,20 +643,26 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         humidity_sensor = current_data.get(CONF_HUMIDITY_SENSOR)
-        schema_dict[vol.Optional(
-            CONF_HUMIDITY_SENSOR,
-            description={"suggested_value": humidity_sensor} if humidity_sensor else None,
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Optional(
+                CONF_HUMIDITY_SENSOR,
+                description={"suggested_value": humidity_sensor}
+                if humidity_sensor
+                else None,
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="humidity",
             )
         )
 
-        schema_dict[vol.Optional(
-            CONF_WINDOW_SENSORS,
-            default=current_data.get(CONF_WINDOW_SENSORS, []),
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Optional(
+                CONF_WINDOW_SENSORS,
+                default=current_data.get(CONF_WINDOW_SENSORS, []),
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="binary_sensor",
                 device_class=["door", "window", "opening"],
@@ -572,10 +671,14 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
-        schema_dict[vol.Optional(
-            CONF_OUTDOOR_SENSOR,
-            description={"suggested_value": outdoor_sensor} if outdoor_sensor else None,
-        )] = selector.EntitySelector(
+        schema_dict[
+            vol.Optional(
+                CONF_OUTDOOR_SENSOR,
+                description={"suggested_value": outdoor_sensor}
+                if outdoor_sensor
+                else None,
+            )
+        ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
                 domain="sensor",
                 device_class="temperature",
@@ -584,21 +687,43 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Override Timeout (Room level, includes "always" option)
         current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "")
-        schema_dict[vol.Optional(
-            CONF_OVERRIDE_TIMEOUT,
-            default=current_override_timeout,
-        )] = selector.SelectSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_OVERRIDE_TIMEOUT,
+                default=current_override_timeout,
+            )
+        ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
                     selector.SelectOptionDict(value="", label="Use hub setting"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_NEVER, label="Never (manual changes stay forever)"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_1H, label="1 hour"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_2H, label="2 hours"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_3H, label="3 hours"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_4H, label="4 hours"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_NEXT_BLOCK, label="Until next schedule block"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_NEXT_DAY, label="Until next day (midnight)"),
-                    selector.SelectOptionDict(value=OVERRIDE_TIMEOUT_ALWAYS, label="Always use schedule (no manual override)"),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_NEVER,
+                        label="Never (manual changes stay forever)",
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_1H, label="1 hour"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_2H, label="2 hours"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_3H, label="3 hours"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_4H, label="4 hours"
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_NEXT_BLOCK,
+                        label="Until next schedule block",
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_NEXT_DAY,
+                        label="Until next day (midnight)",
+                    ),
+                    selector.SelectOptionDict(
+                        value=OVERRIDE_TIMEOUT_ALWAYS,
+                        label="Always use schedule (no manual override)",
+                    ),
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
             )
@@ -606,10 +731,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Hysteresis
         current_hysteresis = current_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
-        schema_dict[vol.Optional(
-            CONF_HYSTERESIS,
-            default=current_hysteresis,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_HYSTERESIS,
+                default=current_hysteresis,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=MIN_HYSTERESIS,
                 max=MAX_HYSTERESIS,
@@ -620,18 +747,24 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         # PID Control
-        current_use_pid = current_data.get(CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL)
-        schema_dict[vol.Optional(
-            CONF_USE_PID_CONTROL,
-            default=current_use_pid,
-        )] = selector.BooleanSelector()
+        current_use_pid = current_data.get(
+            CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL
+        )
+        schema_dict[
+            vol.Optional(
+                CONF_USE_PID_CONTROL,
+                default=current_use_pid,
+            )
+        ] = selector.BooleanSelector()
 
         # PID Parameters (only shown if PID is enabled, but always available in schema)
         current_pid_kp = current_data.get(CONF_PID_KP, DEFAULT_PID_KP)
-        schema_dict[vol.Optional(
-            CONF_PID_KP,
-            default=current_pid_kp,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_PID_KP,
+                default=current_pid_kp,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.1,
                 max=5.0,
@@ -641,10 +774,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         current_pid_ki = current_data.get(CONF_PID_KI, DEFAULT_PID_KI)
-        schema_dict[vol.Optional(
-            CONF_PID_KI,
-            default=current_pid_ki,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_PID_KI,
+                default=current_pid_ki,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.001,
                 max=0.1,
@@ -654,10 +789,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         current_pid_kd = current_data.get(CONF_PID_KD, DEFAULT_PID_KD)
-        schema_dict[vol.Optional(
-            CONF_PID_KD,
-            default=current_pid_kd,
-        )] = selector.NumberSelector(
+        schema_dict[
+            vol.Optional(
+                CONF_PID_KD,
+                default=current_pid_kd,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.0,
                 max=1.0,
@@ -667,28 +804,38 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         # Moes TRV Mode (Use HVAC Off for Low Temperatures)
-        current_use_hvac_off = current_data.get(CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP)
-        schema_dict[vol.Optional(
-            CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
-            default=current_use_hvac_off,
-        )] = selector.BooleanSelector()
+        current_use_hvac_off = current_data.get(
+            CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP
+        )
+        schema_dict[
+            vol.Optional(
+                CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+                default=current_use_hvac_off,
+            )
+        ] = selector.BooleanSelector()
 
         # Multi-Room Heat Coupling (Phase 3.2)
-        current_use_coupling = current_data.get(CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING)
-        schema_dict[vol.Optional(
-            CONF_USE_ROOM_COUPLING,
-            default=current_use_coupling,
-        )] = selector.BooleanSelector()
+        current_use_coupling = current_data.get(
+            CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING
+        )
+        schema_dict[
+            vol.Optional(
+                CONF_USE_ROOM_COUPLING,
+                default=current_use_coupling,
+            )
+        ] = selector.BooleanSelector()
 
         # Adjacent Rooms (for coupling)
         current_adjacent = current_data.get(CONF_ADJACENT_ROOMS, [])
         # Get list of other rooms for selection
         other_rooms = self._get_other_room_names()
         if other_rooms:
-            schema_dict[vol.Optional(
-                CONF_ADJACENT_ROOMS,
-                default=current_adjacent,
-            )] = selector.SelectSelector(
+            schema_dict[
+                vol.Optional(
+                    CONF_ADJACENT_ROOMS,
+                    default=current_adjacent,
+                )
+            ] = selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=other_rooms,
                     multiple=True,
@@ -697,11 +844,15 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
 
         # Coupling Strength
-        current_coupling_strength = current_data.get(CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH)
-        schema_dict[vol.Optional(
-            CONF_COUPLING_STRENGTH,
-            default=current_coupling_strength,
-        )] = selector.NumberSelector(
+        current_coupling_strength = current_data.get(
+            CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH
+        )
+        schema_dict[
+            vol.Optional(
+                CONF_COUPLING_STRENGTH,
+                default=current_coupling_strength,
+            )
+        ] = selector.NumberSelector(
             selector.NumberSelectorConfig(
                 min=0.1,
                 max=1.0,

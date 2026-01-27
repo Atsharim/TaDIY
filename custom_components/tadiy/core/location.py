@@ -1,4 +1,5 @@
 """Location-based control for TaDIY integration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -52,7 +53,9 @@ class LocationManager:
         self.hass = hass
         self.person_entity_ids = person_entity_ids or []
         self._location_state = LocationState()
-        self._manual_override: bool | None = None  # None = auto, True = force home, False = force away
+        self._manual_override: bool | None = (
+            None  # None = auto, True = force home, False = force away
+        )
 
     def get_location_state(self) -> LocationState:
         """Get current location state."""
@@ -84,7 +87,9 @@ class LocationManager:
         if self._manual_override is not None:
             self._location_state = LocationState(
                 anyone_home=self._manual_override,
-                person_count_home=len(self.person_entity_ids) if self._manual_override else 0,
+                person_count_home=len(self.person_entity_ids)
+                if self._manual_override
+                else 0,
                 person_count_total=len(self.person_entity_ids),
                 persons_home=self.person_entity_ids if self._manual_override else [],
                 persons_away=[] if self._manual_override else self.person_entity_ids,

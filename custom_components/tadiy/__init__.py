@@ -1,4 +1,5 @@
 """The TaDIY integration."""
+
 from __future__ import annotations
 
 import logging
@@ -75,49 +76,63 @@ PLATFORMS: list[Platform] = [
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 SERVICE_RESET_LEARNING_SCHEMA = vol.Schema({vol.Optional(ATTR_ROOM): cv.string})
-SERVICE_BOOST_ALL_SCHEMA = vol.Schema({
-    vol.Optional(ATTR_TEMPERATURE, default=DEFAULT_BOOST_TEMPERATURE): vol.All(
-        vol.Coerce(float), vol.Range(min=MIN_BOOST_TEMP, max=MAX_BOOST_TEMP)
-    ),
-    vol.Optional(ATTR_DURATION_MINUTES, default=DEFAULT_BOOST_DURATION): vol.All(
-        vol.Coerce(int), vol.Range(min=MIN_BOOST_DURATION, max=MAX_BOOST_DURATION)
-    ),
-})
+SERVICE_BOOST_ALL_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_TEMPERATURE, default=DEFAULT_BOOST_TEMPERATURE): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_BOOST_TEMP, max=MAX_BOOST_TEMP)
+        ),
+        vol.Optional(ATTR_DURATION_MINUTES, default=DEFAULT_BOOST_DURATION): vol.All(
+            vol.Coerce(int), vol.Range(min=MIN_BOOST_DURATION, max=MAX_BOOST_DURATION)
+        ),
+    }
+)
 SERVICE_SET_HUB_MODE_SCHEMA = vol.Schema({vol.Required(ATTR_MODE): cv.string})
-SERVICE_SET_HEATING_CURVE_SCHEMA = vol.Schema({
-    vol.Required(ATTR_ROOM): cv.string,
-    vol.Required(ATTR_HEATING_RATE): vol.All(
-        vol.Coerce(float), vol.Range(min=MIN_HEATING_RATE, max=MAX_HEATING_RATE)
-    ),
-})
-SERVICE_GET_SCHEDULE_SCHEMA = vol.Schema({
-    vol.Required(ATTR_ENTITY_ID): cv.entity_id,
-    vol.Required(ATTR_MODE): cv.string,
-    vol.Optional(ATTR_SCHEDULE_TYPE): cv.string,
-})
-SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema({
-    vol.Required(ATTR_ENTITY_ID): cv.entity_id,
-    vol.Required(ATTR_MODE): cv.string,
-    vol.Optional(ATTR_SCHEDULE_TYPE): cv.string,
-    vol.Required(ATTR_BLOCKS): vol.All(cv.ensure_list, [dict]),
-})
-SERVICE_SET_TRV_CALIBRATION_SCHEMA = vol.Schema({
-    vol.Required(ATTR_ENTITY_ID): cv.entity_id,
-    vol.Optional(ATTR_MODE): vol.In(["auto", "manual", "disabled"]),
-    vol.Optional(ATTR_OFFSET): vol.All(
-        vol.Coerce(float), vol.Range(min=MIN_TRV_OFFSET, max=MAX_TRV_OFFSET)
-    ),
-    vol.Optional(ATTR_MULTIPLIER): vol.All(
-        vol.Coerce(float), vol.Range(min=MIN_TRV_MULTIPLIER, max=MAX_TRV_MULTIPLIER)
-    ),
-})
-SERVICE_CLEAR_OVERRIDE_SCHEMA = vol.Schema({
-    vol.Optional(ATTR_ROOM): cv.string,
-    vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
-})
-SERVICE_SET_LOCATION_OVERRIDE_SCHEMA = vol.Schema({
-    vol.Required(ATTR_LOCATION_OVERRIDE): vol.In(["auto", "home", "away"]),
-})
+SERVICE_SET_HEATING_CURVE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ROOM): cv.string,
+        vol.Required(ATTR_HEATING_RATE): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_HEATING_RATE, max=MAX_HEATING_RATE)
+        ),
+    }
+)
+SERVICE_GET_SCHEDULE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_MODE): cv.string,
+        vol.Optional(ATTR_SCHEDULE_TYPE): cv.string,
+    }
+)
+SERVICE_SET_SCHEDULE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required(ATTR_MODE): cv.string,
+        vol.Optional(ATTR_SCHEDULE_TYPE): cv.string,
+        vol.Required(ATTR_BLOCKS): vol.All(cv.ensure_list, [dict]),
+    }
+)
+SERVICE_SET_TRV_CALIBRATION_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Optional(ATTR_MODE): vol.In(["auto", "manual", "disabled"]),
+        vol.Optional(ATTR_OFFSET): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_TRV_OFFSET, max=MAX_TRV_OFFSET)
+        ),
+        vol.Optional(ATTR_MULTIPLIER): vol.All(
+            vol.Coerce(float), vol.Range(min=MIN_TRV_MULTIPLIER, max=MAX_TRV_MULTIPLIER)
+        ),
+    }
+)
+SERVICE_CLEAR_OVERRIDE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(ATTR_ROOM): cv.string,
+        vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
+    }
+)
+SERVICE_SET_LOCATION_OVERRIDE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_LOCATION_OVERRIDE): vol.In(["auto", "home", "away"]),
+    }
+)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -128,9 +143,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     # cache_headers=False ensures fresh content during development
     files_path = Path(__file__).parent / "www"
     try:
-        await hass.http.async_register_static_paths([
-            StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
-        ])
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
+            ]
+        )
         _LOGGER.info("TaDIY: Registered static path /tadiy for Lovelace cards")
     except ValueError as err:
         # Path already registered (can happen during reload)
@@ -179,9 +196,8 @@ async def async_register_lovelace_resources(hass: HomeAssistant) -> None:
         "\n"
         "The TaDIY Panel is already available in the sidebar!\n"
         "═══════════════════════════════════════════════════════════════════\n",
-        VERSION
+        VERSION,
     )
-
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -201,9 +217,11 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Ensure static path is registered (in case async_setup wasn't called)
     files_path = Path(__file__).parent / "www"
     try:
-        await hass.http.async_register_static_paths([
-            StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
-        ])
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
+            ]
+        )
         _LOGGER.debug("TaDIY: Static path /tadiy ensured during hub setup")
     except ValueError:
         # Path already registered, that's fine
@@ -233,6 +251,7 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     show_panel = entry.data.get(CONF_SHOW_PANEL, True)
     if show_panel:
         from .panel import async_register_panel
+
         await async_register_panel(hass)
         _LOGGER.info("TaDIY panel registered")
     else:
@@ -246,6 +265,7 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY Room."""
     import asyncio
+
     room_name = entry.data.get(CONF_ROOM_NAME, "Unknown")
     _LOGGER.info("Setting up TaDIY Room: %s", room_name)
 
@@ -259,10 +279,14 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await asyncio.sleep(0.5)
 
     if not hub_coordinator:
-        _LOGGER.warning("Hub coordinator not found for room setup after timeout, retrying later")
+        _LOGGER.warning(
+            "Hub coordinator not found for room setup after timeout, retrying later"
+        )
         raise ConfigEntryNotReady("Hub coordinator not found")
 
-    room_coordinator = TaDIYRoomCoordinator(hass, entry.entry_id, entry.data, hub_coordinator)
+    room_coordinator = TaDIYRoomCoordinator(
+        hass, entry.entry_id, entry.data, hub_coordinator
+    )
     await room_coordinator.async_load_schedules()
     await room_coordinator.async_load_calibrations()
     await room_coordinator.async_load_overrides()
@@ -300,13 +324,19 @@ async def async_register_services(
         if room_name:
             if room_name in hub_coordinator.heat_models:
                 from .core.early_start import HeatUpModel
-                hub_coordinator.heat_models[room_name] = HeatUpModel(room_name=room_name)
+
+                hub_coordinator.heat_models[room_name] = HeatUpModel(
+                    room_name=room_name
+                )
                 await hub_coordinator.async_save_learning_data()
                 _LOGGER.info("Learning data reset for room: %s", room_name)
         else:
             from .core.early_start import HeatUpModel
+
             for room_name in hub_coordinator.heat_models:
-                hub_coordinator.heat_models[room_name] = HeatUpModel(room_name=room_name)
+                hub_coordinator.heat_models[room_name] = HeatUpModel(
+                    room_name=room_name
+                )
             await hub_coordinator.async_save_learning_data()
             _LOGGER.info("Learning data reset for all rooms")
 
@@ -350,14 +380,20 @@ async def async_register_services(
         if room_name in hub_coordinator.heat_models:
             hub_coordinator.heat_models[room_name].heating_rate = heating_rate
             await hub_coordinator.async_save_learning_data()
-            _LOGGER.info("Heating rate for room %s set to %.2f °C/h", room_name, heating_rate)
+            _LOGGER.info(
+                "Heating rate for room %s set to %.2f °C/h", room_name, heating_rate
+            )
         else:
             _LOGGER.error("Room not found: %s", room_name)
 
     async def handle_get_schedule(call: ServiceCall) -> dict:
         """Get schedule for a room."""
         from .schedule_storage import ScheduleStorageManager
-        from .const import SCHEDULE_TYPE_DAILY, SCHEDULE_TYPE_WEEKDAY, SCHEDULE_TYPE_WEEKEND
+        from .const import (
+            SCHEDULE_TYPE_DAILY,
+            SCHEDULE_TYPE_WEEKDAY,
+            SCHEDULE_TYPE_WEEKEND,
+        )
 
         entity_id = call.data.get(ATTR_ENTITY_ID)
         mode = call.data.get(ATTR_MODE)
@@ -385,7 +421,9 @@ async def async_register_services(
 
         if not room_schedule:
             # Return default schedule
-            default_blocks = ScheduleStorageManager.create_default_schedule(schedule_type)
+            default_blocks = ScheduleStorageManager.create_default_schedule(
+                schedule_type
+            )
             return {"blocks": [b.to_dict() for b in default_blocks]}
 
         # Get day schedule based on mode and type
@@ -401,7 +439,9 @@ async def async_register_services(
             day_schedule = room_schedule.get_custom_schedule(mode)
 
         if day_schedule:
-            ui_blocks = ScheduleStorageManager.schedule_blocks_to_ui_blocks(day_schedule.blocks)
+            ui_blocks = ScheduleStorageManager.schedule_blocks_to_ui_blocks(
+                day_schedule.blocks
+            )
             return {"blocks": [b.to_dict() for b in ui_blocks]}
 
         # Fallback to default schedule
@@ -455,6 +495,7 @@ async def async_register_services(
 
         if not room_schedule:
             from .core.schedule_model import RoomSchedule
+
             room_schedule = RoomSchedule(room_name=room_name)
             room_coord.schedule_engine._room_schedules[room_name] = room_schedule
 
@@ -541,23 +582,34 @@ async def async_register_services(
                         entity_entry = entity_registry.async_get(entity_id)
                         expected_unique_id = f"{entry_id}_climate"
 
-                        if entity_entry and entity_entry.unique_id == expected_unique_id:
+                        if (
+                            entity_entry
+                            and entity_entry.unique_id == expected_unique_id
+                        ):
                             # User targeted the Room Entity -> Clear ALL overrides for this room
                             count = room_coord.override_manager.clear_all_overrides()
                             if count > 0:
                                 cleared_count += count
                                 await room_coord.async_save_overrides()
-                                _LOGGER.info("Cleared %d override(s) for room %s (via room entity)", count, room_coord.room_config.name)
-                            # If count is 0, we still found the room, so we can stop searching if we want, 
-                            # or just continue. 
-                            return # We found the target
+                                _LOGGER.info(
+                                    "Cleared %d override(s) for room %s (via room entity)",
+                                    count,
+                                    room_coord.room_config.name,
+                                )
+                            # If count is 0, we still found the room, so we can stop searching if we want,
+                            # or just continue.
+                            return  # We found the target
                 else:
                     # No entity_id, clear all for this room (if room_name matched)
                     count = room_coord.override_manager.clear_all_overrides()
                     if count > 0:
                         cleared_count += count
                         await room_coord.async_save_overrides()
-                        _LOGGER.info("Cleared %d override(s) for room %s", count, room_coord.room_config.name)
+                        _LOGGER.info(
+                            "Cleared %d override(s) for room %s",
+                            count,
+                            room_coord.room_config.name,
+                        )
 
                 # If entity_id was specified and found (as TRV), stop searching
                 if entity_id and cleared_count > 0:
@@ -685,24 +737,85 @@ async def async_register_services(
         _LOGGER.error("Room %s not found", room_name)
 
     hass.services.async_register(DOMAIN, SERVICE_FORCE_REFRESH, handle_force_refresh)
-    hass.services.async_register(DOMAIN, SERVICE_RESET_LEARNING, handle_reset_learning, schema=SERVICE_RESET_LEARNING_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_BOOST_ALL_ROOMS, handle_boost_all_rooms, schema=SERVICE_BOOST_ALL_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_SET_HUB_MODE, handle_set_hub_mode, schema=SERVICE_SET_HUB_MODE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_SET_HEATING_CURVE, handle_set_heating_curve, schema=SERVICE_SET_HEATING_CURVE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_GET_SCHEDULE, handle_get_schedule, schema=SERVICE_GET_SCHEDULE_SCHEMA, supports_response=True)
-    hass.services.async_register(DOMAIN, SERVICE_SET_SCHEDULE, handle_set_schedule, schema=SERVICE_SET_SCHEDULE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_SET_TRV_CALIBRATION, handle_set_trv_calibration, schema=SERVICE_SET_TRV_CALIBRATION_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_CLEAR_OVERRIDE, handle_clear_override, schema=SERVICE_CLEAR_OVERRIDE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_SET_LOCATION_OVERRIDE, handle_set_location_override, schema=SERVICE_SET_LOCATION_OVERRIDE_SCHEMA)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RESET_LEARNING,
+        handle_reset_learning,
+        schema=SERVICE_RESET_LEARNING_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_BOOST_ALL_ROOMS,
+        handle_boost_all_rooms,
+        schema=SERVICE_BOOST_ALL_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_HUB_MODE,
+        handle_set_hub_mode,
+        schema=SERVICE_SET_HUB_MODE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_HEATING_CURVE,
+        handle_set_heating_curve,
+        schema=SERVICE_SET_HEATING_CURVE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_GET_SCHEDULE,
+        handle_get_schedule,
+        schema=SERVICE_GET_SCHEDULE_SCHEMA,
+        supports_response=True,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_SCHEDULE,
+        handle_set_schedule,
+        schema=SERVICE_SET_SCHEDULE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_TRV_CALIBRATION,
+        handle_set_trv_calibration,
+        schema=SERVICE_SET_TRV_CALIBRATION_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_CLEAR_OVERRIDE,
+        handle_clear_override,
+        schema=SERVICE_CLEAR_OVERRIDE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_LOCATION_OVERRIDE,
+        handle_set_location_override,
+        schema=SERVICE_SET_LOCATION_OVERRIDE_SCHEMA,
+    )
 
     # PID Auto-Tuning services
     SERVICE_START_PID_AUTOTUNE_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
     SERVICE_STOP_PID_AUTOTUNE_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
     SERVICE_APPLY_PID_AUTOTUNE_SCHEMA = vol.Schema({vol.Required(ATTR_ROOM): cv.string})
 
-    hass.services.async_register(DOMAIN, SERVICE_START_PID_AUTOTUNE, handle_start_pid_autotune, schema=SERVICE_START_PID_AUTOTUNE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_STOP_PID_AUTOTUNE, handle_stop_pid_autotune, schema=SERVICE_STOP_PID_AUTOTUNE_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_APPLY_PID_AUTOTUNE, handle_apply_pid_autotune, schema=SERVICE_APPLY_PID_AUTOTUNE_SCHEMA)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_START_PID_AUTOTUNE,
+        handle_start_pid_autotune,
+        schema=SERVICE_START_PID_AUTOTUNE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_STOP_PID_AUTOTUNE,
+        handle_stop_pid_autotune,
+        schema=SERVICE_STOP_PID_AUTOTUNE_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_APPLY_PID_AUTOTUNE,
+        handle_apply_pid_autotune,
+        schema=SERVICE_APPLY_PID_AUTOTUNE_SCHEMA,
+    )
 
     # Weather Prediction service
     async def handle_refresh_weather_forecast(call: ServiceCall) -> None:
@@ -711,9 +824,13 @@ async def async_register_services(
         if success:
             _LOGGER.info("Weather forecast refreshed successfully")
         else:
-            _LOGGER.warning("Weather forecast refresh failed or no weather entity configured")
+            _LOGGER.warning(
+                "Weather forecast refresh failed or no weather entity configured"
+            )
 
-    hass.services.async_register(DOMAIN, SERVICE_REFRESH_WEATHER_FORECAST, handle_refresh_weather_forecast)
+    hass.services.async_register(
+        DOMAIN, SERVICE_REFRESH_WEATHER_FORECAST, handle_refresh_weather_forecast
+    )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -741,6 +858,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if entry_data.get("type") == "hub":
             # Unregister panel
             from .panel import async_unregister_panel
+
             await async_unregister_panel(hass)
 
             hass.services.async_remove(DOMAIN, SERVICE_FORCE_REFRESH)

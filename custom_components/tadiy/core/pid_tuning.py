@@ -1,4 +1,5 @@
 """PID auto-tuning using Ziegler-Nichols method for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -145,7 +146,10 @@ class PIDTuningState:
             if self.current_direction == "rising" and new_direction == "falling":
                 if self.last_peak_temp is None or self.last_temp > self.last_peak_temp:
                     # Valid peak
-                    if self.last_valley_temp is not None and self.last_valley_time is not None:
+                    if (
+                        self.last_valley_temp is not None
+                        and self.last_valley_time is not None
+                    ):
                         # We have a complete oscillation
                         oscillation = OscillationMeasurement(
                             peak_time=self.last_update,
@@ -169,7 +173,10 @@ class PIDTuningState:
 
             # Detect valley (was falling, now rising)
             elif self.current_direction == "falling" and new_direction == "rising":
-                if self.last_valley_temp is None or self.last_temp < self.last_valley_temp:
+                if (
+                    self.last_valley_temp is None
+                    or self.last_temp < self.last_valley_temp
+                ):
                     self.last_valley_temp = self.last_temp
                     self.last_valley_time = self.last_update
 
@@ -193,8 +200,12 @@ class PIDTuningState:
 
         # Calculate average amplitude and period from last oscillations
         recent_oscillations = self.oscillations[-REQUIRED_CYCLES:]
-        avg_amplitude = sum(osc.amplitude for osc in recent_oscillations) / len(recent_oscillations)
-        avg_period_seconds = sum(osc.period.total_seconds() for osc in recent_oscillations) / len(recent_oscillations)
+        avg_amplitude = sum(osc.amplitude for osc in recent_oscillations) / len(
+            recent_oscillations
+        )
+        avg_period_seconds = sum(
+            osc.period.total_seconds() for osc in recent_oscillations
+        ) / len(recent_oscillations)
 
         # Estimate ultimate gain (Ku) using relay method
         # This is a simplified estimation - in reality would need controlled relay test

@@ -1,4 +1,5 @@
 """Weather-compensated heating curve for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

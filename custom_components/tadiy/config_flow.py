@@ -1,4 +1,5 @@
 """Config flow for TaDIY integration."""
+
 from __future__ import annotations
 
 import logging
@@ -72,9 +73,7 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         # Check if hub already exists
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
-        hub_exists = any(
-            entry.data.get(CONF_HUB, False) for entry in existing_entries
-        )
+        hub_exists = any(entry.data.get(CONF_HUB, False) for entry in existing_entries)
 
         if not hub_exists:
             # First setup: Create Hub automatically
@@ -155,7 +154,9 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     user_input["hub_entry_id"] = hub_entry.entry_id
 
                     # Remove empty optional fields
-                    cleaned_data = {k: v for k, v in user_input.items() if v not in ("", [], None)}
+                    cleaned_data = {
+                        k: v for k, v in user_input.items() if v not in ("", [], None)
+                    }
 
                     return self.async_create_entry(
                         title=room_name,
@@ -167,9 +168,7 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Build schema step-by-step to avoid validation errors
         # Same fix as in options_flow.py - complex dict literals cause issues
-        schema_dict = {
-            vol.Required(CONF_ROOM_NAME): selector.TextSelector()
-        }
+        schema_dict = {vol.Required(CONF_ROOM_NAME): selector.TextSelector()}
 
         schema_dict[vol.Required(CONF_TRV_ENTITIES)] = selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -178,38 +177,48 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         )
 
-        schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR, default="")] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
+        schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
             )
         )
 
-        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default="")] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="humidity",
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="humidity",
+                )
             )
         )
 
-        schema_dict[vol.Optional(CONF_WINDOW_SENSORS, default=[])] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="binary_sensor",
-                device_class=["door", "window", "opening"],
-                multiple=True,
+        schema_dict[vol.Optional(CONF_WINDOW_SENSORS, default=[])] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="binary_sensor",
+                    device_class=["door", "window", "opening"],
+                    multiple=True,
+                )
             )
         )
 
-        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
+        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
             )
         )
 
-        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default="")] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="weather",
+        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="weather",
+                )
             )
         )
 

@@ -1,4 +1,5 @@
 """Constants for the TaDIY integration."""
+
 from __future__ import annotations
 
 import json
@@ -6,6 +7,7 @@ from pathlib import Path
 from typing import Final
 
 DOMAIN: Final = "tadiy"
+
 
 # Version from manifest.json
 def _get_version() -> str:
@@ -18,6 +20,7 @@ def _get_version() -> str:
     except Exception:
         return "unknown"
 
+
 VERSION: Final = _get_version()
 
 # Configuration
@@ -29,8 +32,12 @@ CONF_WINDOW_SENSORS: Final = "window_sensors"
 CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
 CONF_HUMIDITY_SENSOR: Final = "humidity_sensor"  # Optional humidity sensor for room
 CONF_WEATHER_ENTITY: Final = "weather_entity"  # Optional weather entity for hub (fallback outdoor temp + forecast)
-CONF_PERSON_ENTITIES: Final = "person_entities"  # Optional person entities for location-based control
-CONF_LOCATION_MODE_ENABLED: Final = "location_mode_enabled"  # Enable location-based control
+CONF_PERSON_ENTITIES: Final = (
+    "person_entities"  # Optional person entities for location-based control
+)
+CONF_LOCATION_MODE_ENABLED: Final = (
+    "location_mode_enabled"  # Enable location-based control
+)
 CONF_CUSTOM_MODES: Final = "custom_modes"  # Additional custom modes for hub
 CONF_SHOW_PANEL: Final = "show_panel"  # Show schedules panel in sidebar
 
@@ -94,7 +101,9 @@ CONF_SCHEDULE_TEMP: Final = "temperature"
 DEFAULT_NAME: Final = "TaDIY Hub"
 DEFAULT_WINDOW_OPEN_TIMEOUT: Final = 300  # 5 minutes
 DEFAULT_WINDOW_CLOSE_TIMEOUT: Final = 180  # 3 minutes
-DEFAULT_DONT_HEAT_BELOW: Final = 18.0
+DEFAULT_DONT_HEAT_BELOW: Final = (
+    0.0  # 0 = disabled (don't heat when outdoor temp >= this)
+)
 DEFAULT_USE_EARLY_START: Final = True
 DEFAULT_LEARN_HEATING_RATE: Final = True
 DEFAULT_TARGET_TEMP_STEP: Final = 0.5
@@ -150,7 +159,9 @@ MIN_HEATING_CURVE_SLOPE: Final = 0.1
 
 # TRV HVAC Mode Control (for Moes and similar TRVs)
 CONF_USE_HVAC_OFF_FOR_LOW_TEMP: Final = "use_hvac_off_for_low_temp"
-DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP: Final = False  # Disabled by default, opt-in for Moes TRVs
+DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP: Final = (
+    False  # Disabled by default, opt-in for Moes TRVs
+)
 
 # Weather Prediction (Phase 3.3)
 CONF_USE_WEATHER_PREDICTION: Final = "use_weather_prediction"
