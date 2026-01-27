@@ -1,4 +1,5 @@
 """Weather-based predictive heating control for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -93,7 +94,10 @@ class WeatherPredictor:
 
         weather_state = self.hass.states.get(self.weather_entity_id)
         if not weather_state:
-            _LOGGER.warning("Weather entity %s not found", self.weather_entity_id)
+            _LOGGER.debug(
+                "Weather entity %s not found or not yet available",
+                self.weather_entity_id,
+            )
             return False
 
         # Get forecast attribute

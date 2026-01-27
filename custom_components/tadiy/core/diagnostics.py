@@ -4,10 +4,11 @@ Phase 4: Detects hardware failures and anomalous behavior.
 - Heating Failure: Valve open but temp falling (Open window / Broken valve)
 - Runaway Heat: Valve closed but temp rising (Stuck valve / External heat)
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from typing import Any
 
@@ -17,10 +18,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # thresholds
 HEATING_FAILURE_THRESHOLD_MINS = 60  # Time to wait before flagging failure
-RUNAWAY_HEAT_THRESHOLD_MINS = 60     # Time to wait before flagging runaway
-MIN_TEMP_RISE_FOR_HEATING = 0.2      # °C expected rise per hour when heating
-MAX_TEMP_RISE_FOR_IDLE = 0.5         # °C max allowed rise per hour when idle
-HIGH_VALVE_THRESHOLD = 0.8           # 80% valve opening considered "Trying hard"
+RUNAWAY_HEAT_THRESHOLD_MINS = 60  # Time to wait before flagging runaway
+MIN_TEMP_RISE_FOR_HEATING = 0.2  # °C expected rise per hour when heating
+MAX_TEMP_RISE_FOR_IDLE = 0.5  # °C max allowed rise per hour when idle
+HIGH_VALVE_THRESHOLD = 0.8  # 80% valve opening considered "Trying hard"
 
 
 @dataclass
@@ -120,7 +121,7 @@ class DiagnosticsManager:
                             "temp_rise": round(total_rise, 2),
                             "rate_per_hour": round(rate, 2),
                             "valve_pos": valve_position,
-                        }
+                        },
                     )
                 else:
                     # Recovered
@@ -131,7 +132,6 @@ class DiagnosticsManager:
             self._heating_start_time = None
             self._clear_event("heating_failure")
 
-
         # ---------------------------------------------------------
         # 2. RUNAWAY HEAT DETECTION (Stuck Valve)
         # ---------------------------------------------------------
@@ -140,7 +140,7 @@ class DiagnosticsManager:
         # Define "Should be off"
         system_off = not is_heating
         if valve_position is not None and valve_position > 0.1:
-             system_off = False # Valve is open, so temp rise is expected
+            system_off = False  # Valve is open, so temp rise is expected
 
         if system_off:
             if self._idle_start_time is None:
@@ -151,14 +151,14 @@ class DiagnosticsManager:
             duration = (now - self._idle_start_time).total_seconds() / 60.0
 
             if duration >= RUNAWAY_HEAT_THRESHOLD_MINS:
-                 # Calculate rise
+                # Calculate rise
                 total_rise = current_temp - (self._idle_start_temp or current_temp)
                 hours = duration / 60.0
                 rate = total_rise / hours if hours > 0 else 0
 
                 # If rising fast while off
                 if rate > MAX_TEMP_RISE_FOR_IDLE:
-                     # Anomaly Detected!
+                    # Anomaly Detected!
                     self._raise_event(
                         "runaway_heat",
                         f"Heating OFF for {int(duration)}m but temp rose {total_rise:.1f}°C ({rate:.2f}°C/h). Possible stuck valve or external heat source.",
@@ -166,10 +166,10 @@ class DiagnosticsManager:
                             "duration_mins": int(duration),
                             "temp_rise": round(total_rise, 2),
                             "rate_per_hour": round(rate, 2),
-                        }
+                        },
                     )
                 else:
-                     self._clear_event("runaway_heat")
+                    self._clear_event("runaway_heat")
         else:
             self._idle_start_time = None
             self._clear_event("runaway_heat")
@@ -184,7 +184,7 @@ class DiagnosticsManager:
                 event_type=key,
                 detected_at=dt_util.utcnow(),
                 message=message,
-                details=details
+                details=details,
             )
 
     def _clear_event(self, key: str) -> None:

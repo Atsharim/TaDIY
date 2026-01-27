@@ -1,4 +1,5 @@
 """Room data models for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -30,12 +31,20 @@ class RoomConfig:
     weather_entity_id: str = ""
     window_open_timeout: int = DEFAULT_WINDOW_OPEN_TIMEOUT
     window_close_timeout: int = DEFAULT_WINDOW_CLOSE_TIMEOUT
-    dont_heat_below_outdoor: float = 20.0
+    dont_heat_below_outdoor: float = (
+        0.0  # 0 = disabled, otherwise outdoor temp threshold
+    )
     use_early_start: bool = True
     learn_heating_rate: bool = True
-    early_start_offset: int | None = None  # Room override (minutes), None = use hub setting
-    early_start_max: int | None = None  # Room override (minutes), None = use hub setting
-    override_timeout: str | None = None  # Room override timeout mode, None = use hub setting
+    early_start_offset: int | None = (
+        None  # Room override (minutes), None = use hub setting
+    )
+    early_start_max: int | None = (
+        None  # Room override (minutes), None = use hub setting
+    )
+    override_timeout: str | None = (
+        None  # Room override timeout mode, None = use hub setting
+    )
     hysteresis: float = 0.3  # Temperature deadband in °C
     use_pid_control: bool = False  # PID controller disabled by default
     pid_kp: float = 0.5  # Proportional gain
@@ -44,7 +53,9 @@ class RoomConfig:
     use_heating_curve: bool = False  # Heating curve disabled by default
     heating_curve_slope: float = 0.5  # Curve slope (°C indoor per °C outdoor)
     use_humidity_compensation: bool = False
-    use_hvac_off_for_low_temp: bool = False  # Use HVAC off instead of low temp for Moes TRVs
+    use_hvac_off_for_low_temp: bool = (
+        False  # Use HVAC off instead of low temp for Moes TRVs
+    )
     use_weather_prediction: bool = False  # Weather-based predictive heating
     use_room_coupling: bool = False  # Multi-room heat coupling
     adjacent_rooms: list[str] = field(default_factory=list)  # Names of adjacent rooms
@@ -116,7 +127,7 @@ class RoomConfig:
             window_close_timeout=data.get(
                 "window_close_timeout", DEFAULT_WINDOW_CLOSE_TIMEOUT
             ),
-            dont_heat_below_outdoor=data.get("dont_heat_below_outdoor", 20.0),
+            dont_heat_below_outdoor=data.get("dont_heat_below_outdoor", 0.0),
             use_early_start=data.get("use_early_start", True),
             learn_heating_rate=data.get("learn_heating_rate", True),
             early_start_offset=data.get("early_start_offset"),
@@ -169,9 +180,7 @@ class RoomData:
                     )
                 )
         if self.heating_rate < 0:
-            raise ValueError(
-                "Heating rate {} must be >= 0".format(self.heating_rate)
-            )
+            raise ValueError("Heating rate {} must be >= 0".format(self.heating_rate))
 
     @property
     def is_heating_blocked(self) -> bool:

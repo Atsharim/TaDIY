@@ -65,5 +65,5 @@ entity: {entity_id}"""
                     "The card is automatically available at:\n"
                     f"/tadiy/tadiy-schedule-card.js?v={VERSION}"
                 )
-            }
+            },
         )

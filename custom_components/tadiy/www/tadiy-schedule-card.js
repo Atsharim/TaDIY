@@ -53,6 +53,12 @@ class TaDiyScheduleCard extends HTMLElement {
     if (!this._availableModes.length) {
       this.loadAvailableModes();
     }
+
+    // Don't re-render while user is editing temperature (prevents spinner reset)
+    if (this._isEditingTemperature || this._hasOpenDropdown) {
+      return;
+    }
+
     this.render();
   }
 
@@ -581,8 +587,8 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .block-editor {
           display: grid;
-          grid-template-columns: 70px 70px 55px 40px; /* Time pickers smaller, temp centered, delete button */
-          gap: 8px 12px; /* row-gap column-gap: more space between temp and delete */
+          grid-template-columns: 1fr 1fr 1fr 32px; /* Flexible columns, fixed delete button */
+          gap: 8px 8px;
           align-items: center;
           margin-bottom: 12px;
           padding: 12px;
@@ -591,6 +597,7 @@ class TaDiyScheduleCard extends HTMLElement {
           border: 2px solid transparent;
           cursor: pointer;
           transition: all 0.2s;
+          max-width: 320px; /* Prevent excessive width */
         }
         .block-editor:hover {
           background: var(--table-row-background-color);
@@ -945,7 +952,25 @@ class TaDiyScheduleCard extends HTMLElement {
 
     // Input changes - handles temperature inputs only (time inputs are readonly)
     this.shadowRoot.querySelectorAll('.temperature').forEach(input => {
+      // Track editing state to prevent re-render during user input
+      input.addEventListener('focus', () => {
+        this._isEditingTemperature = true;
+      });
+
+      // Handle input event (fires on spinner clicks and typing)
+      // Update data immediately but don't re-render to avoid losing focus
+      input.addEventListener('input', (e) => {
+        const index = parseInt(e.target.dataset.index);
+        let temp = parseFloat(e.target.value);
+        if (!isNaN(temp)) {
+          // Clamp to valid range
+          temp = Math.max(5, Math.min(30, temp));
+          this._editingBlocks[index].temperature = temp;
+        }
+      });
+
       input.addEventListener('blur', (e) => {
+        this._isEditingTemperature = false;
         const index = parseInt(e.target.dataset.index);
         let temp = parseFloat(e.target.value);
         if (isNaN(temp) || temp < 5) temp = 5;

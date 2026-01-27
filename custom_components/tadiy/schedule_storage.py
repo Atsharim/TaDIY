@@ -167,10 +167,16 @@ class ScheduleStorageManager:
                     end_minutes = 24 * 60
 
                 if start_minutes >= end_minutes:
-                    return False, f"Block {block.start_time}-{block.end_time} has invalid time range"
+                    return (
+                        False,
+                        f"Block {block.start_time}-{block.end_time} has invalid time range",
+                    )
 
             except (ValueError, IndexError):
-                return False, f"Invalid time format in block {block.start_time}-{block.end_time}"
+                return (
+                    False,
+                    f"Invalid time format in block {block.start_time}-{block.end_time}",
+                )
 
         # First block must start at 00:00
         if sorted_blocks[0].start_time != "00:00":
