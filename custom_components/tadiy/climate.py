@@ -86,15 +86,8 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     def target_temperature(self) -> float | None:
         """Return the target temperature."""
         if not self.coordinator.data:
-            _LOGGER.warning("Climate %s: No coordinator data!", self._room_name)
             return None
-        target = self.coordinator.data.target_temperature
-        _LOGGER.warning(
-            "Climate %s: target_temperature property returning %s (from RoomData)",
-            self._room_name,
-            target,
-        )
-        return target
+        return self.coordinator.data.target_temperature
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -237,7 +230,10 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                     "Failed to set temperature for %s: %s", trv_entity_id, err
                 )
 
-        await self.coordinator.async_request_refresh()
+        # Immediately update commanded target to reflect user's choice
+        # This prevents bouncing while waiting for next update cycle
+        self.coordinator._commanded_target = temperature
+        self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode for all TRVs in this room."""
@@ -255,7 +251,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             except Exception as err:
                 _LOGGER.error("Failed to set HVAC mode for %s: %s", trv_entity_id, err)
 
-        await self.coordinator.async_request_refresh()
+        # Update commanded mode and refresh state
+        self.coordinator._commanded_hvac_mode = hvac_mode
+        self.async_write_ha_state()
 
     @callback
     def _handle_coordinator_update(self) -> None:

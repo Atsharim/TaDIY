@@ -703,6 +703,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self._state_listeners = []
         self._last_trv_targets: dict[str, float] = {}
 
+        # Command and Remember: Store the last target TaDIY commanded
+        self._commanded_target: float | None = None
+        self._commanded_hvac_mode: str = "heat"
+
         # Cached outdoor temperature for heating curve
         self._cached_outdoor_temp: float | None = None
 
@@ -1223,23 +1227,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
         mode = self.get_hub_mode()
 
-        # Debug: Log schedule engine state
-        _LOGGER.warning(
-            "Room %s: get_scheduled_target() - mode=%s, schedule_rooms=%s",
-            self.room_config.name,
-            mode,
-            list(self.schedule_engine._room_schedules.keys()),
-        )
-
         base_target = self.schedule_engine.get_target_temperature(
             self.room_config.name, mode
         )
 
-        _LOGGER.warning(
-            "Room %s: get_scheduled_target() result - base_target=%s",
-            self.room_config.name,
-            base_target,
-        )
+        self.debug("rooms", "get_scheduled_target - mode=%s, target=%s", mode, base_target)
 
         # Apply heating curve if enabled and outdoor temp available
         if (
@@ -1445,8 +1437,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # This is partly handled by setup_state_listeners, but we sync here too.
             pass
 
-        # 6. Apply Target if needed
-        if enforce_target:
+        # 6. Apply Target if needed and store commanded target
+        if enforce_target and final_target is not None:
             # Determine if we should heat (hysteresis/PID)
             should_heat = self.orchestrator.calculate_heating_decision(
                 fused_temp=fused_temp,
@@ -1456,6 +1448,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)
             
+            # Command and Remember: Store what we just commanded
+            self._commanded_target = final_target
+            self._commanded_hvac_mode = "heat" if should_heat else "off"
+            
             # Re-read mode if it was potentially changed for Moes TRVs
             if self.room_config.use_hvac_off_for_low_temp:
                 trv_state["mode"] = "heat" if should_heat else "off"
@@ -1463,7 +1459,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             else:
                 heating_active = should_heat and trv_state["mode"] != "off"
         else:
-            heating_active = False # Manual TRV control - TaDIY doesn't decide
+            # Manual mode or no enforcement - use TRV's current target
+            self._commanded_target = trv_state["target"]
+            heating_active = trv_state["mode"] == "heat"
 
         # 7. Update models (Learning)
         if fused_temp is not None:
@@ -1495,16 +1493,16 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
              
              self._last_fused_temp = fused_temp
 
-        # 8. Create RoomData
+        # 8. Create RoomData using COMMANDED target (not TRV feedback)
         room_data = RoomData(
             room_name=self.room_config.name,
-            current_temperature=fused_temp if fused_temp is not None else trv_state["target"],
+            current_temperature=fused_temp if fused_temp is not None else 20.0,
             main_sensor_temperature=self.sensor_manager._get_sensor_value(self.room_config.main_temp_sensor_id) or 0.0,
             trv_temperatures=trv_state["all_targets"],
             window_state=window_state,
             outdoor_temperature=outdoor_temp,
-            target_temperature=final_target,
-            hvac_mode=trv_state["mode"],
+            target_temperature=self._commanded_target,  # Use commanded target!
+            hvac_mode=self._commanded_hvac_mode if enforce_target else trv_state["mode"],
             humidity=humidity,
             heating_active=heating_active,
             heating_rate=self._heat_model.get_heating_rate(),

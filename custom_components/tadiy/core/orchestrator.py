@@ -21,7 +21,7 @@ class RoomOrchestrator:
         self.coordinator = room_coordinator
         self.room_config = room_coordinator.room_config
         self._last_user_interaction: datetime | None = None
-        self._interaction_grace_seconds = 45
+        self._interaction_grace_seconds = 5
 
     def notify_user_interaction(self) -> None:
         """Called when a user manually changes temperature or mode."""
@@ -77,25 +77,29 @@ class RoomOrchestrator:
                                   outdoor_temp, self.room_config.dont_heat_below_outdoor, frost_protection)
             return frost_protection, True
 
-        # 4. Manual / Overrides
-        # In Manual Hub Mode, we prioritize the TaDIY climate entity's current target (the override)
-        if hub_mode == "manual" or active_override_target is not None:
-            # If we have an active override, use it
+        # 4. Manual Hub Mode (complete manual control - no schedule enforcement)
+        if hub_mode == "manual":
+            # In true manual mode, if there's an override, use it
             if active_override_target is not None:
-                self.coordinator.debug("rooms", "Target: Using active override %.1f°C", active_override_target)
+                self.coordinator.debug("rooms", "Target: Manual mode with override %.1f°C", active_override_target)
                 return active_override_target, True
-            
-            # In Manual mode without specific override, we just use the current TRV setting
-            # (handled by the coordinator during state assembly)
-            return 20.0, False # Placeholder, coordinator will use trv current target
+            # Otherwise, don't enforce - let TRV keep its current setting
+            self.coordinator.debug("rooms", "Target: Manual mode - no enforcement")
+            return None, False
 
-        # 5. Schedule
+        # 5. Active Override (user set a different temperature than schedule)
+        if active_override_target is not None:
+            self.coordinator.debug("rooms", "Target: Using active override %.1f°C", active_override_target)
+            return active_override_target, True
+
+        # 6. Schedule (normal operation)
         if scheduled_target is not None:
             self.coordinator.debug("rooms", "Target: Using scheduled target %.1f°C", scheduled_target)
             return scheduled_target, True
 
-        # Fallback
-        return 20.0, False
+        # 7. Fallback - no schedule defined for this room/mode
+        self.coordinator.debug("rooms", "Target: No schedule found, using default 20°C")
+        return 20.0, True  # Enforce a sensible default
 
     def calculate_heating_decision(
         self, 
