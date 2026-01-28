@@ -1463,9 +1463,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 desired_target,
             )
 
-            # Check for active override
+            # Check for active override - but NOT in Manual Mode
+            # In Manual Mode, the user controls the TRV directly
+            hub_mode = self.get_hub_mode()
             active_override = self.override_manager.get_active_override()
-            if active_override:
+            if active_override and hub_mode != "manual":
                 desired_target = active_override.temperature
                 _LOGGER.warning(
                     "Room %s: Step 2 - Override active! override_temp=%.1f, desired_target=%s",
@@ -1473,32 +1475,54 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     active_override.temperature,
                     desired_target,
                 )
+            elif active_override and hub_mode == "manual":
+                _LOGGER.warning(
+                    "Room %s: Step 2 - Override exists but ignored (Manual Mode)",
+                    self.room_config.name,
+                )
 
             # Check defaults if no schedule and no override (e.g. Manual Hub Mode)
             # In Manual Hub Mode, get_scheduled_target returns None.
-            # We explicitly do NOT enforce any target in Manual Mode, unless safety features trigger.
+            # We explicitly do NOT enforce any target in Manual Mode.
             enforce_target = True
-            if desired_target is None:
+            if hub_mode == "manual":
+                # Manual Mode: Don't enforce anything, let user control TRV directly
+                enforce_target = False
+                _LOGGER.warning(
+                    "Room %s: Step 3 - Manual Mode, enforce_target=False",
+                    self.room_config.name,
+                )
+                # Read current TRV temperature for display only
+                for trv_id in self.room_config.trv_entity_ids:
+                    trv_state = self.hass.states.get(trv_id)
+                    if trv_state and "temperature" in trv_state.attributes:
+                        try:
+                            trv_temp = float(trv_state.attributes["temperature"])
+                            desired_target = trv_temp
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                if desired_target is None:
+                    desired_target = 20.0  # Fallback for display
+            elif desired_target is None:
                 enforce_target = False
                 _LOGGER.warning(
                     "Room %s: Step 3 - No target, enforce_target=False",
                     self.room_config.name,
                 )
                 # Use current TRV setting as reference for display
-                # But only if TRV is in heat mode - ignore off mode values
                 for trv_id in self.room_config.trv_entity_ids:
                     trv_state = self.hass.states.get(trv_id)
                     if trv_state and trv_state.state == "heat" and "temperature" in trv_state.attributes:
                         try:
                             trv_temp = float(trv_state.attributes["temperature"])
-                            # Only use if it's a reasonable temperature (not min_temp)
                             if trv_temp > 10.0:
                                 desired_target = trv_temp
                                 break
                         except (ValueError, TypeError):
                             continue
                 if desired_target is None:
-                    desired_target = 20.0  # Fallback for display in Manual mode
+                    desired_target = 20.0  # Fallback for display
 
             # 3. Outdoor Temperature Threshold - only if feature is explicitly enabled
             # Note: dont_heat_below_outdoor = 0 means feature is disabled
@@ -1656,6 +1680,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     await self._apply_trv_target(
                         current_target, should_heat=should_heat
                     )
+                    # Update hvac_mode after applying (it may have changed)
+                    hvac_mode = "heat" if should_heat else "off"
+                    # Also update heating_active based on our decision
+                    heating_active = should_heat
             else:
                 heating_active = False
 
