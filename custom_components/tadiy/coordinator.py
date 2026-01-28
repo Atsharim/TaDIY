@@ -1591,6 +1591,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     break
 
             # Determine heating state with hysteresis and optional PID
+            _LOGGER.warning(
+                "Room %s: Heating decision - current_temp=%.1f, target=%.1f, use_hvac_off=%s",
+                self.room_config.name,
+                fused_temp if fused_temp else 0,
+                current_target if current_target else 0,
+                self.room_config.use_hvac_off_for_low_temp,
+            )
             if current_target is not None and fused_temp is not None:
                 # If using PID controller, calculate PID adjustment
                 if isinstance(self.heating_controller, PIDHeatingController):
@@ -1627,12 +1634,25 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # HVAC mode "heat" means TRV is configured to heat, not that it's actively heating
                 heating_active = should_heat and hvac_mode != "off"
 
+                _LOGGER.warning(
+                    "Room %s: Hysteresis result - should_heat=%s, heating_active=%s",
+                    self.room_config.name,
+                    should_heat,
+                    heating_active,
+                )
+
                 # For Moes TRVs: Apply HVAC mode based on heating decision
                 if (
                     self.room_config.use_hvac_off_for_low_temp
                     and enforce_target
                     and current_target is not None
                 ):
+                    _LOGGER.warning(
+                        "Room %s: Moes TRV mode - applying target=%.1f with should_heat=%s",
+                        self.room_config.name,
+                        current_target,
+                        should_heat,
+                    )
                     await self._apply_trv_target(
                         current_target, should_heat=should_heat
                     )
