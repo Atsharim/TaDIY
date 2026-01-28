@@ -1441,6 +1441,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             window_should_stop=window_state.heating_should_stop
         )
 
+        _LOGGER.warning(
+            "Room %s: RESULT - final_target=%s, enforce=%s",
+            self.room_config.name,
+            final_target,
+            enforce_target
+        )
+
         # 5. Inhibit selection bounce (Grace Period)
         # If we are in grace period, we ignore the TRV's reported target and stick to what we sent
         if self.orchestrator.is_in_grace_period():
