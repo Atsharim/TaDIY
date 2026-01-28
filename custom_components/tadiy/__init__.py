@@ -227,7 +227,7 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Path already registered, that's fine
         pass
 
-    hub_coordinator = TaDIYHubCoordinator(hass, entry.entry_id, entry.data)
+    hub_coordinator = TaDIYHubCoordinator(hass, entry.entry_id, entry.data, entry)
     await hub_coordinator.async_load_learning_data()
     await hub_coordinator.async_load_schedules()
     await hub_coordinator.async_config_entry_first_refresh()
