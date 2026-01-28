@@ -85,18 +85,25 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     @property
     def target_temperature(self) -> float | None:
         """Return the target temperature."""
-        if not self.coordinator.data:
-            return None
-        return self.coordinator.data.target_temperature
+        # Use commanded target first (most up-to-date)
+        if self.coordinator._commanded_target is not None:
+            return self.coordinator._commanded_target
+        # Fallback to coordinator data
+        if self.coordinator.data:
+            return self.coordinator.data.target_temperature
+        return None
 
     @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation mode."""
-        if not self.coordinator.data:
-            return HVACMode.OFF
-        return (
-            HVACMode.HEAT if self.coordinator.data.hvac_mode == "heat" else HVACMode.OFF
-        )
+        # Use commanded mode first
+        commanded = getattr(self.coordinator, "_commanded_hvac_mode", None)
+        if commanded:
+            return HVACMode.HEAT if commanded == "heat" else HVACMode.OFF
+        # Fallback to coordinator data
+        if self.coordinator.data:
+            return HVACMode.HEAT if self.coordinator.data.hvac_mode == "heat" else HVACMode.OFF
+        return HVACMode.OFF
 
     @property
     def min_temp(self) -> float:
@@ -251,8 +258,8 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             except Exception as err:
                 _LOGGER.error("Failed to set HVAC mode for %s: %s", trv_entity_id, err)
 
-        # Update commanded mode and refresh state
-        self.coordinator._commanded_hvac_mode = hvac_mode
+        # Update commanded mode (convert enum to string) and refresh state
+        self.coordinator._commanded_hvac_mode = "heat" if hvac_mode == HVACMode.HEAT else "off"
         self.async_write_ha_state()
 
     @callback
