@@ -139,6 +139,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             temperature,
         )
 
+        # Notify coordinator of user interaction for grace period
+        self.coordinator.notify_user_interaction()
+
         # Create override to prevent schedule from overwriting user's choice
         scheduled_target = self.coordinator.get_scheduled_target()
         if scheduled_target is not None and abs(temperature - scheduled_target) > 0.2:
@@ -238,6 +241,8 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode for all TRVs in this room."""
+        # Notify coordinator of user interaction for grace period
+        self.coordinator.notify_user_interaction()
         # Set HVAC mode for all TRVs in the room
         for trv_entity_id in self._trv_entity_ids:
             try:

@@ -12,6 +12,11 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .core.logger import TaDIYLogger
+from .core.sensor_manager import SensorManager
+from .core.trv_manager import TrvManager
+from .core.orchestrator import RoomOrchestrator
+
 from .const import (
     CONF_CUSTOM_MODES,
     CONF_GLOBAL_DONT_HEAT_BELOW,
@@ -38,11 +43,14 @@ from .const import (
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
     CONF_USE_WEATHER_PREDICTION,
-    CONF_ADJACENT_ROOMS,
-    CONF_USE_ROOM_COUPLING,
     CONF_COUPLING_STRENGTH,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
+    CONF_DEBUG_ROOMS,
+    CONF_DEBUG_HUB,
+    CONF_DEBUG_PANEL,
+    CONF_DEBUG_UI,
+    CONF_DEBUG_CARDS,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
@@ -622,6 +630,19 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.hub_coordinator = hub_coordinator
 
+        # Initialize Logger
+        debug_config = {}
+        if hub_coordinator:
+            hub_conf = hub_coordinator.config_entry.data
+            debug_config = {
+                CONF_DEBUG_ROOMS: hub_conf.get(CONF_DEBUG_ROOMS, False),
+                CONF_DEBUG_HUB: hub_conf.get(CONF_DEBUG_HUB, False),
+                CONF_DEBUG_PANEL: hub_conf.get(CONF_DEBUG_PANEL, False),
+                CONF_DEBUG_UI: hub_conf.get(CONF_DEBUG_UI, False),
+                CONF_DEBUG_CARDS: hub_conf.get(CONF_DEBUG_CARDS, False),
+            }
+        self._logger = TaDIYLogger(debug_config)
+
         # Transform config flow data to RoomConfig format
         room_config_data = self._transform_config_data(room_data)
         self.room_config = RoomConfig.from_dict(room_config_data)
@@ -671,7 +692,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_overrides_{entry_id}",
         )
 
-        # State listener tracking
+        # Modular Managers
+        self.sensor_manager = SensorManager(self)
+        self.trv_manager = TrvManager(self)
+        self.orchestrator = RoomOrchestrator(self)
+        self._logger = TaDIYLogger(self)
         self._state_listeners = []
         self._last_trv_targets: dict[str, float] = {}
 
@@ -748,6 +773,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 adjacent_rooms=self.room_config.adjacent_rooms,
                 coupling_strength=self.room_config.coupling_strength,
             )
+
+    def debug(self, category: str, message: str, *args: Any) -> None:
+        """Log debug message if category enabled."""
+        self._logger.debug(category, message, *args)
+
+    def notify_user_interaction(self) -> None:
+        """Notify orchestrator of user interactive change."""
+        self.orchestrator.notify_user_interaction()
 
     def _transform_config_data(self, room_data: dict[str, Any]) -> dict[str, Any]:
         """Transform config flow data to RoomConfig expected format."""
@@ -1368,609 +1401,121 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             return True
         return False
 
-    async def _async_update_data(self) -> RoomData | None:
-        """Fetch and process room data."""
-        try:
-            # Sync frost protection temp from hub to room schedule engine
-            if self.hub_coordinator:
-                frost_temp = self.hub_coordinator.get_frost_protection_temp()
-                hub_mode = self.hub_coordinator.get_hub_mode()
-                self.schedule_engine.set_frost_protection_temp(frost_temp)
-                _LOGGER.info(
-                    "Room %s: Hub sync - mode=%s, frost_temp=%.1f, schedule_rooms=%s",
-                    self.room_config.name,
-                    hub_mode,
-                    frost_temp,
-                    list(self.schedule_engine._room_schedules.keys()),
-                )
+    async def _async_update_data(self) -> RoomData:
+        """Fetch and process room data using modular managers."""
+        self.debug("rooms", "Starting room update cycle")
 
-            main_temp = self._get_sensor_value(self.room_config.main_temp_sensor_id)
-            humidity = self._get_sensor_value(self.room_config.humidity_sensor_id)
-            outdoor_temp = self._get_sensor_value(self.room_config.outdoor_sensor_id)
+        # 1. Gather Sensor Data
+        fused_temp = self.sensor_manager.get_fused_temperature()
+        outdoor_temp = self.sensor_manager.get_outdoor_temperature()
+        window_open = self.sensor_manager.is_window_open()
+        humidity = self.sensor_manager.get_humidity()
 
-            # Fallback to hub's weather entity if no outdoor sensor configured
-            if outdoor_temp is None and self.hub_coordinator:
-                weather_entity_id = self.hub_coordinator.config_data.get(
-                    CONF_WEATHER_ENTITY
-                )
-                if weather_entity_id:
-                    weather_state = self.hass.states.get(weather_entity_id)
-                    if weather_state:
-                        try:
-                            outdoor_temp = float(
-                                weather_state.attributes.get("temperature", None)
-                            )
-                        except (ValueError, TypeError):
-                            pass
-
-            # Cache outdoor temperature for heating curve
-            self._cached_outdoor_temp = outdoor_temp
-
-            window_open = self._check_window_state(self.room_config.window_sensor_ids)
-
-            trv_readings = []
-            trv_temps = []
-            for trv_id in self.room_config.trv_entity_ids:
-                trv_state = self.hass.states.get(trv_id)
-                if trv_state:
-                    trv_current = trv_state.attributes.get("current_temperature")
-                    if trv_current:
-                        try:
-                            trv_temp = float(trv_current)
-                            trv_temps.append(trv_temp)
-                            trv_readings.append(
-                                SensorReading(
-                                    entity_id=trv_id,
-                                    temperature=trv_temp,
-                                    weight=TRV_SENSOR_WEIGHT,
-                                )
-                            )
-                        except (ValueError, TypeError):
-                            pass
-
-            # Calculate fused temperature
-            if main_temp is not None:
-                fused_temp = main_temp
-            elif trv_readings:
-                fused_temp = calculate_fused_temperature(trv_readings)
-            else:
-                # Only warn after initial updates (sensors need time to initialize)
-                if self._update_count >= 3:
-                    _LOGGER.warning(
-                        "No valid temperature for room %s", self.room_config.name
-                    )
-                fused_temp = None
-
-            # Calculate window state early (needed for target logic)
-            window_state = self._calculate_window_state(window_open)
-
-            # Determine Desired Target Temperature
-            # Priority:
-            # 1. Window Open / Safety cutoff (Frost Protection)
-            # 2. Away Mode (Frost Protection or Eco)
-            # 3. Outdoor Temperature Threshold (Frost Protection)
-            # 4. Manual Override
-            # 5. Schedule / Heating Curve
-
-            # Get base scheduled target (includes heating curve if enabled)
-            scheduled_target = self.get_scheduled_target()
-            desired_target = scheduled_target
-
-            _LOGGER.warning(
-                "Room %s: Step 1 - scheduled_target=%s, desired_target=%s",
-                self.room_config.name,
-                scheduled_target,
-                desired_target,
-            )
-
-            # Check for active override - but NOT in Manual Mode
-            # In Manual Mode, the user controls the TRV directly
-            hub_mode = self.get_hub_mode()
-            active_override = self.override_manager.get_active_override()
-            if active_override and hub_mode != "manual":
-                desired_target = active_override.temperature
-                _LOGGER.warning(
-                    "Room %s: Step 2 - Override active! override_temp=%.1f, desired_target=%s",
-                    self.room_config.name,
-                    active_override.temperature,
-                    desired_target,
-                )
-            elif active_override and hub_mode == "manual":
-                _LOGGER.warning(
-                    "Room %s: Step 2 - Override exists but ignored (Manual Mode)",
-                    self.room_config.name,
-                )
-
-            # Check defaults if no schedule and no override (e.g. Manual Hub Mode)
-            # In Manual Hub Mode, get_scheduled_target returns None.
-            # We explicitly do NOT enforce any target in Manual Mode.
-            enforce_target = True
-            if hub_mode == "manual":
-                # Manual Mode: Don't enforce anything, let user control TRV directly
-                enforce_target = False
-                _LOGGER.warning(
-                    "Room %s: Step 3 - Manual Mode, enforce_target=False",
-                    self.room_config.name,
-                )
-                # Read current TRV temperature for display only
-                for trv_id in self.room_config.trv_entity_ids:
-                    trv_state = self.hass.states.get(trv_id)
-                    if trv_state and "temperature" in trv_state.attributes:
-                        try:
-                            trv_temp = float(trv_state.attributes["temperature"])
-                            desired_target = trv_temp
-                            break
-                        except (ValueError, TypeError):
-                            continue
-                if desired_target is None:
-                    desired_target = 20.0  # Fallback for display
-            elif desired_target is None:
-                enforce_target = False
-                _LOGGER.warning(
-                    "Room %s: Step 3 - No target, enforce_target=False",
-                    self.room_config.name,
-                )
-                # Use current TRV setting as reference for display
-                for trv_id in self.room_config.trv_entity_ids:
-                    trv_state = self.hass.states.get(trv_id)
-                    if trv_state and trv_state.state == "heat" and "temperature" in trv_state.attributes:
-                        try:
-                            trv_temp = float(trv_state.attributes["temperature"])
-                            if trv_temp > 10.0:
-                                desired_target = trv_temp
-                                break
-                        except (ValueError, TypeError):
-                            continue
-                if desired_target is None:
-                    desired_target = 20.0  # Fallback for display
-
-            # 3. Outdoor Temperature Threshold - only if feature is explicitly enabled
-            # Note: dont_heat_below_outdoor = 0 means feature is disabled
-            _LOGGER.warning(
-                "Room %s: Step 4 - outdoor_temp=%s, dont_heat_below=%s",
-                self.room_config.name,
-                outdoor_temp,
-                self.room_config.dont_heat_below_outdoor,
-            )
-            if (
-                outdoor_temp is not None
-                and self.room_config.dont_heat_below_outdoor > 0
-                and outdoor_temp >= self.room_config.dont_heat_below_outdoor
-            ):
-                frost_protection = (
-                    self.hub_coordinator.get_frost_protection_temp()
-                    if self.hub_coordinator
-                    else DEFAULT_FROST_PROTECTION_TEMP
-                )
-                desired_target = frost_protection
-                enforce_target = True  # Safety overrides Manual Mode
-                _LOGGER.warning(
-                    "Room %s: Step 4 TRIGGERED - outdoor >= threshold, frost=%.1f",
-                    self.room_config.name,
-                    frost_protection,
-                )
-
-            # 2. Away Mode
-            away_active = (
-                self.hub_coordinator
-                and self.hub_coordinator.should_reduce_heating_for_away()
-            )
-            _LOGGER.warning(
-                "Room %s: Step 5 - away_active=%s",
-                self.room_config.name,
-                away_active,
-            )
-            if away_active:
-                frost_protection = self.hub_coordinator.get_frost_protection_temp()
-                desired_target = frost_protection
-                enforce_target = True
-                _LOGGER.warning(
-                    "Room %s: Step 5 TRIGGERED - away mode, frost=%.1f",
-                    self.room_config.name,
-                    frost_protection,
-                )
-
-            # 1. Window Open (Highest Priority)
-            _LOGGER.warning(
-                "Room %s: Step 6 - window_should_stop=%s",
-                self.room_config.name,
-                window_state.heating_should_stop,
-            )
-            if window_state.heating_should_stop:
-                frost_protection = (
-                    self.hub_coordinator.get_frost_protection_temp()
-                    if self.hub_coordinator
-                    else DEFAULT_FROST_PROTECTION_TEMP
-                )
-                # Or usage of specific window open temperature if added to config
-                desired_target = frost_protection
-                enforce_target = True
-                _LOGGER.warning(
-                    "Room %s: Step 6 TRIGGERED - window open, frost=%.1f",
-                    self.room_config.name,
-                    frost_protection,
-                )
-
-            current_target = desired_target
-
-            _LOGGER.warning(
-                "Room %s: FINAL TARGET DECISION - current_target=%s (type=%s), enforce_target=%s, desired_target=%s",
-                self.room_config.name,
-                current_target,
-                type(current_target).__name__,
-                enforce_target,
-                desired_target,
-            )
-
-            # Apply target to TRVs if needed
-            if enforce_target and current_target is not None:
-                await self._apply_trv_target(current_target)
-
-            # Get HVAC mode
-            hvac_mode = "heat"
-            for trv_id in self.room_config.trv_entity_ids:
-                trv_state = self.hass.states.get(trv_id)
-                if trv_state:
-                    hvac_mode = trv_state.state
-                    break
-
-            # Determine heating state with hysteresis and optional PID
-            _LOGGER.warning(
-                "Room %s: Heating decision - current_temp=%.1f, target=%.1f, use_hvac_off=%s",
-                self.room_config.name,
-                fused_temp if fused_temp else 0,
-                current_target if current_target else 0,
-                self.room_config.use_hvac_off_for_low_temp,
-            )
-            if current_target is not None and fused_temp is not None:
-                # If using PID controller, calculate PID adjustment
-                if isinstance(self.heating_controller, PIDHeatingController):
-                    # PID calculates adjustment based on error
-                    pid_adjustment = self.heating_controller.calculate_output(
-                        fused_temp, current_target
-                    )
-                    # PID output is used to determine heating intensity
-                    # For now, we use simple on/off based on PID output
-                    # Positive output = heating needed, negative = no heating
-                    should_heat = pid_adjustment > 0
-                    _LOGGER.debug(
-                        "Room %s: PID adjustment=%.2f°C (current=%.1f°C, target=%.1f°C, should_heat=%s)",
-                        self.room_config.name,
-                        pid_adjustment,
-                        fused_temp,
-                        current_target,
-                        should_heat,
-                    )
-                else:
-                    # Basic hysteresis-based control
-                    should_heat, _ = self.heating_controller.should_heat(
-                        fused_temp, current_target
-                    )
-                    _LOGGER.debug(
-                        "Room %s: Hysteresis control (current=%.1f°C, target=%.1f°C, should_heat=%s)",
-                        self.room_config.name,
-                        fused_temp,
-                        current_target,
-                        should_heat,
-                    )
-
-                # heating_active reflects TaDIY's decision, not just HVAC mode
-                # HVAC mode "heat" means TRV is configured to heat, not that it's actively heating
-                heating_active = should_heat and hvac_mode != "off"
-
-                _LOGGER.warning(
-                    "Room %s: Hysteresis result - should_heat=%s, heating_active=%s",
-                    self.room_config.name,
-                    should_heat,
-                    heating_active,
-                )
-
-                # For Moes TRVs: Apply HVAC mode based on heating decision
-                if (
-                    self.room_config.use_hvac_off_for_low_temp
-                    and enforce_target
-                    and current_target is not None
-                ):
-                    _LOGGER.warning(
-                        "Room %s: Moes TRV mode - applying target=%.1f with should_heat=%s",
-                        self.room_config.name,
-                        current_target,
-                        should_heat,
-                    )
-                    await self._apply_trv_target(
-                        current_target, should_heat=should_heat
-                    )
-                    # Update hvac_mode after applying (it may have changed)
-                    hvac_mode = "heat" if should_heat else "off"
-                    # Also update heating_active based on our decision
-                    heating_active = should_heat
-            else:
-                heating_active = False
-
-            # Update coupling manager with heating status (Phase 3.2)
-            if self.hub_coordinator and self.room_config.use_room_coupling:
-                self.hub_coordinator.room_coupling_manager.update_room_heating_status(
-                    room_name=self.room_config.name,
-                    is_heating=heating_active,
-                    current_temp=fused_temp,
-                    target_temp=current_target,
-                )
-
-            if heating_active and self.current_room_data:
-                # Check if we have previous data to calculate heating rate
-                prev_temp = self.current_room_data.current_temperature
-                prev_time = (
-                    self._last_temp_measurement_time
-                    if hasattr(self, "_last_temp_measurement_time")
-                    else None
-                )
-
-                if (
-                    prev_temp is not None
-                    and prev_time is not None
-                    and fused_temp is not None
-                ):
-                    # Calculate time since last measurement
-                    now = dt_util.utcnow()
-                    time_delta = (now - prev_time).total_seconds() / 60.0  # minutes
-
-                    # Only update if enough time has passed (at least 5 minutes)
-                    if time_delta >= 5.0:
-                        temp_increase = fused_temp - prev_temp
-
-                        # Only record if temperature is increasing (heating is working)
-                        if temp_increase > 0.01:  # Minimum 0.01°C increase
-                            try:
-                                self._heat_model.update_with_measurement(
-                                    temp_increase=temp_increase,
-                                    time_minutes=time_delta,
-                                )
-                                _LOGGER.debug(
-                                    "Room %s: Updated heating rate measurement "
-                                    "(%.2f°C -> %.2f°C over %.1f min, rate=%.2f°C/h)",
-                                    self.room_config.name,
-                                    prev_temp,
-                                    fused_temp,
-                                    time_delta,
-                                    self._heat_model.get_heating_rate(),
-                                )
-                                # Reset measurement time after successful update
-                                self._last_temp_measurement_time = now
-                            except ValueError as err:
-                                _LOGGER.debug(
-                                    "Room %s: Heating rate measurement rejected: %s",
-                                    self.room_config.name,
-                                    err,
-                                )
-
-            # Store current temperature and time for next measurement
-            if fused_temp is not None and heating_active:
-                if (
-                    not hasattr(self, "_last_temp_measurement_time")
-                    or self._last_temp_measurement_time is None
-                ):
-                    self._last_temp_measurement_time = dt_util.utcnow()
-
-            # Track cooling rate when heating is not active (thermal mass learning)
-            if fused_temp is not None:
-                # Start or continue cooling measurement
-                self._thermal_mass_model.start_cooling_measurement(
-                    fused_temp,
-                    heating_active,
-                )
-
-                # Update cooling rate if measurement is ongoing
-                if not heating_active:
-                    updated = self._thermal_mass_model.update_with_cooling_measurement(
-                        fused_temp,
-                        outdoor_temp,
-                    )
-                    if updated:
-                        # Save thermal mass model after successful learning
-                        await self.async_save_thermal_mass()
-
-            # Update PID auto-tuner if active
-            if fused_temp is not None and self.pid_autotuner.is_tuning_active():
-                tuned_params = self.pid_autotuner.update(fused_temp)
-                if tuned_params:
-                    # Auto-tuning complete
-                    kp, ki, kd = tuned_params
-                    _LOGGER.info(
-                        "Room %s: PID auto-tuning complete - Kp=%.3f, Ki=%.4f, Kd=%.3f",
-                        self.room_config.name,
-                        kp,
-                        ki,
-                        kd,
-                    )
-
-            # Check for expired overrides and restore scheduled temperatures
-            expired_entities = self.override_manager.check_expired_overrides()
-            if expired_entities:
-                # Save updated overrides
-                await self.async_save_overrides()
-
-                # For each expired override, restore scheduled temperature
-                scheduled_target = self.get_scheduled_target()
-                if scheduled_target is not None:
-                    for entity_id in expired_entities:
-                        _LOGGER.info(
-                            "Restoring scheduled temperature %.1f°C for %s after override expiry",
-                            scheduled_target,
-                            entity_id,
-                        )
-                        # This will be handled by the climate entity's async_set_temperature
-
-            # Get override status
-            override_count = len(self.override_manager._overrides)
-            override_active = override_count > 0
-
-            # Log final state for debugging
-            _LOGGER.debug(
-                "Room %s: Final state - target=%.1f°C, current=%.1f°C, "
-                "enforce=%s, heating_active=%s, override_active=%s",
-                self.room_config.name,
-                current_target or 0,
-                fused_temp or 0,
-                enforce_target,
-                heating_active,
-                override_active,
-            )
-
-            # Ensure we have a valid target temperature for RoomData
-            final_target = current_target if current_target is not None else 20.0
-
-            _LOGGER.warning(
-                "Room %s: Creating RoomData - final_target=%s, hvac_mode=%s",
-                self.room_config.name,
-                final_target,
-                hvac_mode,
-            )
-
-            self.current_room_data = RoomData(
-                room_name=self.room_config.name,
-                current_temperature=fused_temp or 20.0,
-                main_sensor_temperature=main_temp or 20.0,
-                trv_temperatures=trv_temps,
-                window_state=window_state,
-                outdoor_temperature=outdoor_temp,
-                target_temperature=final_target,
-                hvac_mode=hvac_mode,
-                humidity=humidity,
-                heating_active=heating_active,
-                heating_rate=self._heat_model.get_heating_rate(),
-                heating_rate_sample_count=self._heat_model.sample_count,
-                heating_rate_confidence=self._heat_model.get_confidence(),
-                override_count=override_count,
-                override_active=override_active,
-            )
-
-            # Increment update counter (used to suppress boot warnings)
-            self._update_count += 1
-
-            return self.current_room_data
-        except Exception as err:
-            _LOGGER.error("Error updating room %s data: %s", self.room_config.name, err)
-            raise UpdateFailed("Error reading room data: {}".format(err)) from err
-
-    def _get_sensor_value(self, entity_id: str | None) -> float | None:
-        """Get numeric value from sensor."""
-        if not entity_id:
-            return None
-        state = self.hass.states.get(entity_id)
-        if not state or state.state in ("unknown", "unavailable"):
-            return None
-        try:
-            return float(state.state)
-        except (ValueError, TypeError):
-            return None
-
-    def _check_window_state(self, window_entity_ids: list[str]) -> bool:
-        """Check if any window is open."""
-        if not window_entity_ids:
-            return False
-        for entity_id in window_entity_ids:
-            state = self.hass.states.get(entity_id)
-            if state and state.state == "on":
-                return True
-        return False
-
-    async def _apply_trv_target(
-        self, target: float, should_heat: bool | None = None
-    ) -> None:
-        """Apply target temperature to all TRVs in the room.
-
-        Args:
-            target: Target temperature in °C
-            should_heat: Optional heating state from hysteresis/PID controller
-        """
-        # Get frost protection temperature for comparison
-        frost_temp = (
-            self.hub_coordinator.get_frost_protection_temp()
-            if self.hub_coordinator
-            else DEFAULT_FROST_PROTECTION_TEMP
+        # 2. Get Hub and TRV states
+        hub_mode = self.get_hub_mode()
+        trv_state = self.trv_manager.get_current_trv_state()
+        
+        # 3. Handle Window Logic
+        window_state = self._calculate_window_state(window_open)
+        
+        # 4. Determine Target Temperature
+        scheduled_target = self.get_scheduled_target()
+        active_override = self.override_manager.get_active_override()
+        override_target = active_override.override_temp if active_override else None
+        
+        final_target, enforce_target = self.orchestrator.calculate_target_temperature(
+            scheduled_target=scheduled_target,
+            active_override_target=override_target,
+            hub_mode=hub_mode,
+            outdoor_temp=outdoor_temp,
+            window_should_stop=window_state.heating_should_stop
         )
 
-        for trv_id in self.room_config.trv_entity_ids:
-            try:
-                state = self.hass.states.get(trv_id)
-                if not state:
-                    continue
+        # 5. Inhibit selection bounce (Grace Period)
+        # If we are in grace period, we ignore the TRV's reported target and stick to what we sent
+        if self.orchestrator.is_in_grace_period():
+            self.debug("rooms", "Grace Period Active: Prioritizing target %.1f over TRV %.1f", 
+                       final_target, trv_state["target"])
+        else:
+            # If TRV target changed significantly and we AREN'T enforcing a schedule, 
+            # we should detect this as a manual change (echo detection)
+            # This is partly handled by setup_state_listeners, but we sync here too.
+            pass
 
-                current_trv_temp = state.attributes.get("temperature")
-                current_hvac_mode = state.state
+        # 6. Apply Target if needed
+        if enforce_target:
+            # Determine if we should heat (hysteresis/PID)
+            should_heat = self.orchestrator.calculate_heating_decision(
+                fused_temp=fused_temp,
+                target_temp=final_target,
+                hvac_mode=trv_state["mode"]
+            )
+            
+            await self.trv_manager.apply_target(final_target, should_heat=should_heat)
+            
+            # Re-read mode if it was potentially changed for Moes TRVs
+            if self.room_config.use_hvac_off_for_low_temp:
+                trv_state["mode"] = "heat" if should_heat else "off"
+                heating_active = should_heat
+            else:
+                heating_active = should_heat and trv_state["mode"] != "off"
+        else:
+            heating_active = False # Manual TRV control - TaDIY doesn't decide
 
-                # Convert to float for comparison
-                try:
-                    current_val = (
-                        float(current_trv_temp)
-                        if current_trv_temp is not None
-                        else None
-                    )
-                except (ValueError, TypeError):
-                    current_val = None
+        # 7. Update models (Learning)
+        if fused_temp is not None:
+             # Heat-up Model Tracking (Learning heating rate)
+             if heating_active:
+                 prev_temp = getattr(self, "_last_fused_temp", None)
+                 prev_time = getattr(self, "_last_temp_time", None)
+                 now = dt_util.utcnow()
+                 
+                 if prev_temp is not None and prev_time is not None:
+                     time_delta = (now - prev_time).total_seconds() / 60.0
+                     if time_delta >= 5.0:
+                         temp_increase = fused_temp - prev_temp
+                         if temp_increase > 0.01:
+                             try:
+                                 self._heat_model.update_with_measurement(temp_increase, time_delta)
+                             except ValueError:
+                                 pass
+                             self._last_temp_time = now
+                 
+                 if not getattr(self, "_last_temp_time", None):
+                     self._last_temp_time = now
+             
+             # Thermal Mass Model Tracking (Learning cooling rate)
+             self._thermal_mass_model.start_cooling_measurement(fused_temp, heating_active)
+             if not heating_active:
+                 if self._thermal_mass_model.update_with_cooling_measurement(fused_temp, outdoor_temp):
+                     self.hass.async_create_task(self.async_save_thermal_mass())
+             
+             self._last_fused_temp = fused_temp
 
-                # Moes TRV Mode: Use HVAC mode based on heating state
-                if self.room_config.use_hvac_off_for_low_temp:
-                    # Determine desired HVAC mode
-                    if target <= frost_temp:
-                        # Frost protection: Always off
-                        desired_hvac_mode = "off"
-                    elif should_heat is not None:
-                        # Use hysteresis/PID decision
-                        desired_hvac_mode = "heat" if should_heat else "off"
-                    else:
-                        # Fallback: Keep current mode or heat
-                        desired_hvac_mode = (
-                            current_hvac_mode
-                            if current_hvac_mode in ["heat", "off"]
-                            else "heat"
-                        )
-
-                    # Apply HVAC mode if changed
-                    if current_hvac_mode != desired_hvac_mode:
-                        await self.hass.services.async_call(
-                            "climate",
-                            "set_hvac_mode",
-                            {"entity_id": trv_id, "hvac_mode": desired_hvac_mode},
-                            blocking=False,
-                        )
-                        _LOGGER.debug(
-                            "TRV %s: Set HVAC mode to %s (target=%.1f°C, should_heat=%s)",
-                            trv_id,
-                            desired_hvac_mode.upper(),
-                            target,
-                            should_heat,
-                        )
-
-                    # Only set temperature if in heat mode
-                    if desired_hvac_mode == "heat":
-                        if current_val is None or abs(current_val - target) > 0.1:
-                            await self.hass.services.async_call(
-                                "climate",
-                                "set_temperature",
-                                {"entity_id": trv_id, "temperature": target},
-                                blocking=False,
-                            )
-                            _LOGGER.debug(
-                                "Applied target %.1f°C to TRV %s", target, trv_id
-                            )
-                            self._last_trv_targets[trv_id] = target
-                else:
-                    # Normal mode: Always set temperature
-                    if current_val is None or abs(current_val - target) > 0.1:
-                        await self.hass.services.async_call(
-                            "climate",
-                            "set_temperature",
-                            {"entity_id": trv_id, "temperature": target},
-                            blocking=False,
-                        )
-                        _LOGGER.debug("Applied target %.1f°C to TRV %s", target, trv_id)
-                        self._last_trv_targets[trv_id] = target
-
-            except Exception as err:
-                _LOGGER.warning(
-                    "Failed to set TRV %s to %.1f°C: %s", trv_id, target, err
-                )
+        # 8. Create RoomData
+        room_data = RoomData(
+            room_name=self.room_config.name,
+            current_temperature=fused_temp if fused_temp is not None else trv_state["target"],
+            main_sensor_temperature=self.sensor_manager._get_sensor_value(self.room_config.main_temp_sensor_id) or 0.0,
+            trv_temperatures=trv_state["all_targets"],
+            window_state=window_state,
+            outdoor_temperature=outdoor_temp,
+            target_temperature=final_target,
+            hvac_mode=trv_state["mode"],
+            humidity=humidity,
+            heating_active=heating_active,
+            heating_rate=self._heat_model.get_heating_rate(),
+            heating_rate_sample_count=self._heat_model.sample_count,
+            heating_rate_confidence=self._heat_model.get_confidence(),
+            override_active=active_override is not None,
+            override_count=1 if active_override else 0
+        )
+        
+        # Increment update counter
+        self._update_count += 1
+        
+        self.current_room_data = room_data
+        return room_data
 
     def _calculate_window_state(self, window_open: bool) -> WindowState:
         """Calculate current window state."""

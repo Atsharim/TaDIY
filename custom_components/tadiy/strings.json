@@ -112,7 +112,12 @@
           "early_start_max": "Max Early Start Duration (min)",
           "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
           "heating_curve_slope": "Heating Curve Slope",
-          "use_weather_prediction": "Enable Weather Prediction"
+          "use_weather_prediction": "Enable Weather Prediction",
+          "debug_rooms": "Debug: Room Logic",
+          "debug_hub": "Debug: Hub Logic",
+          "debug_panel": "Debug: Schedules Panel",
+          "debug_ui": "Debug: User Interface",
+          "debug_cards": "Debug: Dashboard Cards"
         },
         "data_description": {
           "weather_entity": "Weather entity for outdoor temperature and forecast data.",
