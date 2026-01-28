@@ -43,6 +43,8 @@ from .const import (
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
     CONF_USE_WEATHER_PREDICTION,
+    CONF_ADJACENT_ROOMS,
+    CONF_USE_ROOM_COUPLING,
     CONF_COUPLING_STRENGTH,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -89,7 +91,6 @@ from .core.location import LocationManager
 from .core.override import OverrideManager
 from .core.room import RoomConfig, RoomData
 from .core.schedule import ScheduleEngine
-from .core.temperature import SensorReading, calculate_fused_temperature
 from .core.weather_predictor import WeatherPredictor
 from .core.room_coupling import RoomCouplingManager
 from .core.window import WindowState
