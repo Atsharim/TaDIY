@@ -1485,16 +1485,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     self.room_config.name,
                 )
                 # Use current TRV setting as reference for display
+                # But only if TRV is in heat mode - ignore off mode values
                 for trv_id in self.room_config.trv_entity_ids:
                     trv_state = self.hass.states.get(trv_id)
-                    if trv_state and "temperature" in trv_state.attributes:
+                    if trv_state and trv_state.state == "heat" and "temperature" in trv_state.attributes:
                         try:
-                            desired_target = float(trv_state.attributes["temperature"])
-                            break
+                            trv_temp = float(trv_state.attributes["temperature"])
+                            # Only use if it's a reasonable temperature (not min_temp)
+                            if trv_temp > 10.0:
+                                desired_target = trv_temp
+                                break
                         except (ValueError, TypeError):
                             continue
                 if desired_target is None:
-                    desired_target = 20.0  # Fallback
+                    desired_target = 20.0  # Fallback for display in Manual mode
 
             # 3. Outdoor Temperature Threshold - only if feature is explicitly enabled
             # Note: dont_heat_below_outdoor = 0 means feature is disabled
@@ -1565,11 +1569,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
             current_target = desired_target
 
-            _LOGGER.info(
-                "Room %s: FINAL TARGET DECISION - current_target=%.1f, enforce_target=%s",
+            _LOGGER.warning(
+                "Room %s: FINAL TARGET DECISION - current_target=%s (type=%s), enforce_target=%s, desired_target=%s",
                 self.room_config.name,
-                current_target if current_target else 0,
+                current_target,
+                type(current_target).__name__,
                 enforce_target,
+                desired_target,
             )
 
             # Apply target to TRVs if needed
@@ -1762,6 +1768,16 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 override_active,
             )
 
+            # Ensure we have a valid target temperature for RoomData
+            final_target = current_target if current_target is not None else 20.0
+
+            _LOGGER.warning(
+                "Room %s: Creating RoomData - final_target=%s, hvac_mode=%s",
+                self.room_config.name,
+                final_target,
+                hvac_mode,
+            )
+
             self.current_room_data = RoomData(
                 room_name=self.room_config.name,
                 current_temperature=fused_temp or 20.0,
@@ -1769,7 +1785,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 trv_temperatures=trv_temps,
                 window_state=window_state,
                 outdoor_temperature=outdoor_temp,
-                target_temperature=current_target or 20.0,
+                target_temperature=final_target,
                 hvac_mode=hvac_mode,
                 humidity=humidity,
                 heating_active=heating_active,

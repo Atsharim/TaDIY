@@ -86,8 +86,15 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     def target_temperature(self) -> float | None:
         """Return the target temperature."""
         if not self.coordinator.data:
+            _LOGGER.warning("Climate %s: No coordinator data!", self._room_name)
             return None
-        return self.coordinator.data.target_temperature
+        target = self.coordinator.data.target_temperature
+        _LOGGER.warning(
+            "Climate %s: target_temperature property returning %s (from RoomData)",
+            self._room_name,
+            target,
+        )
+        return target
 
     @property
     def hvac_mode(self) -> HVACMode:
