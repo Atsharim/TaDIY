@@ -1415,8 +1415,23 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         
         # 4. Determine Target Temperature
         scheduled_target = self.get_scheduled_target()
+        
+        # Check for expired overrides first
+        expired = self.override_manager.check_expired_overrides()
+        if expired:
+            _LOGGER.warning("Room %s: Expired overrides cleared: %s", self.room_config.name, expired)
+        
         active_override = self.override_manager.get_active_override()
         override_target = active_override.override_temp if active_override else None
+        
+        _LOGGER.warning(
+            "Room %s: UPDATE CYCLE - hub_mode=%s, scheduled=%.1f, override=%s, commanded=%.1f",
+            self.room_config.name,
+            hub_mode,
+            scheduled_target or 0,
+            override_target,
+            self._commanded_target or 0
+        )
         
         final_target, enforce_target = self.orchestrator.calculate_target_temperature(
             scheduled_target=scheduled_target,
