@@ -143,12 +143,25 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         self.coordinator.notify_user_interaction()
 
         # Create override to prevent schedule from overwriting user's choice
+        # We always create an override if the target differs from schedule 
+        # OR if we are in manual mode (to ensure the manual choice is remembered)
         scheduled_target = self.coordinator.get_scheduled_target()
-        if scheduled_target is not None and abs(temperature - scheduled_target) > 0.2:
-            # User is setting a different temperature than scheduled
+        hub_mode = self.coordinator.get_hub_mode()
+        
+        # If no scheduled target (manual mode), we still want to store this as an override
+        # to ensure it's preserved through restarts and update cycles
+        should_create_override = False
+        if scheduled_target is None:
+            should_create_override = True
+        elif abs(temperature - scheduled_target) > 0.1:
+            should_create_override = True
+        elif hub_mode == "manual":
+            should_create_override = True
+
+        if should_create_override:
             timeout_mode = self.coordinator.get_override_timeout()
             next_change = self.coordinator.schedule_engine.get_next_schedule_change(
-                self.coordinator.room_config.name, self.coordinator.get_hub_mode()
+                self.coordinator.room_config.name, hub_mode
             )
             next_block_time = next_change[0] if next_change else None
 
@@ -156,17 +169,17 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             for trv_entity_id in self._trv_entity_ids:
                 self.coordinator.override_manager.create_override(
                     entity_id=trv_entity_id,
-                    scheduled_temp=scheduled_target,
+                    scheduled_temp=scheduled_target or 20.0,
                     override_temp=temperature,
                     timeout_mode=timeout_mode,
                     next_block_time=next_block_time,
                 )
             self.hass.async_create_task(self.coordinator.async_save_overrides())
             _LOGGER.info(
-                "Room %s: Created override for %.1f°C (scheduled was %.1f°C)",
+                "Room %s: Created/Updated override for %.1f°C (scheduled was %s)",
                 self._room_name,
                 temperature,
-                scheduled_target,
+                scheduled_target if scheduled_target is not None else "None (Manual Mode)",
             )
 
         # Get current room temperature for auto-calibration
