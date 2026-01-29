@@ -113,11 +113,8 @@
           "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
           "heating_curve_slope": "Heating Curve Slope",
           "use_weather_prediction": "Enable Weather Prediction",
-          "debug_rooms": "Debug: Room Logic",
-          "debug_hub": "Debug: Hub Logic",
-          "debug_panel": "Debug: Schedules Panel",
-          "debug_ui": "Debug: User Interface",
-          "debug_cards": "Debug: Dashboard Cards"
+          "global_window_open_timeout": "Window Open Timeout (seconds)",
+          "global_window_close_timeout": "Window Close Timeout (seconds)"
         },
         "data_description": {
           "weather_entity": "Weather entity for outdoor temperature and forecast data.",
@@ -135,7 +132,20 @@
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Global Settings"
+          "panel_settings": "Global Settings",
+          "debug_settings": "Debug Settings"
+        }
+      },
+      "debug_settings": {
+        "title": "Debug Settings",
+        "description": "{info}",
+        "data": {
+          "debug_enabled": "Enable Debug Logging",
+          "debug_categories": "Debug Categories"
+        },
+        "data_description": {
+          "debug_enabled": "Master switch to enable/disable all debug logging.",
+          "debug_categories": "Select which categories to log."
         }
       },
       "init_room": {

@@ -112,7 +112,9 @@
           "early_start_max": "Max Early Start Duration (min)",
           "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
           "heating_curve_slope": "Heating Curve Slope",
-          "use_weather_prediction": "Enable Weather Prediction"
+          "use_weather_prediction": "Enable Weather Prediction",
+          "global_window_open_timeout": "Window Open Timeout (seconds)",
+          "global_window_close_timeout": "Window Close Timeout (seconds)"
         },
         "data_description": {
           "weather_entity": "Weather entity for outdoor temperature and forecast data.",
@@ -120,7 +122,9 @@
           "early_start_offset": "Additional buffer minutes to start heating early.",
           "early_start_max": "Maximum pre-heating duration in minutes.",
           "heating_curve_slope": "Higher value = stronger target adjustment at low outdoor temps.",
-          "use_weather_prediction": "Pre-heat before cold fronts, reduce heating before warm fronts."
+          "use_weather_prediction": "Pre-heat before cold fronts, reduce heating before warm fronts.",
+          "global_window_open_timeout": "Grace period before stopping heating when window opens.",
+          "global_window_close_timeout": "Cooldown before resuming heating after window closes."
         }
       },
       "init_hub": {
@@ -130,7 +134,20 @@
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Hub Configuration"
+          "panel_settings": "Hub Configuration",
+          "debug_settings": "Debug Settings"
+        }
+      },
+      "debug_settings": {
+        "title": "Debug Settings",
+        "description": "{info}",
+        "data": {
+          "debug_enabled": "Enable Debug Logging",
+          "debug_categories": "Debug Categories"
+        },
+        "data_description": {
+          "debug_enabled": "Master switch to enable/disable all debug logging.",
+          "debug_categories": "Select which categories to log."
         }
       },
       "init_room": {
