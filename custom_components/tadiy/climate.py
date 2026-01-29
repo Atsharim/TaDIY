@@ -15,7 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, OVERRIDE_TIMEOUT_NEVER
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -142,45 +142,48 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         # Notify coordinator of user interaction for grace period
         self.coordinator.notify_user_interaction()
 
-        # Create override to prevent schedule from overwriting user's choice
-        # We always create an override if the target differs from schedule 
-        # OR if we are in manual mode (to ensure the manual choice is remembered)
-        scheduled_target = self.coordinator.get_scheduled_target()
+        # Unified override logic: same as hardware changes
         hub_mode = self.coordinator.get_hub_mode()
         
-        # If no scheduled target (manual mode), we still want to store this as an override
-        # to ensure it's preserved through restarts and update cycles
-        should_create_override = False
-        if scheduled_target is None:
-            should_create_override = True
-        elif abs(temperature - scheduled_target) > 0.1:
-            should_create_override = True
+        # Determine reference value and timeout based on mode
+        if hub_mode == "off":
+            # Off mode: 2h temporary override
+            reference_target = self.coordinator.hub_coordinator.get_frost_protection_temp() if self.coordinator.hub_coordinator else 5.0
+            override_timeout = "2h"
+            next_block_time = None
         elif hub_mode == "manual":
-            should_create_override = True
-
-        if should_create_override:
-            timeout_mode = self.coordinator.get_override_timeout()
+            # Manual mode: permanent override
+            reference_target = self.coordinator._commanded_target or 20.0
+            override_timeout = OVERRIDE_TIMEOUT_NEVER
+            next_block_time = None
+        else:
+            # Schedule mode: use scheduled target and configured timeout
+            reference_target = self.coordinator.get_scheduled_target() or 20.0
+            override_timeout = self.coordinator.get_override_timeout()
             next_change = self.coordinator.schedule_engine.get_next_schedule_change(
                 self.coordinator.room_config.name, hub_mode
             )
             next_block_time = next_change[0] if next_change else None
 
-            # Create override for the room (using first TRV as reference)
-            for trv_entity_id in self._trv_entity_ids:
-                self.coordinator.override_manager.create_override(
-                    entity_id=trv_entity_id,
-                    scheduled_temp=scheduled_target or 20.0,
-                    override_temp=temperature,
-                    timeout_mode=timeout_mode,
-                    next_block_time=next_block_time,
-                )
-            self.hass.async_create_task(self.coordinator.async_save_overrides())
-            _LOGGER.info(
-                "Room %s: Created/Updated override for %.1f°C (scheduled was %s)",
-                self._room_name,
-                temperature,
-                scheduled_target if scheduled_target is not None else "None (Manual Mode)",
+        # Create override for all TRVs in the room
+        for trv_entity_id in self._trv_entity_ids:
+            self.coordinator.override_manager.create_override(
+                entity_id=trv_entity_id,
+                scheduled_temp=reference_target,
+                override_temp=temperature,
+                timeout_mode=override_timeout,
+                next_block_time=next_block_time,
             )
+        self.hass.async_create_task(self.coordinator.async_save_overrides())
+        _LOGGER.info(
+            "Room %s: Created override in %s mode (reference=%.1f, target=%.1f, timeout=%s)",
+            self._room_name,
+            hub_mode,
+            reference_target,
+            temperature,
+            override_timeout,
+        )
+
 
         # Get current room temperature for auto-calibration
         room_temp = (

@@ -79,6 +79,7 @@ from .const import (
     DOMAIN,
     MAX_CUSTOM_MODES,
     OVERRIDE_TIMEOUT_ALWAYS,
+    OVERRIDE_TIMEOUT_NEVER,
     STORAGE_KEY,
     STORAGE_KEY_SCHEDULES,
     STORAGE_VERSION,
@@ -418,14 +419,38 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         return self.hub_mode
 
     def set_hub_mode(self, mode: str) -> None:
-        """Set hub mode."""
+        """Set hub mode and clear all room overrides."""
         if mode in self.custom_modes:
+            old_mode = self.hub_mode
             self.hub_mode = mode
             _LOGGER.debug("Hub mode set to: %s", mode)
+            
+            # Clear all room overrides on mode change
+            if old_mode != mode:
+                self._clear_all_room_overrides()
         else:
             _LOGGER.warning(
                 "Invalid hub mode: %s (available: %s)", mode, self.custom_modes
             )
+
+    def _clear_all_room_overrides(self) -> None:
+        """Clear overrides in all room coordinators on mode change."""
+        from . import DOMAIN
+        
+        count = 0
+        for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and entry_data.get("type") == "room":
+                coordinator = entry_data.get("coordinator")
+                if coordinator and hasattr(coordinator, "override_manager"):
+                    cleared = coordinator.override_manager.clear_all_overrides()
+                    count += cleared
+                    if cleared > 0:
+                        # Persist the cleared state
+                        self.hass.async_create_task(coordinator.async_save_overrides())
+        
+        if count > 0:
+            _LOGGER.info("Mode change: Cleared %d override(s) across all rooms", count)
+
 
     def get_custom_modes(self) -> list[str]:
         """Get list of available custom modes."""
@@ -1324,12 +1349,22 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         if not new_state or not old_state:
             return
 
+        # Context-based echo detection
+        # If this event was caused by our own command, ignore it
+        if self.trv_manager.is_own_context(event.context):
+            _LOGGER.debug(
+                "TRV %s: Ignoring echo of our own command (context match)",
+                entity_id
+            )
+            return
+
         # Get temperature attribute
         new_temp_attr = new_state.attributes.get("temperature")
         old_temp_attr = old_state.attributes.get("temperature")
 
         if new_temp_attr is None or old_temp_attr is None:
             return
+
 
         try:
             new_temp = float(new_temp_attr)
@@ -1341,16 +1376,33 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         if abs(new_temp - old_temp) < 0.1:
             return
 
-        # Get scheduled target
-        scheduled_target = self.get_scheduled_target()
-        if scheduled_target is None:
+        # Get hub mode to determine reference value and timeout
+        hub_mode = self.get_hub_mode()
+        
+        # Determine reference value based on mode
+        if hub_mode == "off":
+            # Off mode: reference is frost protection
+            reference_target = self.hub_coordinator.get_frost_protection_temp() if self.hub_coordinator else 5.0
+            override_timeout = "2h"  # 2 hour temporary override in off mode
+        elif hub_mode == "manual":
+            # Manual mode: reference is last commanded target
+            reference_target = self._commanded_target
+            override_timeout = OVERRIDE_TIMEOUT_NEVER  # Never expires in manual mode
+        else:
+            # Schedule mode: reference is scheduled target
+            reference_target = self.get_scheduled_target()
+            override_timeout = self.get_override_timeout()
+        
+        # If no reference value available, cannot create override
+        if reference_target is None:
+            _LOGGER.debug(
+                "TRV %s: No reference temperature available for override detection",
+                entity_id
+            )
             return
 
-        # Check timeout mode
-        timeout_mode = self.get_override_timeout()
-
-        # If timeout mode is "always", reject manual overrides
-        if timeout_mode == OVERRIDE_TIMEOUT_ALWAYS:
+        # If timeout mode is "always", reject manual overrides (only in schedule mode)
+        if hub_mode not in ("manual", "off") and override_timeout == OVERRIDE_TIMEOUT_ALWAYS:
             _LOGGER.info(
                 "Manual override detected for %s but timeout mode is 'always', "
                 "will restore scheduled temperature",
@@ -1359,25 +1411,31 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # Schedule restoration in next update cycle
             return
 
-        # Check if this is a manual override (different from scheduled)
-        if abs(new_temp - scheduled_target) > 0.2:
+        # Check if this is a manual override (different from reference)
+        if abs(new_temp - reference_target) > 0.2:
             # Store last known target to detect TaDIY vs manual changes
             last_known = self._last_trv_targets.get(entity_id)
 
             # Only create override if this wasn't set by TaDIY
             if last_known is None or abs(new_temp - last_known) > 0.2:
-                # Get next schedule block time for timeout calculation
-                next_change = self.schedule_engine.get_next_schedule_change(
-                    self.room_config.name, self.get_hub_mode()
-                )
-                next_block_time = next_change[0] if next_change else None
+                # Get next schedule block time for timeout calculation (only relevant for schedule mode)
+                next_block_time = None
+                if hub_mode not in ("manual", "off"):
+                    next_change = self.schedule_engine.get_next_schedule_change(
+                        self.room_config.name, hub_mode
+                    )
+                    next_block_time = next_change[0] if next_change else None
 
                 # Create override record
+                _LOGGER.info(
+                    "TRV %s: Creating override in %s mode (reference=%.1f, override=%.1f, timeout=%s)",
+                    entity_id, hub_mode, reference_target, new_temp, override_timeout
+                )
                 self.override_manager.create_override(
                     entity_id=entity_id,
-                    scheduled_temp=scheduled_target,
+                    scheduled_temp=reference_target,
                     override_temp=new_temp,
-                    timeout_mode=timeout_mode,
+                    timeout_mode=override_timeout,
                     next_block_time=next_block_time,
                 )
 
@@ -1386,6 +1444,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # Update last known target
         self._last_trv_targets[entity_id] = new_temp
+
 
     def check_window_override(self, current_target: float) -> bool:
         """Check if window open overrides heating."""
@@ -1461,11 +1520,21 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # 6. Apply Target if needed and store commanded target
         if enforce_target and final_target is not None:
-            # Determine if we should heat (hysteresis/PID)
+            # Determine if we should heat based on temperature demand
+            # Pass "heat" as intended mode since we ARE enforcing a target
+            # (the decision should be based on temp difference, not current TRV state)
             should_heat = self.orchestrator.calculate_heating_decision(
                 fused_temp=fused_temp,
                 target_temp=final_target,
-                hvac_mode=trv_state["mode"]
+                hvac_mode="heat"  # We intend to heat when enforcing a target
+            )
+            
+            _LOGGER.warning(
+                "Room %s: Heating decision - fused=%.1f, target=%.1f, should_heat=%s",
+                self.room_config.name,
+                fused_temp or 0,
+                final_target,
+                should_heat
             )
             
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)
@@ -1474,12 +1543,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             self._commanded_target = final_target
             self._commanded_hvac_mode = "heat" if should_heat else "off"
             
-            # Re-read mode if it was potentially changed for Moes TRVs
-            if self.room_config.use_hvac_off_for_low_temp:
-                trv_state["mode"] = "heat" if should_heat else "off"
-                heating_active = should_heat
-            else:
-                heating_active = should_heat and trv_state["mode"] != "off"
+            # Heating is active based on our decision, not TRV state
+            heating_active = should_heat
         else:
             # Manual mode or no enforcement - use TRV's current target
             self._commanded_target = trv_state["target"]
