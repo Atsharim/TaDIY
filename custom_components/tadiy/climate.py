@@ -212,10 +212,11 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                         trv_entity_id, trv_temp, room_temp
                     )
 
-                # Get calibrated target
+                # Get calibrated target with offset compensation
                 calibrated_temp = (
                     self.coordinator.calibration_manager.get_calibrated_target(
-                        trv_entity_id, temperature, room_temp, trv_temp
+                        trv_entity_id, temperature, room_temp, trv_temp, 
+                        max_temp=self.max_temp
                     )
                 )
 

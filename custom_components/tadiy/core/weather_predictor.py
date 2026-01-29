@@ -85,6 +85,7 @@ class WeatherPredictor:
     async def async_update_forecast(self) -> bool:
         """
         Update weather forecast from Home Assistant.
+        Uses get_forecasts service for HA 2024+, falls back to attribute.
 
         Returns:
             True if forecast was updated successfully
@@ -100,8 +101,30 @@ class WeatherPredictor:
             )
             return False
 
-        # Get forecast attribute
-        forecast_data = weather_state.attributes.get("forecast")
+        forecast_data = None
+
+        # Try new get_forecasts service first (HA 2024+)
+        try:
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": self.weather_entity_id, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
+            if response and self.weather_entity_id in response:
+                forecast_data = response[self.weather_entity_id].get("forecast", [])
+                _LOGGER.debug("Got forecast via get_forecasts service: %d entries", 
+                              len(forecast_data) if forecast_data else 0)
+        except Exception as e:
+            _LOGGER.debug("get_forecasts service failed, trying legacy attribute: %s", e)
+
+        # Fallback to legacy forecast attribute
+        if not forecast_data:
+            forecast_data = weather_state.attributes.get("forecast")
+            if forecast_data:
+                _LOGGER.debug("Got forecast via legacy attribute: %d entries", len(forecast_data))
+
         if not forecast_data:
             _LOGGER.debug("No forecast data available from %s", self.weather_entity_id)
             return False
