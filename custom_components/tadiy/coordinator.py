@@ -1287,6 +1287,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
         )
 
+    def get_current_temperature(self) -> float | None:
+        """Get current room temperature (fused from all sensors)."""
+        if hasattr(self, 'current_room_data') and self.current_room_data:
+            return self.current_room_data.current_temperature
+        return getattr(self, '_last_fused_temp', None)
+
     def get_scheduled_target(self) -> float | None:
         """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
         mode = self.get_hub_mode()
