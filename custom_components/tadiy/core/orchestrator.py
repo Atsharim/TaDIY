@@ -62,10 +62,11 @@ class RoomOrchestrator:
             self.coordinator.debug("rooms", "Target: Window open - enforcing frost protection %.1f°C", frost_protection)
             return frost_protection, True
 
-        # 2. Away Mode (Hub level away)
+        # 2. Away Mode (Hub level away) - use room's away temperature
         if self.coordinator.hub_coordinator and self.coordinator.hub_coordinator.should_reduce_heating_for_away():
-            self.coordinator.debug("rooms", "Target: Away mode - enforcing frost protection %.1f°C", frost_protection)
-            return frost_protection, True
+            away_temp = self.room_config.away_temperature
+            self.coordinator.debug("rooms", "Target: Away mode - enforcing away temperature %.1f°C", away_temp)
+            return away_temp, True
 
         # 3. Outdoor Temperature Threshold (Heat below outside)
         if (

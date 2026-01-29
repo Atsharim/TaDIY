@@ -292,6 +292,7 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await room_coordinator.async_load_overrides()
     await room_coordinator.async_load_feature_settings()
     await room_coordinator.async_load_thermal_mass()
+    await room_coordinator.async_load_overshoot()
     await room_coordinator.async_config_entry_first_refresh()
 
     # Set up state listeners for override detection

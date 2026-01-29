@@ -713,6 +713,16 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_calibrations_{entry_id}",
         )
 
+        # Overshoot Learning Manager
+        from .core.overshoot import OvershootManager
+
+        self.overshoot_manager = OvershootManager()
+        self.overshoot_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"tadiy_overshoot_{entry_id}",
+        )
+
         # Override Manager
         self.override_manager = OverrideManager()
         self.override_store = Store(
@@ -973,6 +983,35 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error(
                 "Failed to save calibrations for %s: %s", self.room_config.name, err
+            )
+
+    async def async_load_overshoot(self) -> None:
+        """Load overshoot learning data from storage."""
+        data = await self.overshoot_store.async_load()
+        if not data:
+            _LOGGER.info(
+                "No overshoot data found for room: %s (using defaults)",
+                self.room_config.name,
+            )
+            return
+
+        try:
+            self.overshoot_manager.load_from_dict(data)
+            _LOGGER.debug("Loaded overshoot data for room: %s", self.room_config.name)
+        except (ValueError, KeyError) as err:
+            _LOGGER.warning(
+                "Failed to load overshoot data for %s: %s", self.room_config.name, err
+            )
+
+    async def async_save_overshoot(self) -> None:
+        """Save overshoot learning data to storage."""
+        try:
+            data = self.overshoot_manager.to_dict()
+            await self.overshoot_store.async_save(data)
+            _LOGGER.debug("Saved overshoot data for room: %s", self.room_config.name)
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to save overshoot data for %s: %s", self.room_config.name, err
             )
 
     async def async_load_overrides(self) -> None:
@@ -1320,6 +1359,27 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 )
                 base_target = adjusted
 
+        # Apply overshoot compensation if learned (helps On/Off TRVs and old radiators)
+        if base_target is not None and hasattr(self, 'overshoot_manager'):
+            current_temp = self.get_current_temperature()
+            outdoor_temp = self._cached_outdoor_temp
+            
+            # Update overshoot tracking with current temperature
+            self.overshoot_manager.update_temperature(
+                self.room_config.name, current_temp, outdoor_temp
+            )
+            
+            # Get compensated target
+            compensated = self.overshoot_manager.get_compensated_target(
+                self.room_config.name, base_target
+            )
+            if abs(compensated - base_target) > 0.05:
+                _LOGGER.debug(
+                    "Room %s: Overshoot compensation applied: base=%.1f°C, compensated=%.1f°C",
+                    self.room_config.name, base_target, compensated
+                )
+                base_target = compensated
+
         return base_target
 
     def setup_state_listeners(self) -> None:
@@ -1538,6 +1598,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             )
             
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)
+            
+            # Track overshoot learning - start cycle when heating begins
+            if hasattr(self, 'overshoot_manager') and should_heat and fused_temp is not None:
+                self.overshoot_manager.start_heating_cycle(
+                    self.room_config.name, fused_temp, final_target
+                )
+            elif hasattr(self, 'overshoot_manager') and not should_heat:
+                self.overshoot_manager.end_heating_cycle(self.room_config.name)
             
             # Command and Remember: Store what we just commanded
             self._commanded_target = final_target

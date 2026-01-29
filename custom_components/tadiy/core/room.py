@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.util import dt as dt_util
 
 from ..const import (
+    DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_HEATING_RATE,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
@@ -60,6 +61,7 @@ class RoomConfig:
     use_room_coupling: bool = False  # Multi-room heat coupling
     adjacent_rooms: list[str] = field(default_factory=list)  # Names of adjacent rooms
     coupling_strength: float = 0.5  # Heat coupling factor (0.0-1.0)
+    away_temperature: float = DEFAULT_AWAY_TEMPERATURE  # Per-room away mode temperature
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -108,6 +110,7 @@ class RoomConfig:
             "use_room_coupling": self.use_room_coupling,
             "adjacent_rooms": self.adjacent_rooms,
             "coupling_strength": self.coupling_strength,
+            "away_temperature": self.away_temperature,
         }
 
     @classmethod
@@ -146,6 +149,7 @@ class RoomConfig:
             use_room_coupling=data.get("use_room_coupling", False),
             adjacent_rooms=data.get("adjacent_rooms", []),
             coupling_strength=data.get("coupling_strength", 0.5),
+            away_temperature=data.get("away_temperature", DEFAULT_AWAY_TEMPERATURE),
         )
 
 

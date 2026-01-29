@@ -106,8 +106,8 @@ CONF_SCHEDULE_TEMP: Final = "temperature"
 
 # Default values
 DEFAULT_NAME: Final = "TaDIY Hub"
-DEFAULT_WINDOW_OPEN_TIMEOUT: Final = 300  # 5 minutes
-DEFAULT_WINDOW_CLOSE_TIMEOUT: Final = 180  # 3 minutes
+DEFAULT_WINDOW_OPEN_TIMEOUT: Final = 60  # 1 minute grace period
+DEFAULT_WINDOW_CLOSE_TIMEOUT: Final = 300  # 5 minutes cooldown
 DEFAULT_DONT_HEAT_BELOW: Final = (
     0.0  # 0 = disabled (don't heat when outdoor temp >= this)
 )
@@ -120,7 +120,11 @@ DEFAULT_EARLY_START_MAX: Final = 120  # 2 hours max pre-heat
 DEFAULT_MIN_HEATING_RATE: Final = 0.5  # °C/h - für Options Flow
 DEFAULT_MAX_HEATING_RATE: Final = 3.0  # °C/h - für Options Flow
 DEFAULT_HEATING_RATE: Final = 1.0
-DEFAULT_FROST_PROTECTION_TEMP: Final = 12.0  # DEBUG: Raised to identify if this is the source
+DEFAULT_FROST_PROTECTION_TEMP: Final = 12.0
+DEFAULT_AWAY_TEMPERATURE: Final = 17.0  # Per-room away mode temperature
+
+# Away temperature configuration (Room-level)
+CONF_AWAY_TEMPERATURE: Final = "away_temperature"
 
 # Heating rate limits (validation boundaries)
 MIN_HEATING_RATE: Final = 0.05  # Absolute minimum (°C/h)
