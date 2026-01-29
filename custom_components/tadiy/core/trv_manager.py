@@ -124,13 +124,6 @@ class TrvManager:
                     # Standard TRVs: Set mode based on heating decision
                     desired_hvac = "heat" if should_heat else "off"
                 
-                # Track what we're commanding
-                self._last_commanded[trv_id] = {
-                    "hvac_mode": desired_hvac,
-                    "temperature": target if desired_hvac == "heat" else None,
-                    "timestamp": self._last_command_time,
-                }
-                
                 # Apply HVAC mode if changed
                 if current_hvac != desired_hvac:
                     _LOGGER.info(
@@ -185,6 +178,13 @@ class TrvManager:
                             blocking=False,
                             context=self._last_command_context,
                         )
+
+                # Track what we commanded (using the FINAL CALIBRATED value)
+                self._last_commanded[trv_id] = {
+                    "hvac_mode": desired_hvac,
+                    "temperature": calibrated if desired_hvac == "heat" else None,
+                    "timestamp": self._last_command_time,
+                }
                         
             except Exception as err:
                 _LOGGER.error("Failed to apply target to TRV %s: %s", trv_id, err)
