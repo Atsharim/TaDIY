@@ -1443,6 +1443,23 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         if abs(new_temp - old_temp) < 0.1:
             return
 
+        # Check if the new temperature matches what we last commanded (Calibrated Echo Detection)
+        # This is critical because we might have sent a calibrated value (e.g. 26) 
+        # that differs from the schedule (e.g. 21). We shouldn't treat 26 as a manual override
+        # if 26 is exactly what we asked for.
+        last_commanded = self.trv_manager.get_last_commanded(entity_id)
+        if last_commanded and last_commanded.get("temperature") is not None:
+             last_sent_temp = last_commanded["temperature"]
+             # If new temp matches last sent command, it's just the TRV obeying us
+             if abs(new_temp - last_sent_temp) < 0.2:
+                 _LOGGER.debug(
+                     "TRV %s: State matches last commanded value (%.1f), ignoring as echo", 
+                     entity_id, last_sent_temp
+                 )
+                 # Update known state to prevent future false positives
+                 self._last_trv_targets[entity_id] = new_temp
+                 return
+        
         # Get hub mode to determine reference value and timeout
         hub_mode = self.get_hub_mode()
         
