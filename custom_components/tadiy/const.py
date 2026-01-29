@@ -138,9 +138,9 @@ MAX_HYSTERESIS: Final = 2.0  # Maximum hysteresis
 # TRV Calibration (automatic by default as per user preference)
 CONF_TRV_CALIBRATION_MODE: Final = "trv_calibration_mode"
 DEFAULT_TRV_CALIBRATION_MODE: Final = "auto"  # auto | manual | disabled
-DEFAULT_TRV_MULTIPLIER: Final = 1.0
-MIN_TRV_MULTIPLIER: Final = 0.5
-MAX_TRV_MULTIPLIER: Final = 2.0
+DEFAULT_TRV_OFFSET: Final = 0.0
+MIN_TRV_OFFSET: Final = -15.0
+MAX_TRV_OFFSET: Final = 15.0
 DEFAULT_TRV_OFFSET: Final = 0.0  # Only used in manual mode
 MIN_TRV_OFFSET: Final = -10.0
 MAX_TRV_OFFSET: Final = 10.0

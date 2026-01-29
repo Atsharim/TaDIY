@@ -22,7 +22,6 @@ from .const import (
     ATTR_HEATING_RATE,
     ATTR_LOCATION_OVERRIDE,
     ATTR_MODE,
-    ATTR_MULTIPLIER,
     ATTR_OFFSET,
     ATTR_ROOM,
     ATTR_SCHEDULE_TYPE,
@@ -36,12 +35,10 @@ from .const import (
     MAX_BOOST_DURATION,
     MAX_BOOST_TEMP,
     MAX_HEATING_RATE,
-    MAX_TRV_MULTIPLIER,
     MAX_TRV_OFFSET,
     MIN_BOOST_DURATION,
     MIN_BOOST_TEMP,
     MIN_HEATING_RATE,
-    MIN_TRV_MULTIPLIER,
     MIN_TRV_OFFSET,
     SERVICE_BOOST_ALL_ROOMS,
     SERVICE_CLEAR_OVERRIDE,
@@ -116,9 +113,6 @@ SERVICE_SET_TRV_CALIBRATION_SCHEMA = vol.Schema(
         vol.Optional(ATTR_MODE): vol.In(["auto", "manual", "disabled"]),
         vol.Optional(ATTR_OFFSET): vol.All(
             vol.Coerce(float), vol.Range(min=MIN_TRV_OFFSET, max=MAX_TRV_OFFSET)
-        ),
-        vol.Optional(ATTR_MULTIPLIER): vol.All(
-            vol.Coerce(float), vol.Range(min=MIN_TRV_MULTIPLIER, max=MAX_TRV_MULTIPLIER)
         ),
     }
 )
@@ -521,7 +515,7 @@ async def async_register_services(
         entity_id = call.data.get(ATTR_ENTITY_ID)
         mode = call.data.get(ATTR_MODE)
         offset = call.data.get(ATTR_OFFSET)
-        multiplier = call.data.get(ATTR_MULTIPLIER)
+        offset = call.data.get(ATTR_OFFSET)
 
         # Find room coordinator that manages this TRV
         for entry_id, data in hass.data[DOMAIN].items():
@@ -537,10 +531,6 @@ async def async_register_services(
                     # Update offset (manual mode)
                     if offset is not None:
                         cal_mgr.set_manual_offset(entity_id, offset)
-
-                    # Update multiplier (auto mode fine-tuning)
-                    if multiplier is not None:
-                        cal_mgr.set_multiplier(entity_id, multiplier)
 
                     await room_coord.async_save_calibrations()
                     _LOGGER.info("TRV calibration updated for %s", entity_id)

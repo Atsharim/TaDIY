@@ -53,27 +53,35 @@ class TRVCalibration:
         Returns:
             Calibrated target for TRV
         """
+        # If disabled, just pass through
         if self.mode == "disabled":
             return round(target_temp, 1)
 
+        # If manual, apply fixed offset
         if self.mode == "manual":
-            # Manual mode: apply fixed offset
             calibrated = target_temp + self.offset
             return round(calibrated, 1)
 
-        if self.mode == "auto":
-            # Auto mode: apply multiplier based on sensor discrepancy
-            if room_temp is not None and trv_temp is not None and trv_temp > 0:
-                # Calculate correction using multiplier
-                # If TRV reads higher than room (near radiator): multiplier < 1.0
-                # If TRV reads lower than room: multiplier > 1.0
-                # Correction = target * multiplier
-                calibrated = target_temp * self.multiplier
-                return round(calibrated, 1)
-            else:
-                # Fallback: no calibration if sensors unavailable
-                return round(target_temp, 1)
-
+        # Auto mode: Determine difference between TRV internal and Room Actual
+        # Formula: Target_TRV = Target_Room + (TRV_Temp - Room_Temp)
+        # Example: Target 21, TRV sees 25, Room is 19.
+        # Difference = 25 - 19 = 6 deg.
+        # We need the TRV to "feel" 25 but work towards 21. TRV Logic thinks 21 is attained when it feels 21.
+        # It feels 25. So we must ask for 21 + 6 = 27 (roughly).
+        # Actually: If we want Room to contain 21 heat, and TRV is hot (25), we need to set TRV to:
+        # Target + (TRV - Room).
+        # Setpoint = 21 + (25 - 19) = 27.
+        
+        if room_temp is not None and trv_temp is not None:
+            diff = trv_temp - room_temp
+            
+            # Update internal offset for tracking
+            self.offset = diff
+            
+            # Apply dynamic offset
+            calibrated = target_temp + diff
+            return round(calibrated, 1)
+            
         return round(target_temp, 1)
 
     def to_dict(self) -> dict[str, Any]:
@@ -223,21 +231,17 @@ class CalibrationManager:
         # No room sensor: pass target through unchanged
         return round(target_temp, 1)
 
-    def update_auto_calibration(
-        self,
-        entity_id: str,
-        trv_temp: float,
-        room_temp: float,
+    def update_calibration(
+        self, entity_id: str, trv_temp: float, room_temp: float
     ) -> None:
         """
-        Update automatic calibration multiplier based on sensor discrepancy.
-
-        Multiplier Logic:
-        - multiplier = room_temp / trv_temp
-        - If TRV reads 22°C but room is 20°C: multiplier = 20/22 = 0.91
-        - If TRV reads 18°C but room is 20°C: multiplier = 20/18 = 1.11
-        - Apply dampening to prevent overcorrection
-
+        Update automatic calibration offset based on sensor discrepancy.
+        
+        Offset Logic:
+        - diff = trv_temp - room_temp
+        - Apply dampening (smoothing)
+        - Save new offset
+        
         Args:
             entity_id: TRV entity ID
             trv_temp: Current TRV sensor reading
@@ -258,23 +262,20 @@ class CalibrationManager:
         if trv_temp <= 0 or room_temp <= 0:
             return
 
-        # Calculate raw multiplier
-        raw_multiplier = room_temp / trv_temp
+        # Calculate current difference
+        raw_diff = trv_temp - room_temp
 
-        # Apply exponential moving average for smoothing (dampening)
-        if cal.multiplier == 1.0:
-            # First calibration
-            cal.multiplier = raw_multiplier
+        # Dampening (smoothing)
+        # If offset is 0.0 (initial), set directly
+        if cal.offset == 0.0:
+             cal.offset = raw_diff
         else:
-            # Smooth update
-            cal.multiplier = (
-                1 - DAMPENING
-            ) * cal.multiplier + DAMPENING * raw_multiplier
+             # Smooth usage: 80% old value, 20% new value
+             cal.offset = (1 - DAMPENING) * cal.offset + DAMPENING * raw_diff
 
-        # Clamp to limits
-        cal.multiplier = max(
-            MIN_TRV_MULTIPLIER, min(MAX_TRV_MULTIPLIER, cal.multiplier)
-        )
+        # Clamp check if needed (e.g. max +/- 15 degrees)
+        # Using 15.0 as a safe upper bound for offset
+        cal.offset = max(min(cal.offset, 15.0), -15.0)
 
         # Update tracking
         cal.last_room_temp = room_temp
@@ -283,12 +284,12 @@ class CalibrationManager:
 
         _LOGGER.debug(
             "TRV %s auto-calibration: room=%.1f°C, trv=%.1f°C, "
-            "raw_multiplier=%.3f, smoothed_multiplier=%.3f",
+            "raw_diff=%.1f, offset=%.1f",
             entity_id,
             room_temp,
             trv_temp,
-            raw_multiplier,
-            cal.multiplier,
+            raw_diff,
+            cal.offset,
         )
 
     def get_calibration_info(self, entity_id: str) -> dict[str, Any] | None:
