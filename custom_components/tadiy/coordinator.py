@@ -1550,12 +1550,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         override_target = active_override.override_temp if active_override else None
         
         _LOGGER.warning(
-            "Room %s: UPDATE CYCLE - hub_mode=%s, scheduled=%.1f, override=%s, commanded=%.1f",
+            "Room %s: UPDATE CYCLE - hub_mode=%s, scheduled=%.1f, override=%s, commanded=%.1f, window=%s, open=%s",
             self.room_config.name,
             hub_mode,
             scheduled_target or 0,
-            override_target,
-            self._commanded_target or 0
+            active_override,
+            self._commanded_target or 0,
+            window_state.is_open,
+            window_open
         )
         
         final_target, enforce_target = self.orchestrator.calculate_target_temperature(
