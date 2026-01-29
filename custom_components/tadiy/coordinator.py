@@ -218,8 +218,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         """Fetch data from coordinator."""
         try:
             # Hub coordinator holds global config
-            self._update_hub_mode()
-            self._update_frost_protection_temp()
+            # Hub coordinator holds global config
+            # self._update_hub_mode() -> REMOVED: Causes circular update loop (reverts state)
+            # self._update_frost_protection_temp() -> REMOVED: Causes circular update loop
 
             # Update location state if location mode enabled
             if self.location_mode_enabled:
