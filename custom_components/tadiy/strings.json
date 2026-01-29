@@ -57,7 +57,8 @@
           "use_hvac_off_for_low_temp": "Use HVAC Off for Low Temp (Moes TRVs)",
           "use_room_coupling": "Enable Room Coupling",
           "adjacent_rooms": "Adjacent Rooms",
-          "coupling_strength": "Coupling Strength"
+          "coupling_strength": "Coupling Strength",
+          "away_temperature": "Away Temperature"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
@@ -75,7 +76,8 @@
           "coupling_strength": "How much to adjust for neighbor heating (0.1=subtle, 1.0=strong).",
           "pid_kp": "Proportional: Reacts to current error. Higher = faster but may overshoot.",
           "pid_ki": "Integral: Eliminates steady error. Higher = faster but may oscillate.",
-          "pid_kd": "Derivative: Dampens oscillations. Higher = smoother but slower."
+          "pid_kd": "Derivative: Dampens oscillations. Higher = smoother but slower.",
+          "away_temperature": "Target temperature when nobody is home (per room)."
         }
       },
       "add_mode": {

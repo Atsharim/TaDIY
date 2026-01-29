@@ -13,6 +13,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ADJACENT_ROOMS,
+    CONF_AWAY_TEMPERATURE,
     CONF_COUPLING_STRENGTH,
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
@@ -46,6 +47,7 @@ from .const import (
     CONF_OVERRIDE_TIMEOUT,
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_ROOM_COUPLING,
+    DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_COUPLING_STRENGTH,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
@@ -1009,6 +1011,25 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        # Away Temperature (per-room)
+        current_away_temp = current_data.get(
+            CONF_AWAY_TEMPERATURE, DEFAULT_AWAY_TEMPERATURE
+        )
+        schema_dict[
+            vol.Optional(
+                CONF_AWAY_TEMPERATURE,
+                default=current_away_temp,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=10.0,
+                max=25.0,
+                step=0.5,
+                unit_of_measurement="°C",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
         return self.async_show_form(
             step_id="room_config",
             data_schema=vol.Schema(schema_dict),
@@ -1021,6 +1042,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     "• Use HVAC Off for Low Temp: Enable for Moes TRVs - uses HVAC mode 'off' instead of low temperature\n"
                     "• Room Coupling: Reduce heating when neighbors are actively heating\n"
                     "• Adjacent Rooms: Select rooms that share walls with this room\n"
+                    "• Away Temperature: Target temperature when nobody is home (default 17°C)\n"
                     "• Coupling Strength: How much to adjust for neighbor heating (0.1 = subtle, 1.0 = strong)\n\n"
                     f"Hub Defaults: Hysteresis={DEFAULT_HYSTERESIS}°C"
                 )

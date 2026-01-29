@@ -147,15 +147,41 @@ class TrvManager:
                 
                 # Apply temperature if in heat mode and temp differs
                 if desired_hvac == "heat":
-                    if current_temp is None or abs(float(current_temp) - target) > 0.1:
+                    # Get calibrated target with offset compensation
+                    calibrated = target
+                    
+                    # Get room temp from coordinator
+                    room_temp = self.coordinator.get_current_temperature()
+                    
+                    # Get TRV's internal sensor temp
+                    trv_temp = state.attributes.get("current_temperature")
+                    if trv_temp is not None:
+                        try:
+                            trv_temp = float(trv_temp)
+                        except (ValueError, TypeError):
+                            trv_temp = None
+                    
+                    # Apply calibration if we have both sensors and calibration_manager
+                    if room_temp and trv_temp and hasattr(self.coordinator, 'calibration_manager'):
+                        calibrated = self.coordinator.calibration_manager.get_calibrated_target(
+                            trv_id, target, room_temp, trv_temp,
+                            max_temp=config.max_temp if hasattr(config, 'max_temp') else 30.0
+                        )
+                        if abs(calibrated - target) > 0.1:
+                            _LOGGER.info(
+                                "TRV %s: Calibrated %.1f -> %.1f (room=%.1f, trv=%.1f)",
+                                trv_id, target, calibrated, room_temp, trv_temp
+                            )
+                    
+                    if current_temp is None or abs(float(current_temp) - calibrated) > 0.1:
                         _LOGGER.info(
                             "TRV %s: Setting temperature %.1f -> %.1f",
-                            trv_id, float(current_temp) if current_temp else 0, target
+                            trv_id, float(current_temp) if current_temp else 0, calibrated
                         )
                         await self.hass.services.async_call(
                             "climate",
                             "set_temperature",
-                            {"entity_id": trv_id, "temperature": target},
+                            {"entity_id": trv_id, "temperature": calibrated},
                             blocking=False,
                             context=self._last_command_context,
                         )
