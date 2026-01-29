@@ -121,9 +121,9 @@ class ScheduleEngine:
         active_block_start = None
         active_block_end = None
         for i, block in enumerate(day_schedule.blocks):
-            block_time = block.time
+            block_time = block.start_time
             next_block_time = (
-                day_schedule.blocks[i + 1].time
+                day_schedule.blocks[i + 1].start_time
                 if i + 1 < len(day_schedule.blocks)
                 else None
             )
