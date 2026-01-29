@@ -54,6 +54,10 @@ from .const import (
     CONF_DEBUG_PANEL,
     CONF_DEBUG_UI,
     CONF_DEBUG_CARDS,
+    CONF_DEBUG_TRV,
+    CONF_DEBUG_SENSORS,
+    CONF_DEBUG_SCHEDULE,
+    CONF_DEBUG_VERBOSE,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
@@ -670,6 +674,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 CONF_DEBUG_PANEL: hub_conf.get(CONF_DEBUG_PANEL, False),
                 CONF_DEBUG_UI: hub_conf.get(CONF_DEBUG_UI, False),
                 CONF_DEBUG_CARDS: hub_conf.get(CONF_DEBUG_CARDS, False),
+                CONF_DEBUG_TRV: hub_conf.get(CONF_DEBUG_TRV, False),
+                CONF_DEBUG_SENSORS: hub_conf.get(CONF_DEBUG_SENSORS, False),
+                CONF_DEBUG_SCHEDULE: hub_conf.get(CONF_DEBUG_SCHEDULE, False),
+                CONF_DEBUG_VERBOSE: hub_conf.get(CONF_DEBUG_VERBOSE, False),
             }
         self._logger = TaDIYLogger(debug_config)
 
@@ -695,7 +703,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         self.pid_autotuner = PIDAutoTuner(room_name=self.room_config.name)
 
-        self.schedule_engine = ScheduleEngine()
+        self.schedule_engine = ScheduleEngine(
+            debug_callback=self._debug_callback
+        )
         self.schedule_store = Store(
             hass,
             STORAGE_VERSION_SCHEDULES,
@@ -725,7 +735,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         )
 
         # Override Manager
-        self.override_manager = OverrideManager()
+        self.override_manager = OverrideManager(
+            debug_callback=self._debug_callback
+        )
         self.override_store = Store(
             hass,
             STORAGE_VERSION,
@@ -819,6 +831,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     def debug(self, category: str, message: str, *args: Any) -> None:
         """Log debug message if category enabled."""
+        self._logger.debug(category, message, *args)
+
+    def _debug_callback(self, category: str, message: str, args: tuple) -> None:
+        """Callback for debug logging from sub-components."""
         self._logger.debug(category, message, *args)
 
     def notify_user_interaction(self) -> None:
@@ -1023,7 +1039,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             return
 
         try:
-            self.override_manager = OverrideManager.from_dict(data)
+            self.override_manager = OverrideManager.from_dict(
+                data, debug_callback=self._debug_callback
+            )
             # Clear any expired overrides from storage
             self.override_manager.check_expired_overrides()
             _LOGGER.debug("Loaded overrides for room: %s", self.room_config.name)
@@ -1562,22 +1580,21 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # Check for expired overrides first
         expired = self.override_manager.check_expired_overrides()
         if expired:
-            _LOGGER.warning("Room %s: Expired overrides cleared: %s", self.room_config.name, expired)
-        
+            self.debug("rooms", "Expired overrides cleared: %s", expired)
+
         active_override = self.override_manager.get_active_override()
         override_target = active_override.override_temp if active_override else None
-        
-        _LOGGER.warning(
-            "Room %s: UPDATE CYCLE - hub_mode=%s, scheduled=%.1f, override=%s, commanded=%.1f, window=%s, open=%s",
-            self.room_config.name,
+
+        self.debug(
+            "rooms",
+            "UPDATE CYCLE | mode=%s | scheduled=%.1f | override=%s | commanded=%.1f | window=%s",
             hub_mode,
             scheduled_target or 0,
-            active_override,
+            override_target,
             self._commanded_target or 0,
             window_state.is_open,
-            window_open
         )
-        
+
         final_target, enforce_target = self.orchestrator.calculate_target_temperature(
             scheduled_target=scheduled_target,
             active_override_target=override_target,
@@ -1586,11 +1603,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             window_should_stop=window_state.heating_should_stop
         )
 
-        _LOGGER.warning(
-            "Room %s: RESULT - final_target=%s, enforce=%s",
-            self.room_config.name,
+        self.debug(
+            "rooms",
+            "RESULT | final_target=%s | enforce=%s",
             final_target,
-            enforce_target
+            enforce_target,
         )
 
         # 5. Inhibit selection bounce (Grace Period)
@@ -1615,12 +1632,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 hvac_mode="heat"  # We intend to heat when enforcing a target
             )
             
-            _LOGGER.warning(
-                "Room %s: Heating decision - fused=%.1f, target=%.1f, should_heat=%s",
-                self.room_config.name,
+            self.debug(
+                "rooms",
+                "Heating decision | fused=%.1f | target=%.1f | should_heat=%s",
                 fused_temp or 0,
                 final_target,
-                should_heat
+                should_heat,
             )
             
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)

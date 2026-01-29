@@ -4,6 +4,7 @@ Features:
 - Update lock to prevent race conditions
 - Context tracking for echo detection
 - Last commanded state tracking
+- Detailed debug logging of all TRV commands
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ _LOGGER = logging.getLogger(__package__)
 
 class TrvManager:
     """Handles communication with TRV devices for a room.
-    
+
     Features:
     - _update_lock: Prevents concurrent updates to TRVs
     - _last_command_context: Context for echo detection
@@ -32,16 +33,21 @@ class TrvManager:
         """Initialize the TRV manager."""
         self.coordinator = coordinator
         self.hass = coordinator.hass
-        
+
         # Update lock prevents race conditions
         self._update_lock = asyncio.Lock()
-        
+
         # Context for echo detection
         self._last_command_context: Context | None = None
-        
+
         # Track last commanded state per TRV for drift detection
         self._last_commanded: dict[str, dict[str, Any]] = {}
         self._last_command_time: datetime | None = None
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log TRV debug message using coordinator's logger."""
+        if hasattr(self.coordinator, "debug"):
+            self.coordinator.debug("trv", message, *args)
 
     def is_own_context(self, context: Context | None) -> bool:
         """Check if event context matches our last command (echo detection)."""
@@ -57,10 +63,10 @@ class TrvManager:
         """Get summarized state of all TRVs in the room."""
         config = self.coordinator.room_config
         trv_entity_ids = config.trv_entity_ids
-        
+
         all_targets = []
         all_modes = []
-        
+
         for trv_id in trv_entity_ids:
             state = self.hass.states.get(trv_id)
             if state:
@@ -68,49 +74,66 @@ class TrvManager:
                 if target is not None:
                     all_targets.append(float(target))
                 all_modes.append(state.state)
-        
+
         # Determine consolidated mode
         # If any TRV is in heat mode, the room is "heating"
         mode = "heat" if "heat" in all_modes else "off"
-        
+
         # Primary target for display
         primary_target = all_targets[0] if all_targets else 20.0
-        
+
         return {
             "mode": mode,
             "target": primary_target,
             "all_targets": all_targets,
-            "all_modes": all_modes
+            "all_modes": all_modes,
         }
 
-    async def apply_target(self, target: float, should_heat: bool | None = None) -> None:
+    async def apply_target(
+        self, target: float, should_heat: bool | None = None
+    ) -> None:
         """Apply target temperature and HVAC mode to all TRVs.
-        
+
         Uses update lock to prevent race conditions.
         """
         # Acquire lock to prevent concurrent TRV updates
         async with self._update_lock:
             await self._apply_target_locked(target, should_heat)
 
-    async def _apply_target_locked(self, target: float, should_heat: bool | None) -> None:
+    async def _apply_target_locked(
+        self, target: float, should_heat: bool | None
+    ) -> None:
         """Internal method to apply target (must be called with lock held)."""
         config = self.coordinator.room_config
-        frost_temp = self.coordinator.hub_coordinator.get_frost_protection_temp() if self.coordinator.hub_coordinator else 5.0
-        
+        frost_temp = (
+            self.coordinator.hub_coordinator.get_frost_protection_temp()
+            if self.coordinator.hub_coordinator
+            else 5.0
+        )
+
         # Create new context for this command batch (for echo detection)
         self._last_command_context = Context()
         self._last_command_time = dt_util.utcnow()
+
+        trv_count = len(config.trv_entity_ids)
+        self._debug(
+            "Applying target %.1f to %d TRV(s) | should_heat=%s",
+            target,
+            trv_count,
+            should_heat,
+        )
 
         for trv_id in config.trv_entity_ids:
             try:
                 state = self.hass.states.get(trv_id)
                 if not state:
                     _LOGGER.warning("TRV %s: State unavailable, skipping", trv_id)
+                    self._debug("%s: SKIPPED - state unavailable", trv_id)
                     continue
 
                 current_hvac = state.state
                 current_temp = state.attributes.get("temperature")
-                
+
                 # Determine desired HVAC mode
                 if config.use_hvac_off_for_low_temp:
                     # Moes Logic: Use HVAC OFF for low temps
@@ -123,12 +146,45 @@ class TrvManager:
                 else:
                     # Standard TRVs: Set mode based on heating decision
                     desired_hvac = "heat" if should_heat else "off"
-                
+
+                # Get room temp from coordinator
+                room_temp = self.coordinator.get_current_temperature()
+
+                # Get TRV's internal sensor temp
+                trv_temp = state.attributes.get("current_temperature")
+                if trv_temp is not None:
+                    try:
+                        trv_temp = float(trv_temp)
+                    except (ValueError, TypeError):
+                        trv_temp = None
+
+                # Calculate calibrated target
+                calibrated = target
+                calibration_offset = 0.0
+
+                # Apply calibration if we have both sensors and calibration_manager
+                if (
+                    room_temp
+                    and trv_temp
+                    and hasattr(self.coordinator, "calibration_manager")
+                ):
+                    calibrated = self.coordinator.calibration_manager.get_calibrated_target(
+                        trv_id,
+                        target,
+                        room_temp,
+                        trv_temp,
+                        max_temp=config.max_temp if hasattr(config, "max_temp") else 30.0,
+                    )
+                    calibration_offset = calibrated - target
+
                 # Apply HVAC mode if changed
-                if current_hvac != desired_hvac:
-                    _LOGGER.info(
-                        "TRV %s: Setting HVAC mode %s -> %s",
-                        trv_id, current_hvac, desired_hvac
+                hvac_changed = current_hvac != desired_hvac
+                if hvac_changed:
+                    self._debug(
+                        "%s: HVAC %s -> %s",
+                        trv_id,
+                        current_hvac,
+                        desired_hvac,
                     )
                     await self.hass.services.async_call(
                         "climate",
@@ -137,49 +193,48 @@ class TrvManager:
                         blocking=False,
                         context=self._last_command_context,
                     )
-                
-                # Apply temperature (Always apply target, even in OFF mode for safety)
-                # Why? Some TRVs don't fully close in OFF mode, or user might have a dumb TRV
-                # where we simulate OFF by setting low temp. Also ensures display matches reality.
-                if True:
-                    # Get calibrated target with offset compensation
-                    calibrated = target
-                    
-                    # Get room temp from coordinator
-                    room_temp = self.coordinator.get_current_temperature()
-                    
-                    # Get TRV's internal sensor temp
-                    trv_temp = state.attributes.get("current_temperature")
-                    if trv_temp is not None:
-                        try:
-                            trv_temp = float(trv_temp)
-                        except (ValueError, TypeError):
-                            trv_temp = None
-                    
-                    # Apply calibration if we have both sensors and calibration_manager
-                    if room_temp and trv_temp and hasattr(self.coordinator, 'calibration_manager'):
-                        calibrated = self.coordinator.calibration_manager.get_calibrated_target(
-                            trv_id, target, room_temp, trv_temp,
-                            max_temp=config.max_temp if hasattr(config, 'max_temp') else 30.0
-                        )
-                        if abs(calibrated - target) > 0.1:
-                            _LOGGER.info(
-                                "TRV %s: Calibrated %.1f -> %.1f (room=%.1f, trv=%.1f)",
-                                trv_id, target, calibrated, room_temp, trv_temp
-                            )
-                    
-                    if current_temp is None or abs(float(current_temp) - calibrated) > 0.1:
-                        _LOGGER.info(
-                            "TRV %s: Setting temperature %.1f -> %.1f",
-                            trv_id, float(current_temp) if current_temp else 0, calibrated
-                        )
-                        await self.hass.services.async_call(
-                            "climate",
-                            "set_temperature",
-                            {"entity_id": trv_id, "temperature": calibrated},
-                            blocking=False,
-                            context=self._last_command_context,
-                        )
+
+                # Apply temperature if changed
+                temp_changed = current_temp is None or abs(
+                    float(current_temp) - calibrated
+                ) > 0.1
+
+                if temp_changed:
+                    self._debug(
+                        "%s: SET TEMP %.1f -> %.1f | HVAC: %s | Room: %.1f | TRV: %.1f",
+                        trv_id,
+                        float(current_temp) if current_temp else 0,
+                        calibrated,
+                        desired_hvac,
+                        room_temp or 0,
+                        trv_temp or 0,
+                    )
+                    await self.hass.services.async_call(
+                        "climate",
+                        "set_temperature",
+                        {"entity_id": trv_id, "temperature": calibrated},
+                        blocking=False,
+                        context=self._last_command_context,
+                    )
+
+                # Log calibration offset if significant
+                if abs(calibration_offset) > 0.1:
+                    self._debug(
+                        "%s: Calibration applied | Target: %.1f | Calibrated: %.1f | Offset: %+.1f",
+                        trv_id,
+                        target,
+                        calibrated,
+                        calibration_offset,
+                    )
+
+                # Log if no changes needed
+                if not hvac_changed and not temp_changed:
+                    self._debug(
+                        "%s: No change needed | HVAC: %s | Temp: %.1f",
+                        trv_id,
+                        current_hvac,
+                        float(current_temp) if current_temp else 0,
+                    )
 
                 # Track what we commanded (using the FINAL CALIBRATED value)
                 self._last_commanded[trv_id] = {
@@ -187,34 +242,41 @@ class TrvManager:
                     "temperature": calibrated,
                     "timestamp": self._last_command_time,
                 }
-                        
+
             except Exception as err:
                 _LOGGER.error("Failed to apply target to TRV %s: %s", trv_id, err)
+                self._debug("%s: ERROR - %s", trv_id, err)
 
-    def check_drift(self, trv_id: str, current_temp: float | None, current_mode: str) -> bool:
+    def check_drift(
+        self, trv_id: str, current_temp: float | None, current_mode: str
+    ) -> bool:
         """Check if TRV has drifted from our last command.
-        
+
         Returns True if TRV state differs significantly from what we commanded.
         """
         last = self._last_commanded.get(trv_id)
         if not last:
             return False
-        
+
         # Check mode drift
         if last["hvac_mode"] != current_mode:
-            _LOGGER.debug(
-                "TRV %s: Mode drift detected - commanded %s, actual %s",
-                trv_id, last["hvac_mode"], current_mode
+            self._debug(
+                "%s: Mode drift detected - commanded %s, actual %s",
+                trv_id,
+                last["hvac_mode"],
+                current_mode,
             )
             return True
-        
+
         # Check temperature drift (only if we commanded heat mode)
         if last["hvac_mode"] == "heat" and last["temperature"] is not None:
             if current_temp is not None and abs(current_temp - last["temperature"]) > 0.5:
-                _LOGGER.debug(
-                    "TRV %s: Temp drift detected - commanded %.1f, actual %.1f",
-                    trv_id, last["temperature"], current_temp
+                self._debug(
+                    "%s: Temp drift detected - commanded %.1f, actual %.1f",
+                    trv_id,
+                    last["temperature"],
+                    current_temp,
                 )
                 return True
-        
+
         return False

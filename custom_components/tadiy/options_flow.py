@@ -29,6 +29,10 @@ from .const import (
     CONF_DEBUG_PANEL,
     CONF_DEBUG_UI,
     CONF_DEBUG_CARDS,
+    CONF_DEBUG_TRV,
+    CONF_DEBUG_SENSORS,
+    CONF_DEBUG_SCHEDULE,
+    CONF_DEBUG_VERBOSE,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     CONF_SHOW_PANEL,
@@ -552,10 +556,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         """Configure debug logging settings."""
         if user_input is not None:
             new_data = dict(self.config_entry.data)
-            
+
             # Master toggle - if disabled, disable all categories
             debug_enabled = user_input.get("debug_enabled", False)
-            
+
             if debug_enabled:
                 # Get selected categories from multi-select
                 selected_categories = user_input.get("debug_categories", [])
@@ -564,6 +568,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 new_data[CONF_DEBUG_PANEL] = "panel" in selected_categories
                 new_data[CONF_DEBUG_UI] = "ui" in selected_categories
                 new_data[CONF_DEBUG_CARDS] = "cards" in selected_categories
+                new_data[CONF_DEBUG_TRV] = "trv" in selected_categories
+                new_data[CONF_DEBUG_SENSORS] = "sensors" in selected_categories
+                new_data[CONF_DEBUG_SCHEDULE] = "schedule" in selected_categories
+                new_data[CONF_DEBUG_VERBOSE] = "verbose" in selected_categories
             else:
                 # Disable all
                 new_data[CONF_DEBUG_ROOMS] = False
@@ -571,6 +579,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 new_data[CONF_DEBUG_PANEL] = False
                 new_data[CONF_DEBUG_UI] = False
                 new_data[CONF_DEBUG_CARDS] = False
+                new_data[CONF_DEBUG_TRV] = False
+                new_data[CONF_DEBUG_SENSORS] = False
+                new_data[CONF_DEBUG_SCHEDULE] = False
+                new_data[CONF_DEBUG_VERBOSE] = False
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
@@ -583,16 +595,20 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Get current settings
         current_data = self.config_entry.data
-        
+
         # Check if any debug is enabled
         any_debug_enabled = (
             current_data.get(CONF_DEBUG_ROOMS, False) or
             current_data.get(CONF_DEBUG_HUB, False) or
             current_data.get(CONF_DEBUG_PANEL, False) or
             current_data.get(CONF_DEBUG_UI, False) or
-            current_data.get(CONF_DEBUG_CARDS, False)
+            current_data.get(CONF_DEBUG_CARDS, False) or
+            current_data.get(CONF_DEBUG_TRV, False) or
+            current_data.get(CONF_DEBUG_SENSORS, False) or
+            current_data.get(CONF_DEBUG_SCHEDULE, False) or
+            current_data.get(CONF_DEBUG_VERBOSE, False)
         )
-        
+
         # Build list of currently enabled categories
         enabled_categories = []
         if current_data.get(CONF_DEBUG_ROOMS, False):
@@ -605,21 +621,33 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             enabled_categories.append("ui")
         if current_data.get(CONF_DEBUG_CARDS, False):
             enabled_categories.append("cards")
+        if current_data.get(CONF_DEBUG_TRV, False):
+            enabled_categories.append("trv")
+        if current_data.get(CONF_DEBUG_SENSORS, False):
+            enabled_categories.append("sensors")
+        if current_data.get(CONF_DEBUG_SCHEDULE, False):
+            enabled_categories.append("schedule")
+        if current_data.get(CONF_DEBUG_VERBOSE, False):
+            enabled_categories.append("verbose")
 
         schema_dict = {
             vol.Required("debug_enabled", default=any_debug_enabled): bool,
         }
-        
+
         schema_dict[
             vol.Optional("debug_categories", default=enabled_categories)
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
+                    selector.SelectOptionDict(value="trv", label="TRV Commands (temperatures sent to TRVs, calibration)"),
+                    selector.SelectOptionDict(value="sensors", label="Sensor Fusion (temperature readings, sources)"),
+                    selector.SelectOptionDict(value="schedule", label="Schedule Logic (active blocks, next change)"),
                     selector.SelectOptionDict(value="rooms", label="Room Logic (heating decisions, targets)"),
                     selector.SelectOptionDict(value="hub", label="Hub Logic (mode changes, coordination)"),
                     selector.SelectOptionDict(value="panel", label="Schedule Panel"),
                     selector.SelectOptionDict(value="ui", label="User Interface"),
                     selector.SelectOptionDict(value="cards", label="Dashboard Cards"),
+                    selector.SelectOptionDict(value="verbose", label="VERBOSE (Enable ALL - very detailed)"),
                 ],
                 multiple=True,
                 mode=selector.SelectSelectorMode.LIST,

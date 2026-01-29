@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.util import dt as dt_util
 
@@ -77,9 +77,28 @@ class OverrideRecord:
 class OverrideManager:
     """Manage temperature overrides for a room."""
 
-    def __init__(self) -> None:
-        """Initialize override manager."""
+    def __init__(
+        self,
+        debug_callback: Callable[[str, str, tuple], None] | None = None,
+    ) -> None:
+        """Initialize override manager.
+
+        Args:
+            debug_callback: Optional callback for debug logging (category, message, args)
+        """
         self._overrides: dict[str, OverrideRecord] = {}
+        self._debug_callback = debug_callback
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log debug message if callback is set."""
+        if self._debug_callback:
+            self._debug_callback("rooms", message, args)
+
+    def set_debug_callback(
+        self, callback: Callable[[str, str, tuple], None] | None
+    ) -> None:
+        """Set the debug callback."""
+        self._debug_callback = callback
 
     def has_override(self, entity_id: str) -> bool:
         """Check if TRV has an active override."""
@@ -138,9 +157,8 @@ class OverrideManager:
 
         self._overrides[entity_id] = override
 
-        _LOGGER.info(
-            "Override created for %s: %.1f°C -> %.1f°C (mode: %s, expires: %s)",
-            entity_id,
+        self._debug(
+            "Override created: %.1f -> %.1f | Mode: %s | Expires: %s",
             scheduled_temp,
             override_temp,
             timeout_mode,
@@ -158,8 +176,8 @@ class OverrideManager:
         """
         if entity_id in self._overrides:
             override = self._overrides.pop(entity_id)
-            _LOGGER.info(
-                "Override cleared for %s (was %.1f°C)",
+            self._debug(
+                "Override cleared for %s (was %.1f)",
                 entity_id,
                 override.override_temp,
             )
@@ -176,7 +194,7 @@ class OverrideManager:
         count = len(self._overrides)
         self._overrides.clear()
         if count > 0:
-            _LOGGER.info("Cleared %d override(s)", count)
+            self._debug("Cleared %d override(s)", count)
         return count
 
     def check_expired_overrides(self) -> list[str]:
@@ -193,8 +211,8 @@ class OverrideManager:
             if override.is_expired(now):
                 expired.append(entity_id)
                 self._overrides.pop(entity_id)
-                _LOGGER.info(
-                    "Override expired for %s (was %.1f°C, scheduled: %.1f°C)",
+                self._debug(
+                    "Override expired for %s (was %.1f, scheduled: %.1f)",
                     entity_id,
                     override.override_temp,
                     override.scheduled_temp,
@@ -260,9 +278,13 @@ class OverrideManager:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> OverrideManager:
+    def from_dict(
+        cls,
+        data: dict[str, Any],
+        debug_callback: Callable[[str, str, tuple], None] | None = None,
+    ) -> OverrideManager:
         """Create from dictionary."""
-        manager = cls()
+        manager = cls(debug_callback=debug_callback)
         for entity_id, override_data in data.items():
             try:
                 override = OverrideRecord.from_dict(override_data)
