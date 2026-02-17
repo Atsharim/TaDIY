@@ -100,7 +100,7 @@
         "description": "{modes_info}"
       },
       "panel_settings": {
-        "title": "Hub Configuration",
+        "title": "Global Settings",
         "description": "{info}",
         "data": {
           "show_panel": "Show Schedules Panel in Sidebar",
@@ -135,7 +135,7 @@
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Hub Configuration"
+          "panel_settings": "Global Settings"
         }
       },
       "init_room": {
