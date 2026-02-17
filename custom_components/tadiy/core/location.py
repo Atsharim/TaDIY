@@ -158,9 +158,7 @@ class LocationManager:
             if self._away_since is not None:
                 self._debug(
                     "Someone returned home after %d min away",
-                    int(
-                        (dt_util.utcnow() - self._away_since).total_seconds() / 60
-                    ),
+                    int((dt_util.utcnow() - self._away_since).total_seconds() / 60),
                 )
             self._away_since = None
         elif self._away_since is None:
@@ -226,9 +224,7 @@ class LocationManager:
             return scheduled_target
 
         if duration < AWAY_PARTIAL_PERIOD:
-            partial = max(
-                away_target, scheduled_target - AWAY_PARTIAL_REDUCTION
-            )
+            partial = max(away_target, scheduled_target - AWAY_PARTIAL_REDUCTION)
             self._debug(
                 "Away gradual: partial reduction (%d min) -> %.1f°C (-%s°C)",
                 int(duration / 60),

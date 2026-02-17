@@ -167,11 +167,14 @@ CONF_HEATING_CURVE_SLOPE: Final = "heating_curve_slope"
 DEFAULT_HEATING_CURVE_SLOPE: Final = 0.5
 MIN_HEATING_CURVE_SLOPE: Final = 0.1
 
-# TRV HVAC Mode Control (for Moes and similar TRVs)
+# TRV HVAC Mode Control
 CONF_USE_HVAC_OFF_FOR_LOW_TEMP: Final = "use_hvac_off_for_low_temp"
 DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP: Final = (
-    False  # Disabled by default, opt-in for Moes TRVs
+    False  # Disabled by default - temperature control only, user opts in for HVAC off
 )
+# Explicit HVAC mode specification (user can override auto-detection)
+CONF_TRV_HVAC_MODES: Final = "trv_hvac_modes"
+DEFAULT_TRV_HVAC_MODES: Final = None  # None = auto-detect from device state
 
 # Weather Prediction (Phase 3.3)
 CONF_USE_WEATHER_PREDICTION: Final = "use_weather_prediction"

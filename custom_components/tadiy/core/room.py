@@ -55,7 +55,10 @@ class RoomConfig:
     heating_curve_slope: float = 0.5  # Curve slope (°C indoor per °C outdoor)
     use_humidity_compensation: bool = False
     use_hvac_off_for_low_temp: bool = (
-        False  # Use HVAC off instead of low temp for Moes TRVs
+        False  # Use HVAC off instead of low temp to stop heating
+    )
+    trv_hvac_modes: list[str] | None = (
+        None  # Explicit HVAC modes for TRV (None = auto-detect from device)
     )
     use_weather_prediction: bool = False  # Weather-based predictive heating
     use_room_coupling: bool = False  # Multi-room heat coupling
@@ -106,6 +109,7 @@ class RoomConfig:
             "heating_curve_slope": self.heating_curve_slope,
             "use_humidity_compensation": self.use_humidity_compensation,
             "use_hvac_off_for_low_temp": self.use_hvac_off_for_low_temp,
+            "trv_hvac_modes": self.trv_hvac_modes,
             "use_weather_prediction": self.use_weather_prediction,
             "use_room_coupling": self.use_room_coupling,
             "adjacent_rooms": self.adjacent_rooms,
@@ -145,6 +149,7 @@ class RoomConfig:
             heating_curve_slope=data.get("heating_curve_slope", 0.5),
             use_humidity_compensation=data.get("use_humidity_compensation", False),
             use_hvac_off_for_low_temp=data.get("use_hvac_off_for_low_temp", False),
+            trv_hvac_modes=data.get("trv_hvac_modes", None),
             use_weather_prediction=data.get("use_weather_prediction", False),
             use_room_coupling=data.get("use_room_coupling", False),
             adjacent_rooms=data.get("adjacent_rooms", []),
@@ -171,6 +176,7 @@ class RoomData:
     heating_rate: float = DEFAULT_HEATING_RATE
     heating_rate_sample_count: int = 0
     heating_rate_confidence: float = 0.0
+    heating_rate_last_updated: datetime | None = None
     override_count: int = 0  # Number of active overrides
     override_active: bool = False  # At least one override active
 

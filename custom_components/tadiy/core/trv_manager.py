@@ -169,10 +169,12 @@ class TrvManager:
 
         trv_count = len(config.trv_entity_ids)
         self._debug(
-            "Applying target %.1f to %d TRV(s) | should_heat=%s",
+            "Applying target %.1f to %d TRV(s) | should_heat=%s | use_hvac_off=%s | frost=%.1f",
             target,
             trv_count,
             should_heat,
+            config.use_hvac_off_for_low_temp,
+            frost_temp,
         )
 
         for trv_id in config.trv_entity_ids:
@@ -187,8 +189,30 @@ class TrvManager:
                 current_hvac = state.state
                 current_temp = state.attributes.get("temperature")
 
-                # Determine desired HVAC mode using profile-aware logic
+                # Get supported HVAC modes
+                # Priority: 1) User-configured modes, 2) Device state, 3) Fallback
+                if config.trv_hvac_modes is not None:
+                    # User has explicitly configured HVAC modes for this room
+                    supported_modes = config.trv_hvac_modes
+                    self._debug(
+                        "%s: Using user-configured HVAC modes: %s",
+                        trv_id,
+                        supported_modes,
+                    )
+                else:
+                    # Auto-detect from device state (this is the authoritative source)
+                    supported_modes = state.attributes.get(
+                        "hvac_modes", ["heat", "off"]
+                    )
+                    self._debug(
+                        "%s: Using device-reported HVAC modes: %s",
+                        trv_id,
+                        supported_modes,
+                    )
+
+                # Determine desired HVAC mode
                 if config.use_hvac_off_for_low_temp:
+                    # User wants to use HVAC "off" mode to stop heating
                     if target <= frost_temp:
                         desired_hvac = "off"
                     elif should_heat is not None:
@@ -196,11 +220,20 @@ class TrvManager:
                     else:
                         desired_hvac = "heat"
                 else:
-                    desired_hvac = "heat" if should_heat else "off"
+                    # User does NOT want HVAC mode changes
+                    # Always stay in "heat" mode, control via temperature only
+                    desired_hvac = "heat"
+                    if should_heat is False:
+                        # Not heating → set to minimum temp to close valve
+                        target = profile.min_temp
+                        self._debug(
+                            "%s: use_hvac_off disabled, using min_temp %.1f instead of HVAC off",
+                            trv_id,
+                            profile.min_temp,
+                        )
 
                 # Fallback: if TRV doesn't support the desired HVAC mode,
                 # use temperature-based control instead
-                supported_modes = state.attributes.get("hvac_modes", profile.hvac_modes)
                 if desired_hvac not in supported_modes:
                     self._debug(
                         "%s: HVAC '%s' not supported (available: %s), using temp fallback",
@@ -212,6 +245,12 @@ class TrvManager:
                         # Can't turn off via HVAC mode — set to minimum temp
                         desired_hvac = "heat"
                         target = profile.min_temp
+                else:
+                    self._debug(
+                        "%s: HVAC mode '%s' is supported",
+                        trv_id,
+                        desired_hvac,
+                    )
 
                 # Get room temp from coordinator
                 room_temp = self.coordinator.get_current_temperature()

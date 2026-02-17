@@ -115,21 +115,3 @@ Thumbs.db
 secrets.yaml
 known_devices.yaml
 ip_bans.yaml
-
-# Ralph Configuration and State
-.ralph/
-.ralphrc
-
-# Ralph Logs
-ralph.log
-.ralph/live.log
-.ralph/logs/
-
-# Roo Code / Cline AI Assistant (internal state only)
-.roo/
-.cline/
-roo-cline/
-.roo-cline/
-
-#Gitignore
-.gitignore

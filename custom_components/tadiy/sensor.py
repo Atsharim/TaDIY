@@ -77,17 +77,34 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         icon=ICON_LEARNING,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda data: (
-            round(data.heating_rate, 2) if data and data.heating_rate else None
+            round(data.heating_rate, 2)
+            if data and data.heating_rate is not None
+            else None
         ),
         available_fn=lambda data: data is not None,
         attr_fn=lambda data: (
             {
-                "sample_count": data.heating_rate_sample_count
-                if hasattr(data, "heating_rate_sample_count")
-                else 0,
-                "confidence": round(data.heating_rate_confidence, 2)
-                if hasattr(data, "heating_rate_confidence")
-                else 0.0,
+                "sample_count": (
+                    data.heating_rate_sample_count
+                    if hasattr(data, "heating_rate_sample_count")
+                    else 0
+                ),
+                "confidence": (
+                    round(data.heating_rate_confidence, 2)
+                    if hasattr(data, "heating_rate_confidence")
+                    else 0.0
+                ),
+                "confidence_percent": (
+                    f"{round(data.heating_rate_confidence * 100)}%"
+                    if hasattr(data, "heating_rate_confidence")
+                    else "0%"
+                ),
+                "last_updated": (
+                    data.heating_rate_last_updated.isoformat()
+                    if hasattr(data, "heating_rate_last_updated")
+                    and data.heating_rate_last_updated
+                    else None
+                ),
             }
             if data
             else {}
@@ -269,7 +286,17 @@ class TaDIYRoomSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return entity specific state attributes."""
         if self.entity_description.attr_fn is not None:
-            return self.entity_description.attr_fn(self.coordinator.data)
+            try:
+                attrs = self.entity_description.attr_fn(self.coordinator.data)
+                return attrs if attrs else {}
+            except Exception as err:
+                _LOGGER.error(
+                    "Error getting attributes for %s: %s",
+                    self.entity_description.key,
+                    err,
+                    exc_info=True,
+                )
+                return {}
         return {}
 
     @callback
@@ -745,10 +772,18 @@ class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):
         data = self.coordinator.data
         if data is None:
             return {}
-        return _calculate_comfort(
-            data.current_temperature,
-            data.humidity,
-        )
+        try:
+            return _calculate_comfort(
+                data.current_temperature,
+                data.humidity,
+            )
+        except Exception as err:
+            _LOGGER.error(
+                "Error calculating comfort attributes: %s",
+                err,
+                exc_info=True,
+            )
+            return {}
 
     @callback
     def _handle_coordinator_update(self) -> None:

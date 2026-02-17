@@ -200,8 +200,7 @@ class HeatingController:
         else:
             # No state change - log current state periodically
             self._debug(
-                "Steady state=%s | current=%.2f°C | target=%.2f°C | "
-                "band=[%.2f, %.2f]",
+                "Steady state=%s | current=%.2f°C | target=%.2f°C | band=[%.2f, %.2f]",
                 "HEAT" if self._heating_active else "OFF",
                 current_temp,
                 target_temp,

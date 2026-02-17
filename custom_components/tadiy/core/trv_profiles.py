@@ -53,9 +53,9 @@ PROFILES: dict[str, TRVProfile] = {
     "sonoff": TRVProfile(
         name="sonoff",
         manufacturer="Sonoff",
-        hvac_modes=["heat", "off", "auto"],
-        supports_auto=True,
-        calibration_attr="local_temperature_calibration",
+        hvac_modes=["heat", "off"],  # Conservative default, rely on actual state
+        supports_auto=False,  # Let Home Assistant tell us
+        calibration_attr=None,  # Sonoff typically doesn't have standard calibration
         calibration_range=(-7.0, 7.0),
         temperature_attr="temperature",
         valve_position_attr=None,
@@ -63,7 +63,7 @@ PROFILES: dict[str, TRVProfile] = {
         window_detection_attr=None,
         supports_eco_mode=False,
         min_temp=5.0,
-        max_temp= 30.0,
+        max_temp=30.0,
     ),
     "generic": TRVProfile(
         name="generic",

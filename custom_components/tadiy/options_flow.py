@@ -537,20 +537,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         return self.async_show_form(
             step_id="panel_settings",
             data_schema=vol.Schema(schema_dict),
-            description_placeholders={
-                "info": (
-                    "Hub Configuration:\n\n"
-                    "• Panel: Show TaDIY Schedules in sidebar\n"
-                    "• Weather Entity: Weather entity for outdoor temperature and forecast\n"
-                    "• Person Entities: Person tracking for location-based heating\n"
-                    "• Location Mode: Automatic heating reduction when nobody is home\n"
-                    "• Override Timeout: How long manual TRV changes override schedules\n"
-                    "• Window Timeouts: How long to wait before/after window open/close\n"
-                    "• Early Start: Pre-heating settings\n"
-                    "• Heating Curve: Adjust target temperature based on outdoor temperature\n"
-                    "• Weather Prediction: Pre-heat before cold fronts, reduce before warm fronts"
-                )
-            },
         )
 
     async def async_step_debug_settings(
@@ -708,15 +694,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         return self.async_show_form(
             step_id="debug_settings",
             data_schema=vol.Schema(schema_dict),
-            description_placeholders={
-                "info": (
-                    "Debug Logging:\n\n"
-                    "Enable debug logging to see detailed information in Home Assistant logs.\n\n"
-                    "1. Enable the master toggle\n"
-                    "2. Select which categories to log\n\n"
-                    "Note: Logs appear as INFO level in Home Assistant Core logs."
-                )
-            },
         )
 
     async def async_step_room_config(

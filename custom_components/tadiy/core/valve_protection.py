@@ -87,10 +87,7 @@ class ValveProtectionManager:
         now = dt_util.now()
         # Find next occurrence of cycle_day at cycle_time
         days_ahead = self.cycle_day - now.weekday()
-        if days_ahead < 0 or (
-            days_ahead == 0
-            and now.time() >= self.cycle_time
-        ):
+        if days_ahead < 0 or (days_ahead == 0 and now.time() >= self.cycle_time):
             days_ahead += 7
 
         from datetime import timedelta

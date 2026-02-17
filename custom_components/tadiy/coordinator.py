@@ -43,6 +43,7 @@ from .const import (
     CONF_TRV_ENTITIES,
     CONF_USE_HEATING_CURVE,
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+    CONF_TRV_HVAC_MODES,
     CONF_USE_PID_CONTROL,
     CONF_USE_WEATHER_PREDICTION,
     CONF_ADJACENT_ROOMS,
@@ -381,6 +382,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
     async def async_load_learning_data(self) -> None:
         """Load learning data from storage."""
+        from .core.early_start import HeatUpModel
+
         _LOGGER.debug("Loading learning data for TaDIY Hub")
 
         data = await self.learning_store.async_load()
@@ -392,8 +395,19 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         try:
             for room_name, model_data in data.items():
                 if room_name in self.heat_models:
-                    self.heat_models[room_name] = model_data
-                    _LOGGER.debug("Loaded learning data for room: %s", room_name)
+                    # Convert dict back to HeatUpModel object
+                    if isinstance(model_data, dict):
+                        self.heat_models[room_name] = HeatUpModel.from_dict(model_data)
+                        _LOGGER.debug(
+                            "Loaded learning data for room %s: %.2f°C/h (%d samples)",
+                            room_name,
+                            model_data.get("degrees_per_hour", 0),
+                            model_data.get("sample_count", 0),
+                        )
+                    else:
+                        # Legacy: already a model object
+                        self.heat_models[room_name] = model_data
+                        _LOGGER.debug("Loaded learning data for room: %s", room_name)
         except Exception as err:
             _LOGGER.error("Failed to load learning data: %s", err)
 
@@ -402,7 +416,22 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Saving learning data for TaDIY Hub")
 
         try:
-            await self.learning_store.async_save(self.heat_models)
+            # Convert HeatUpModel objects to dicts for serialization
+            serializable_data = {}
+            for room_name, model in self.heat_models.items():
+                if hasattr(model, "to_dict"):
+                    serializable_data[room_name] = model.to_dict()
+                    _LOGGER.debug(
+                        "Saving learning data for room %s: %.2f°C/h (%d samples)",
+                        room_name,
+                        model.degrees_per_hour,
+                        model.sample_count,
+                    )
+                else:
+                    # Fallback: already a dict
+                    serializable_data[room_name] = model
+
+            await self.learning_store.async_save(serializable_data)
             _LOGGER.info("Learning data saved successfully")
         except Exception as err:
             _LOGGER.error("Failed to save learning data: %s", err)
@@ -690,7 +719,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # TRV Calibration Manager
         from .core.calibration import CalibrationManager
 
-        self.calibration_manager = CalibrationManager(debug_callback=self._debug_callback)
+        self.calibration_manager = CalibrationManager(
+            debug_callback=self._debug_callback
+        )
         self.calibration_store = Store(
             hass,
             STORAGE_VERSION,
@@ -888,6 +919,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "use_hvac_off_for_low_temp": room_data.get(
                 CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP
             ),
+            "trv_hvac_modes": room_data.get(CONF_TRV_HVAC_MODES, None),
             "use_weather_prediction": room_data.get(
                 CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
             ),
@@ -1114,9 +1146,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         data = await self.heating_stats_store.async_load()
         if data:
             self.heating_stats = data
-            _LOGGER.debug(
-                "Loaded heating stats for room %s", self.room_config.name
-            )
+            _LOGGER.debug("Loaded heating stats for room %s", self.room_config.name)
         else:
             self.heating_stats = {}
         self.async_update_listeners()
@@ -1718,10 +1748,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     final_target,
                     clamped_target,
                     MIN_TEMP,
-                    MAX_TEMP
+                    MAX_TEMP,
                 )
                 final_target = clamped_target
-        
+
             should_heat = self.orchestrator.calculate_heating_decision(
                 fused_temp=fused_temp,
                 target_temp=final_target,
@@ -1823,6 +1853,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             heating_rate=self._heat_model.get_heating_rate(),
             heating_rate_sample_count=self._heat_model.sample_count,
             heating_rate_confidence=self._heat_model.get_confidence(),
+            heating_rate_last_updated=self._heat_model.last_updated,
             override_active=active_override is not None,
             override_count=1 if active_override else 0,
         )

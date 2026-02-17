@@ -12,15 +12,19 @@
           "room_name": "Raumname",
           "trv_entities": "Thermostate (TRVs)",
           "main_temp_sensor": "Temperatursensor",
+          "humidity_sensor": "Luftfeuchtigkeitssensor",
           "window_sensors": "Fenstersensoren",
-          "outdoor_sensor": "Außentemperatursensor"
+          "outdoor_sensor": "Außentemperatursensor",
+          "weather_entity": "Wetter-Entität"
         },
         "data_description": {
           "room_name": "Eindeutigen Namen für diesen Raum wählen.",
           "trv_entities": "Wähle ein oder mehr Klima-Entitäten (TRVs) für diesen Raum.",
           "main_temp_sensor": "Haupttemperatursensor für diesen Raum (optional).",
+          "humidity_sensor": "Luftfeuchtigkeitssensor für diesen Raum (optional).",
           "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
-          "outdoor_sensor": "Außentemperatursensor für wetterabhängige Steuerung (optional)."
+          "outdoor_sensor": "Außentemperatursensor für wetterabhängige Steuerung (optional).",
+          "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersage (optional, wird auf Hub-Ebene als Fallback verwendet)."
         }
       }
     },
@@ -103,7 +107,7 @@
       },
       "panel_settings": {
         "title": "Globale Einstellungen",
-        "description": "{info}",
+        "description": "Hub-Konfiguration:\n\n• Panel: TaDIY Zeitpläne in Seitenleiste anzeigen\n• Wetter-Entität: Wetter-Entität für Außentemperatur und Vorhersage\n• Personen-Entitäten: Personenverfolgung für ortsbasierte Heizung\n• Ortsmodus: Automatische Heizungsreduzierung wenn niemand zu Hause ist\n• Override Timeout: Wie lange manuelle TRV-Änderungen Zeitpläne überschreiben\n• Fenster-Timeouts: Wie lange vor/nach Fenster öffnen/schließen gewartet wird\n• Early Start: Vorheiz-Einstellungen\n• Heizkurve: Zieltemperatur basierend auf Außentemperatur anpassen\n• Wettervorhersage: Vorheizen vor Kaltfronten, Reduzierung vor Warmfronten",
         "data": {
           "show_panel": "Zeitplan-Panel in Seitenleiste anzeigen",
           "weather_entity": "Wetter-Entität",
@@ -140,7 +144,7 @@
       },
       "debug_settings": {
         "title": "Debug-Einstellungen",
-        "description": "{info}",
+        "description": "Debug-Protokollierung:\n\nAktivieren Sie Debug-Protokollierung um detaillierte Informationen in den Home Assistant Logs zu sehen.\n\n1. Hauptschalter aktivieren\n2. Kategorien zum Protokollieren auswählen\n\nHinweis: Logs erscheinen als INFO-Level in den Home Assistant Core Logs.",
         "data": {
           "debug_enabled": "Debug-Logging aktivieren",
           "debug_categories": "Debug-Kategorien"
