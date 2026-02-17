@@ -16,6 +16,7 @@ from .schedule_model import RoomSchedule
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class ScheduleEngine:
     """Engine for calculating target temperatures based on schedules and mode."""
 
@@ -62,7 +63,9 @@ class ScheduleEngine:
 
         # Manual mode: Don't provide scheduled temperature
         if mode == MODE_MANUAL:
-            _LOGGER.debug("Manual mode active, no scheduled temperature for %s", room_name)
+            _LOGGER.debug(
+                "Manual mode active, no scheduled temperature for %s", room_name
+            )
             return None
 
         # Off mode: Always frost protection
@@ -77,17 +80,34 @@ class ScheduleEngine:
         # Normal or Homeoffice: Use schedules
         room_schedule = self._room_schedules.get(room_name)
         if not room_schedule:
-            _LOGGER.warning("No schedule found for room: %s", room_name)
+            _LOGGER.warning(
+                "No schedule found for room: %s (available rooms: %s)",
+                room_name,
+                list(self._room_schedules.keys()),
+            )
             return None
 
         day_schedule = room_schedule.get_schedule_for_mode(mode, dt)
         if not day_schedule:
+            # Custom mode without own schedule: Fall back to normal schedule
             _LOGGER.debug(
-                "No schedule defined for room %s in mode %s",
+                "No schedule defined for room %s in mode %s, falling back to normal",
                 room_name,
                 mode,
             )
-            return None
+            # Try to use normal schedule as fallback
+            day_schedule = room_schedule.get_schedule_for_mode("normal", dt)
+            if not day_schedule:
+                _LOGGER.warning(
+                    "No schedule found for room %s in mode %s or normal fallback "
+                    "(weekday=%s, weekend=%s, homeoffice=%s)",
+                    room_name,
+                    mode,
+                    room_schedule.normal_weekday is not None,
+                    room_schedule.normal_weekend is not None,
+                    room_schedule.homeoffice_daily is not None,
+                )
+                return None
 
         current_time = dt.time()
         target_temp = day_schedule.get_temperature(
@@ -155,6 +175,7 @@ class ScheduleEngine:
         else:
             # Next day
             from datetime import timedelta
+
             next_dt = dt + timedelta(days=1)
             next_dt = next_dt.replace(
                 hour=next_time.hour,
@@ -179,4 +200,7 @@ class ScheduleEngine:
             return False
 
         day_schedule = room_schedule.get_schedule_for_mode(mode)
+        # Fall back to normal if no custom schedule defined
+        if day_schedule is None:
+            day_schedule = room_schedule.get_schedule_for_mode("normal")
         return day_schedule is not None and len(day_schedule.blocks) > 0

@@ -1,4 +1,5 @@
 """Window detection logic for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -96,7 +97,9 @@ class WindowDetector:
             return self._current_state
 
         if raw_state.is_open != self._current_state.is_open:
-            if self._state_changed_at is None or (now - self._state_changed_at) > timedelta(seconds=5):
+            if self._state_changed_at is None or (
+                now - self._state_changed_at
+            ) > timedelta(seconds=5):
                 _LOGGER.info(
                     "Window state change detected: %s -> %s (%s)",
                     "OPEN" if self._current_state.is_open else "CLOSED",
@@ -127,9 +130,7 @@ class WindowDetector:
                 )
             else:
                 remaining = (self._open_timeout - time_since_change).total_seconds()
-                _LOGGER.debug(
-                    "Window opening detected, timeout in %.0fs", remaining
-                )
+                _LOGGER.debug("Window opening detected, timeout in %.0fs", remaining)
                 self._current_state.timeout_active = False
                 self._current_state.heating_should_stop = False
 
@@ -161,7 +162,10 @@ class WindowDetector:
             if self._current_state.is_open:
                 self._current_state.heating_should_stop = True
             else:
-                if self._timeout_started_at and (now - self._timeout_started_at) >= self._close_timeout:
+                if (
+                    self._timeout_started_at
+                    and (now - self._timeout_started_at) >= self._close_timeout
+                ):
                     self._current_state.timeout_active = False
                     self._current_state.heating_should_stop = False
                     self._current_state.timeout_ends_at = None

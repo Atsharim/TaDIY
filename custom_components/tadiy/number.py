@@ -1,8 +1,13 @@
 """Number platform for TaDIY integration."""
+
 from __future__ import annotations
 import logging
 
-from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
+from homeassistant.components.number import (
+    NumberEntity,
+    NumberEntityDescription,
+    NumberMode,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -86,7 +91,9 @@ class TaDIYHubNumber(CoordinatorEntity, NumberEntity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, description: NumberEntityDescription, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator, description: NumberEntityDescription, entry: ConfigEntry
+    ) -> None:
         """Initialize the number."""
         super().__init__(coordinator)
         self.entity_description = description
@@ -113,5 +120,5 @@ class TaDIYHubNumber(CoordinatorEntity, NumberEntity):
             self.coordinator.config_data["boost_temperature"] = value
         elif self.entity_description.key == "boost_duration":
             self.coordinator.config_data["boost_duration_minutes"] = int(value)
-        
+
         self.async_write_ha_state()

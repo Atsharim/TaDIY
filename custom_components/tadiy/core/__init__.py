@@ -1,4 +1,5 @@
 """Core functionality for TaDIY integration."""
+
 from __future__ import annotations
 
 from .early_start import EarlyStartCalculator, HeatUpModel

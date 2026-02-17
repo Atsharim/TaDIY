@@ -1,4 +1,5 @@
 """Switch platform for TaDIY."""
+
 from __future__ import annotations
 import logging
 from homeassistant.components.switch import SwitchEntity
@@ -8,16 +9,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from .const import (
-CONF_GLOBAL_LEARN_HEATING_RATE,
-CONF_GLOBAL_USE_EARLY_START,
-CONF_HUB,
-DEFAULT_LEARN_HEATING_RATE,
-DEFAULT_USE_EARLY_START,
-DOMAIN,
-MANUFACTURER,
-MODEL_NAME,
+    CONF_GLOBAL_LEARN_HEATING_RATE,
+    CONF_GLOBAL_USE_EARLY_START,
+    CONF_HUB,
+    DEFAULT_LEARN_HEATING_RATE,
+    DEFAULT_USE_EARLY_START,
+    DOMAIN,
+    MANUFACTURER,
+    MODEL_NAME,
 )
+
 _LOGGER = logging.getLogger(__name__)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -38,9 +42,13 @@ async def async_setup_entry(
     ]
     async_add_entities(entities)
     _LOGGER.info("TaDIY switch platform setup complete")
+
+
 class TaDIYUseEarlyStartSwitch(SwitchEntity, RestoreEntity):
     """Switch entity for use early start (global)."""
+
     _attr_entity_category = EntityCategory.CONFIG
+
     def __init__(self, entry_id: str, initial_state: bool) -> None:
         """Initialize the switch entity."""
         self._entry_id = entry_id
@@ -54,6 +62,7 @@ class TaDIYUseEarlyStartSwitch(SwitchEntity, RestoreEntity):
             "manufacturer": MANUFACTURER,
             "model": MODEL_NAME,
         }
+
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on early start."""
         self._attr_is_on = True
@@ -63,6 +72,7 @@ class TaDIYUseEarlyStartSwitch(SwitchEntity, RestoreEntity):
         if coordinator:
             coordinator.global_settings[CONF_GLOBAL_USE_EARLY_START] = True
             await coordinator.async_request_refresh()
+
     async def async_turn_off(self, **kwargs) -> None:
         """Turn off early start."""
         self._attr_is_on = False
@@ -72,6 +82,7 @@ class TaDIYUseEarlyStartSwitch(SwitchEntity, RestoreEntity):
         if coordinator:
             coordinator.global_settings[CONF_GLOBAL_USE_EARLY_START] = False
             await coordinator.async_request_refresh()
+
     async def async_added_to_hass(self) -> None:
         """Restore last value when added to hass."""
         await super().async_added_to_hass()
@@ -79,9 +90,13 @@ class TaDIYUseEarlyStartSwitch(SwitchEntity, RestoreEntity):
         if last_state and last_state.state not in ("unknown", "unavailable"):
             self._attr_is_on = last_state.state == "on"
             _LOGGER.debug("Restored use early start: %s", last_state.state)
+
+
 class TaDIYLearnHeatingRateSwitch(SwitchEntity, RestoreEntity):
     """Switch entity for learn heating rate (global)."""
+
     _attr_entity_category = EntityCategory.CONFIG
+
     def __init__(self, entry_id: str, initial_state: bool) -> None:
         """Initialize the switch entity."""
         self._entry_id = entry_id
@@ -95,6 +110,7 @@ class TaDIYLearnHeatingRateSwitch(SwitchEntity, RestoreEntity):
             "manufacturer": MANUFACTURER,
             "model": MODEL_NAME,
         }
+
     async def async_turn_on(self, **kwargs) -> None:
         """Turn on learning."""
         self._attr_is_on = True
@@ -104,6 +120,7 @@ class TaDIYLearnHeatingRateSwitch(SwitchEntity, RestoreEntity):
         if coordinator:
             coordinator.global_settings[CONF_GLOBAL_LEARN_HEATING_RATE] = True
             await coordinator.async_request_refresh()
+
     async def async_turn_off(self, **kwargs) -> None:
         """Turn off learning."""
         self._attr_is_on = False
@@ -113,6 +130,7 @@ class TaDIYLearnHeatingRateSwitch(SwitchEntity, RestoreEntity):
         if coordinator:
             coordinator.global_settings[CONF_GLOBAL_LEARN_HEATING_RATE] = False
             await coordinator.async_request_refresh()
+
     async def async_added_to_hass(self) -> None:
         """Restore last value when added to hass."""
         await super().async_added_to_hass()

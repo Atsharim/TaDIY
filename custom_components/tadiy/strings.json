@@ -40,20 +40,42 @@
     "step": {
       "room_config": {
         "title": "Room Options",
-        "description": "Configure basic room settings. Advanced settings are available through device entities.",
+        "description": "Configure basic room settings. Weather and Early Start settings are configured at Hub level.",
         "data": {
           "room_name": "Room Name",
           "trv_entities": "TRV Entities",
           "main_temp_sensor": "Temperature Sensor",
+          "humidity_sensor": "Humidity Sensor",
           "window_sensors": "Window Sensors",
-          "outdoor_sensor": "Outdoor Sensor"
+          "outdoor_sensor": "Outdoor Sensor",
+          "override_timeout": "Override Timeout",
+          "hysteresis": "Temperature Hysteresis",
+          "use_pid_control": "Enable PID Control",
+          "pid_kp": "PID: Proportional Gain (Kp)",
+          "pid_ki": "PID: Integral Gain (Ki)",
+          "pid_kd": "PID: Derivative Gain (Kd)",
+          "use_hvac_off_for_low_temp": "Use HVAC Off for Low Temp (Moes TRVs)",
+          "use_room_coupling": "Enable Room Coupling",
+          "adjacent_rooms": "Adjacent Rooms",
+          "coupling_strength": "Coupling Strength"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
           "trv_entities": "Select one or more climate entities (TRVs) to control in this room.",
           "main_temp_sensor": "Select the primary temperature sensor for this room (optional).",
+          "humidity_sensor": "Select a humidity sensor for this room (optional).",
           "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
-          "outdoor_sensor": "Select an outdoor temperature sensor (optional)."
+          "outdoor_sensor": "Select an outdoor temperature sensor (optional).",
+          "override_timeout": "How long manual TRV changes override schedules (empty = use hub setting).",
+          "hysteresis": "Temperature deadband to prevent rapid on/off cycling.",
+          "use_pid_control": "Enable PID controller for smoother temperature regulation.",
+          "use_hvac_off_for_low_temp": "Enable for Moes TRVs that don't support low temperatures.",
+          "use_room_coupling": "Enable heat transfer awareness between adjacent rooms.",
+          "adjacent_rooms": "Select rooms that share walls with this room.",
+          "coupling_strength": "How much to adjust for neighbor heating (0.1=subtle, 1.0=strong).",
+          "pid_kp": "Proportional: Reacts to current error. Higher = faster but may overshoot.",
+          "pid_ki": "Integral: Eliminates steady error. Higher = faster but may oscillate.",
+          "pid_kd": "Derivative: Dampens oscillations. Higher = smoother but slower."
         }
       },
       "add_mode": {
@@ -78,29 +100,42 @@
         "description": "{modes_info}"
       },
       "panel_settings": {
-        "title": "Panel Settings",
+        "title": "Hub Configuration",
         "description": "{info}",
         "data": {
-          "show_panel": "Show Schedules Panel in Sidebar"
+          "show_panel": "Show Schedules Panel in Sidebar",
+          "weather_entity": "Weather Entity",
+          "person_entities": "Person Entities",
+          "location_mode_enabled": "Enable Location-Based Heating (Away Mode)",
+          "global_override_timeout": "Default Override Timeout",
+          "early_start_offset": "Early Start Offset (min)",
+          "early_start_max": "Max Early Start Duration (min)",
+          "use_heating_curve": "Enable Heating Curve (Weather Compensation)",
+          "heating_curve_slope": "Heating Curve Slope",
+          "use_weather_prediction": "Enable Weather Prediction"
+        },
+        "data_description": {
+          "weather_entity": "Weather entity for outdoor temperature and forecast data.",
+          "person_entities": "Person entities for presence detection and away mode.",
+          "early_start_offset": "Additional buffer minutes to start heating early.",
+          "early_start_max": "Maximum pre-heating duration in minutes.",
+          "heating_curve_slope": "Higher value = stronger target adjustment at low outdoor temps.",
+          "use_weather_prediction": "Pre-heat before cold fronts, reduce heating before warm fronts."
         }
       },
       "init_hub": {
-        "title": "Manage TaDIY Hub Modes",
-        "description": "Manage custom operating modes for your heating system. You have {room_count} room(s) configured.",
+        "title": "TaDIY Hub",
+        "description": "Manage your heating system. You have {room_count} room(s) configured.",
         "menu_options": {
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Panel Settings"
+          "panel_settings": "Hub Configuration"
         }
       },
       "init_room": {
         "title": "Configure Room",
-        "description": "Manage room settings and schedules.",
-        "menu_options": {
-          "room_config": "Room Configuration",
-          "manage_schedules": "Manage Schedules"
-        }
+        "description": "Manage room settings and schedules."
       },
       "room_details": {
         "title": "Room Configuration",

@@ -1,4 +1,5 @@
 """Early start calculation with learning for TaDIY."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -18,7 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 
 LEARNING_RATE: float = 0.1
 MAX_SAMPLES_FOR_AVERAGING: int = 50
-MIN_TEMP_INCREASE: float = 0.05
+MIN_TEMP_INCREASE: float = 0.01
 MAX_TEMP_INCREASE_PER_MINUTE: float = 0.5
 
 
@@ -52,7 +53,7 @@ class HeatUpModel:
     ) -> None:
         """
         Update model with a new measurement.
-        
+
         Args:
             temp_increase: Temperature increase in °C
             time_minutes: Time period in minutes
@@ -99,9 +100,8 @@ class HeatUpModel:
             self.degrees_per_hour = self._running_sum / self.sample_count
         else:
             self.degrees_per_hour = (
-                (1 - LEARNING_RATE) * self.degrees_per_hour
-                + LEARNING_RATE * rate_per_hour
-            )
+                1 - LEARNING_RATE
+            ) * self.degrees_per_hour + LEARNING_RATE * rate_per_hour
             self.sample_count += 1
 
         self.last_updated = dt_util.utcnow()
@@ -120,7 +120,7 @@ class HeatUpModel:
     def get_confidence(self) -> float:
         """
         Get confidence score for the learned rate (0.0 to 1.0).
-        
+
         Returns:
             Confidence score based on sample count
         """
@@ -174,12 +174,12 @@ class EarlyStartCalculator:
     ) -> datetime:
         """
         Calculate when to start heating to reach target by target_time.
-        
+
         Args:
             current_temp: Current room temperature in °C
             target_temp: Target temperature in °C
             target_time: Desired time to reach target
-            
+
         Returns:
             Datetime when heating should start
         """
@@ -231,13 +231,13 @@ class EarlyStartCalculator:
     ) -> bool:
         """
         Check if heating should start now to reach target by target_time.
-        
+
         Args:
             current_temp: Current room temperature
             target_temp: Target temperature
             target_time: Desired time to reach target
             current_time: Current time (defaults to now)
-            
+
         Returns:
             True if heating should start
         """

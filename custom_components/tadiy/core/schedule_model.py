@@ -112,6 +112,15 @@ class DaySchedule:
     ) -> float:
         """Get temperature for given time."""
         if not self.blocks:
+            # No blocks defined - this is a configuration issue
+            # Log warning and return frost protection as fallback
+            import logging
+
+            _LOGGER = logging.getLogger(__name__)
+            _LOGGER.warning(
+                "Schedule has no blocks defined (type=%s), returning frost protection",
+                self.schedule_type,
+            )
             return frost_protection_temp
 
         # Find active block
@@ -131,9 +140,7 @@ class DaySchedule:
 
         return float(active_block.temperature)
 
-    def get_next_change(
-        self, current_time: time
-    ) -> tuple[time, float | str] | None:
+    def get_next_change(self, current_time: time) -> tuple[time, float | str] | None:
         """Get next schedule change time and temperature."""
         if not self.blocks:
             return None

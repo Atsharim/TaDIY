@@ -1,4 +1,5 @@
 """Config flow for TaDIY integration."""
+
 from __future__ import annotations
 
 import logging
@@ -21,10 +22,13 @@ from .const import (
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HUB,
+    CONF_HUMIDITY_SENSOR,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
     CONF_ROOM_NAME,
+    CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
+    CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
@@ -57,15 +61,19 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
         """Get the options flow for this handler."""
         return TaDIYOptionsFlowHandler(config_entry)
 
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle re-configuration."""
+        return await self.async_step_user(user_input)
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
         # Check if hub already exists
         existing_entries = self.hass.config_entries.async_entries(DOMAIN)
-        hub_exists = any(
-            entry.data.get(CONF_HUB, False) for entry in existing_entries
-        )
+        hub_exists = any(entry.data.get(CONF_HUB, False) for entry in existing_entries)
 
         if not hub_exists:
             # First setup: Create Hub automatically
@@ -87,6 +95,7 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             hub_data = {
                 "name": "TaDIY Hub",
                 CONF_HUB: True,
+                CONF_SHOW_PANEL: True,
                 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: DEFAULT_WINDOW_OPEN_TIMEOUT,
                 CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT: DEFAULT_WINDOW_CLOSE_TIMEOUT,
                 CONF_GLOBAL_DONT_HEAT_BELOW: DEFAULT_DONT_HEAT_BELOW,
@@ -145,7 +154,9 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     user_input["hub_entry_id"] = hub_entry.entry_id
 
                     # Remove empty optional fields
-                    cleaned_data = {k: v for k, v in user_input.items() if v not in ("", [], None)}
+                    cleaned_data = {
+                        k: v for k, v in user_input.items() if v not in ("", [], None)
+                    }
 
                     return self.async_create_entry(
                         title=room_name,
@@ -157,9 +168,7 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
 
         # Build schema step-by-step to avoid validation errors
         # Same fix as in options_flow.py - complex dict literals cause issues
-        schema_dict = {
-            vol.Required(CONF_ROOM_NAME): selector.TextSelector()
-        }
+        schema_dict = {vol.Required(CONF_ROOM_NAME): selector.TextSelector()}
 
         schema_dict[vol.Required(CONF_TRV_ENTITIES)] = selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -168,24 +177,48 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         )
 
-        schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR, default="")] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
+        schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
             )
         )
 
-        schema_dict[vol.Optional(CONF_WINDOW_SENSORS, default=[])] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="binary_sensor",
-                multiple=True,
+        schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="humidity",
+                )
             )
         )
 
-        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
+        schema_dict[vol.Optional(CONF_WINDOW_SENSORS, default=[])] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="binary_sensor",
+                    device_class=["door", "window", "opening"],
+                    multiple=True,
+                )
+            )
+        )
+
+        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            )
+        )
+
+        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default="")] = (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="weather",
+                )
             )
         )
 

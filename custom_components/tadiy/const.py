@@ -1,4 +1,5 @@
 """Constants for the TaDIY integration."""
+
 from __future__ import annotations
 
 import json
@@ -6,6 +7,7 @@ from pathlib import Path
 from typing import Final
 
 DOMAIN: Final = "tadiy"
+
 
 # Version from manifest.json
 def _get_version() -> str:
@@ -18,6 +20,7 @@ def _get_version() -> str:
     except Exception:
         return "unknown"
 
+
 VERSION: Final = _get_version()
 
 # Configuration
@@ -27,6 +30,14 @@ CONF_TRV_ENTITIES: Final = "trv_entities"
 CONF_MAIN_TEMP_SENSOR: Final = "main_temp_sensor"
 CONF_WINDOW_SENSORS: Final = "window_sensors"
 CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
+CONF_HUMIDITY_SENSOR: Final = "humidity_sensor"  # Optional humidity sensor for room
+CONF_WEATHER_ENTITY: Final = "weather_entity"  # Optional weather entity for hub (fallback outdoor temp + forecast)
+CONF_PERSON_ENTITIES: Final = (
+    "person_entities"  # Optional person entities for location-based control
+)
+CONF_LOCATION_MODE_ENABLED: Final = (
+    "location_mode_enabled"  # Enable location-based control
+)
 CONF_CUSTOM_MODES: Final = "custom_modes"  # Additional custom modes for hub
 CONF_SHOW_PANEL: Final = "show_panel"  # Show schedules panel in sidebar
 
@@ -53,6 +64,32 @@ CONF_MIN_HEATING_RATE: Final = "min_heating_rate"
 CONF_MAX_HEATING_RATE: Final = "max_heating_rate"
 CONF_FROST_PROTECTION_TEMP: Final = "frost_protection_temp"
 
+# Override timeout settings (Hub + Room level)
+CONF_GLOBAL_OVERRIDE_TIMEOUT: Final = "global_override_timeout"
+CONF_OVERRIDE_TIMEOUT: Final = "override_timeout"
+
+# Override timeout options (Hub: never, 1h, 2h, 3h, 4h, next_block, next_day)
+# Room adds "always" option
+OVERRIDE_TIMEOUT_NEVER: Final = "never"
+OVERRIDE_TIMEOUT_1H: Final = "1h"
+OVERRIDE_TIMEOUT_2H: Final = "2h"
+OVERRIDE_TIMEOUT_3H: Final = "3h"
+OVERRIDE_TIMEOUT_4H: Final = "4h"
+OVERRIDE_TIMEOUT_NEXT_BLOCK: Final = "next_block"
+OVERRIDE_TIMEOUT_NEXT_DAY: Final = "next_day"
+OVERRIDE_TIMEOUT_ALWAYS: Final = "always"  # Room only
+
+DEFAULT_GLOBAL_OVERRIDE_TIMEOUT: Final = OVERRIDE_TIMEOUT_NEXT_BLOCK
+DEFAULT_OVERRIDE_TIMEOUT: Final = None  # None = use hub setting
+
+# Override timeout durations in minutes
+OVERRIDE_TIMEOUT_DURATIONS: Final = {
+    OVERRIDE_TIMEOUT_1H: 60,
+    OVERRIDE_TIMEOUT_2H: 120,
+    OVERRIDE_TIMEOUT_3H: 180,
+    OVERRIDE_TIMEOUT_4H: 240,
+}
+
 # Schedule configuration
 CONF_SCHEDULES: Final = "schedules"
 CONF_SCHEDULE_NAME: Final = "schedule_name"
@@ -64,7 +101,9 @@ CONF_SCHEDULE_TEMP: Final = "temperature"
 DEFAULT_NAME: Final = "TaDIY Hub"
 DEFAULT_WINDOW_OPEN_TIMEOUT: Final = 300  # 5 minutes
 DEFAULT_WINDOW_CLOSE_TIMEOUT: Final = 180  # 3 minutes
-DEFAULT_DONT_HEAT_BELOW: Final = 18.0
+DEFAULT_DONT_HEAT_BELOW: Final = (
+    0.0  # 0 = disabled (don't heat when outdoor temp >= this)
+)
 DEFAULT_USE_EARLY_START: Final = True
 DEFAULT_LEARN_HEATING_RATE: Final = True
 DEFAULT_TARGET_TEMP_STEP: Final = 0.5
@@ -79,6 +118,69 @@ DEFAULT_FROST_PROTECTION_TEMP: Final = 5.0
 # Heating rate limits (validation boundaries)
 MIN_HEATING_RATE: Final = 0.05  # Absolute minimum (°C/h)
 MAX_HEATING_RATE: Final = 10.0  # Absolute maximum (°C/h)
+
+# Hysteresis settings (anti-cycling deadband)
+DEFAULT_HYSTERESIS: Final = 0.3  # °C deadband to prevent rapid cycling
+MIN_HYSTERESIS: Final = 0.1  # Minimum hysteresis
+MAX_HYSTERESIS: Final = 2.0  # Maximum hysteresis
+
+# TRV Calibration (automatic by default as per user preference)
+CONF_TRV_CALIBRATION_MODE: Final = "trv_calibration_mode"
+DEFAULT_TRV_CALIBRATION_MODE: Final = "auto"  # auto | manual | disabled
+DEFAULT_TRV_MULTIPLIER: Final = 1.0
+MIN_TRV_MULTIPLIER: Final = 0.5
+MAX_TRV_MULTIPLIER: Final = 2.0
+DEFAULT_TRV_OFFSET: Final = 0.0  # Only used in manual mode
+MIN_TRV_OFFSET: Final = -10.0
+MAX_TRV_OFFSET: Final = 10.0
+
+# Hysteresis settings
+CONF_HYSTERESIS: Final = "hysteresis"
+DEFAULT_HYSTERESIS: Final = 0.3  # °C deadband
+MIN_HYSTERESIS: Final = 0.1
+MAX_HYSTERESIS: Final = 2.0
+
+# PID Control settings
+CONF_USE_PID_CONTROL: Final = "use_pid_control"
+DEFAULT_USE_PID_CONTROL: Final = False  # Disabled by default, opt-in available
+CONF_PID_KP: Final = "pid_kp"
+CONF_PID_KI: Final = "pid_ki"
+CONF_PID_KD: Final = "pid_kd"
+DEFAULT_PID_KP: Final = 0.5
+DEFAULT_PID_KI: Final = 0.01
+DEFAULT_PID_KD: Final = 0.1
+
+# Heating Curve settings
+CONF_USE_HEATING_CURVE: Final = "use_heating_curve"
+DEFAULT_USE_HEATING_CURVE: Final = False  # Disabled by default, opt-in available
+CONF_HEATING_CURVE_SLOPE: Final = "heating_curve_slope"
+DEFAULT_HEATING_CURVE_SLOPE: Final = 0.5
+MIN_HEATING_CURVE_SLOPE: Final = 0.1
+
+# TRV HVAC Mode Control (for Moes and similar TRVs)
+CONF_USE_HVAC_OFF_FOR_LOW_TEMP: Final = "use_hvac_off_for_low_temp"
+DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP: Final = (
+    False  # Disabled by default, opt-in for Moes TRVs
+)
+
+# Weather Prediction (Phase 3.3)
+CONF_USE_WEATHER_PREDICTION: Final = "use_weather_prediction"
+DEFAULT_USE_WEATHER_PREDICTION: Final = False  # Disabled by default, opt-in
+
+# Multi-Room Heat Coupling (Phase 3.2)
+CONF_ADJACENT_ROOMS: Final = "adjacent_rooms"
+CONF_USE_ROOM_COUPLING: Final = "use_room_coupling"
+DEFAULT_USE_ROOM_COUPLING: Final = False  # Disabled by default, opt-in
+CONF_COUPLING_STRENGTH: Final = "coupling_strength"
+DEFAULT_COUPLING_STRENGTH: Final = 0.5  # Temperature adjustment factor (0.0-1.0)
+
+# Thermal Mass Learning settings
+CONF_LEARN_COOLING_RATE: Final = "learn_cooling_rate"
+DEFAULT_LEARN_COOLING_RATE: Final = True  # Enabled by default, opt-out available
+DEFAULT_COOLING_RATE: Final = 0.5  # °C/h conservative default
+MIN_COOLING_RATE: Final = 0.1
+MAX_COOLING_RATE: Final = 3.0
+MAX_HEATING_CURVE_SLOPE: Final = 2.0
 
 # Frost Protection limits
 MIN_FROST_PROTECTION: Final = -5.0  # Minimum frost protection temperature
@@ -115,6 +217,13 @@ SERVICE_BOOST_ALL_ROOMS: Final = "boost_all_rooms"
 SERVICE_SET_HEATING_CURVE: Final = "set_heating_curve"
 SERVICE_GET_SCHEDULE: Final = "get_schedule"
 SERVICE_SET_SCHEDULE: Final = "set_schedule"
+SERVICE_SET_TRV_CALIBRATION: Final = "set_trv_calibration"
+SERVICE_CLEAR_OVERRIDE: Final = "clear_override"
+SERVICE_SET_LOCATION_OVERRIDE: Final = "set_location_override"
+SERVICE_START_PID_AUTOTUNE: Final = "start_pid_autotune"
+SERVICE_STOP_PID_AUTOTUNE: Final = "stop_pid_autotune"
+SERVICE_APPLY_PID_AUTOTUNE: Final = "apply_pid_autotune"
+SERVICE_REFRESH_WEATHER_FORECAST: Final = "refresh_weather_forecast"
 
 # Service attributes
 ATTR_ROOM: Final = "room"
@@ -125,6 +234,9 @@ ATTR_HEATING_RATE: Final = "heating_rate"
 ATTR_ENTITY_ID: Final = "entity_id"
 ATTR_SCHEDULE_TYPE: Final = "schedule_type"
 ATTR_BLOCKS: Final = "blocks"
+ATTR_OFFSET: Final = "offset"
+ATTR_MULTIPLIER: Final = "multiplier"
+ATTR_LOCATION_OVERRIDE: Final = "location_override"
 
 # Hub modes
 HUB_MODE_NORMAL: Final = "normal"
@@ -165,6 +277,7 @@ STORAGE_VERSION_LEARNING: Final = 1
 STORAGE_KEY: Final = "tadiy"
 STORAGE_KEY_LEARNING: Final = "learning_data"
 STORAGE_KEY_SCHEDULES: Final = "schedules"
+STORAGE_KEY_FEATURES: Final = "features"
 
 # Window states
 WINDOW_STATE_CLOSED: Final = "closed"

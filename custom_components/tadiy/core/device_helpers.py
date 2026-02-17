@@ -1,4 +1,5 @@
 """Device info helpers for TaDIY integration."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -9,7 +10,9 @@ from homeassistant.core import HomeAssistant
 from ..const import CONF_HUB, DOMAIN, VERSION
 
 
-def get_device_info(entry: ConfigEntry, hass: HomeAssistant | None = None) -> dict[str, Any]:
+def get_device_info(
+    entry: ConfigEntry, hass: HomeAssistant | None = None
+) -> dict[str, Any]:
     """Get device info for an entry.
 
     Creates exactly ONE device per config entry.
