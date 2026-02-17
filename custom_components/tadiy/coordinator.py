@@ -714,6 +714,27 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_overrides_{entry_id}",
         )
 
+        # Safety Manager
+        from .core.safety import SafetyManager
+
+        self.safety_manager = SafetyManager(
+            room_name=self.room_config.name,
+            debug_callback=self._debug_callback,
+        )
+
+        # Valve Protection Manager
+        from .core.valve_protection import ValveProtectionManager
+
+        self.valve_protection = ValveProtectionManager(
+            room_name=self.room_config.name,
+            debug_callback=self._debug_callback,
+        )
+        self.valve_protection_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"tadiy_valve_protection_{entry_id}",
+        )
+
         self.sensor_manager = SensorManager(self)
         self.trv_manager = TrvManager(self)
         self.orchestrator = RoomOrchestrator(self)
@@ -733,7 +754,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self._cached_outdoor_temp: float | None = None
 
         # Heating Controller with Hysteresis and optional PID
-        hysteresis = room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
+        hysteresis = max(1.0, room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS))
         use_pid = room_data.get(CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL)
 
         if use_pid:
@@ -1455,7 +1476,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         if last_commanded and last_commanded.get("temperature") is not None:
             last_sent_temp = last_commanded["temperature"]
             # If new temp matches last sent command, it's just the TRV obeying us
-            if abs(new_temp - last_sent_temp) < 0.2:
+            if abs(new_temp - last_sent_temp) < 1.0:
                 _LOGGER.debug(
                     "TRV %s: State matches last commanded value (%.1f), ignoring as echo",
                     entity_id,
@@ -1626,6 +1647,33 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # This is partly handled by setup_state_listeners, but we sync here too.
             pass
 
+        # 5b. Safety checks (overheat / frost override any target)
+        overheat = self.safety_manager.check_overheat(fused_temp)
+        frost_emergency = self.safety_manager.check_frost(
+            fused_temp, heating_active=True
+        )
+        if overheat:
+            enforce_target = True
+            # Keep final_target but force heating off via should_heat below
+        if frost_emergency and not overheat:
+            enforce_target = True
+            final_target = max(final_target or 10.0, 10.0)
+
+        # 5c. Valve protection cycling (runs once a week)
+        if self.valve_protection.should_cycle_now():
+            self.valve_protection.start_cycle()
+        if self.valve_protection.state.cycling_active:
+            phase, cycle_temp = self.valve_protection.update_cycle()
+            if cycle_temp is not None:
+                # Override target during valve exercise
+                self.debug(
+                    "rooms",
+                    "Valve protection: phase=%s, temp=%.0f",
+                    phase,
+                    cycle_temp,
+                )
+                await self.trv_manager.apply_target(cycle_temp, should_heat=True)
+
         # 6. Apply Target if needed and store commanded target
         if enforce_target and final_target is not None:
             should_heat = self.orchestrator.calculate_heating_decision(
@@ -1634,15 +1682,23 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 hvac_mode="heat",
             )
 
+            # Safety overrides
+            if overheat:
+                should_heat = False
+            if frost_emergency and not overheat:
+                should_heat = True
+
             self.debug(
                 "rooms",
-                "Heating decision | fused=%.1f | target=%.1f | should_heat=%s",
+                "Heating decision | fused=%.1f | target=%.1f | should_heat=%s%s",
                 fused_temp or 0,
                 final_target,
                 should_heat,
+                " [OVERHEAT]" if overheat else (" [FROST]" if frost_emergency else ""),
             )
 
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)
+            self.safety_manager.on_trv_command_sent(fused_temp)
 
             # Overshoot learning
             if should_heat and fused_temp is not None:
@@ -1661,6 +1717,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             self._commanded_target = trv_state["target"]
             self._last_enforce = False
             heating_active = trv_state["mode"] == "heat"
+
+        # 6b. Valve stuck detection
+        self.safety_manager.check_valve_stuck(fused_temp, heating_active)
 
         # 7. Update models (Learning)
         if fused_temp is not None:
@@ -1726,6 +1785,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self._update_count += 1
 
         self.current_room_data = room_data
+
+        # Attach safety info (not part of dataclass but accessible via coordinator)
+        self._safety_alerts = self.safety_manager.get_active_alerts()
+
         return room_data
 
     def _calculate_window_state(self, window_open: bool) -> WindowState:

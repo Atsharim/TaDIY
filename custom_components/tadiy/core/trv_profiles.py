@@ -104,7 +104,6 @@ def detect_trv_profile(entity_id: str, state: Any) -> str:
     # Check manufacturer string
     manufacturer = str(attrs.get("manufacturer", "")).lower()
     model = str(attrs.get("model", "")).lower()
-    friendly = str(attrs.get("friendly_name", "")).lower()
 
     if "moes" in manufacturer or "moes" in model or "_moes" in entity_id.lower():
         _LOGGER.debug("TRV %s detected as Moes (name match)", entity_id)

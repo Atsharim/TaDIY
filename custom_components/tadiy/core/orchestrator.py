@@ -73,18 +73,25 @@ class RoomOrchestrator:
             )
             return frost_protection, True
 
-        # 2. Away Mode (Hub level away) - use room's away temperature
+        # 2. Away Mode (Hub level away) - gradual temperature reduction
         if (
             self.coordinator.hub_coordinator
             and self.coordinator.hub_coordinator.should_reduce_heating_for_away()
         ):
             away_temp = self.room_config.away_temperature
+            # Use gradual reduction: grace period → partial → full away
+            loc_mgr = self.coordinator.hub_coordinator.location_manager
+            gradual_target = loc_mgr.get_gradual_away_target(
+                scheduled_target or 20.0, away_temp
+            )
             self.coordinator.debug(
                 "rooms",
-                "Target: Away mode - enforcing away temperature %.1f°C",
+                "Target: Away mode - gradual target %.1f°C (away=%.1f°C, sched=%.1f°C)",
+                gradual_target,
                 away_temp,
+                scheduled_target or 20.0,
             )
-            return away_temp, True
+            return gradual_target, True
 
         # 3. Outdoor Temperature Threshold (Heat below outside)
         if (

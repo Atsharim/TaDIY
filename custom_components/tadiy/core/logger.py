@@ -49,7 +49,7 @@ class TaDIYLogger:
             if room_name:
                 prefix += f"({room_name}) "
 
-            _LOGGER.info(prefix + message, *args)
+            _LOGGER.debug(prefix + message, *args)
 
     def _is_enabled(self, category: str) -> bool:
         """Check if a debug category is enabled in hub config."""
