@@ -342,7 +342,6 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
             trv_key = entity_id.replace("climate.", "").replace(".", "_")
             if cal_info:
                 attributes[f"{trv_key}_mode"] = cal_info["mode"]
-                attributes[f"{trv_key}_multiplier"] = round(cal_info["multiplier"], 3)
                 attributes[f"{trv_key}_offset"] = round(cal_info["offset"], 1)
                 attributes[f"{trv_key}_current_temp"] = (
                     round(trv_temp, 2) if trv_temp else None
@@ -361,7 +360,6 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
             else:
                 # No calibration data yet
                 attributes[f"{trv_key}_mode"] = "auto"
-                attributes[f"{trv_key}_multiplier"] = 1.0
                 attributes[f"{trv_key}_offset"] = 0.0
                 attributes[f"{trv_key}_current_temp"] = (
                     round(trv_temp, 2) if trv_temp else None
