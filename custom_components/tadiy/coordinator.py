@@ -49,15 +49,6 @@ from .const import (
     CONF_COUPLING_STRENGTH,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
-    CONF_DEBUG_ROOMS,
-    CONF_DEBUG_HUB,
-    CONF_DEBUG_PANEL,
-    CONF_DEBUG_UI,
-    CONF_DEBUG_CARDS,
-    CONF_DEBUG_TRV,
-    CONF_DEBUG_SENSORS,
-    CONF_DEBUG_SCHEDULE,
-    CONF_DEBUG_VERBOSE,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
@@ -664,22 +655,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self.hass = hass
         self.hub_coordinator = hub_coordinator
 
-        # Initialize Logger
-        debug_config = {}
-        if hub_coordinator:
-            hub_conf = hub_coordinator.config_entry.data
-            debug_config = {
-                CONF_DEBUG_ROOMS: hub_conf.get(CONF_DEBUG_ROOMS, False),
-                CONF_DEBUG_HUB: hub_conf.get(CONF_DEBUG_HUB, False),
-                CONF_DEBUG_PANEL: hub_conf.get(CONF_DEBUG_PANEL, False),
-                CONF_DEBUG_UI: hub_conf.get(CONF_DEBUG_UI, False),
-                CONF_DEBUG_CARDS: hub_conf.get(CONF_DEBUG_CARDS, False),
-                CONF_DEBUG_TRV: hub_conf.get(CONF_DEBUG_TRV, False),
-                CONF_DEBUG_SENSORS: hub_conf.get(CONF_DEBUG_SENSORS, False),
-                CONF_DEBUG_SCHEDULE: hub_conf.get(CONF_DEBUG_SCHEDULE, False),
-                CONF_DEBUG_VERBOSE: hub_conf.get(CONF_DEBUG_VERBOSE, False),
-            }
-        self._logger = TaDIYLogger(debug_config)
+        # Initialize Logger (pass self so it can dynamically access hub config)
+        self._logger = TaDIYLogger(self)
 
         # Transform config flow data to RoomConfig format
         room_config_data = self._transform_config_data(room_data)
