@@ -1456,19 +1456,21 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             scheduled_target = self.get_scheduled_target()
             desired_target = scheduled_target
 
-            _LOGGER.debug(
-                "Room %s: Initial scheduled_target=%s",
+            _LOGGER.warning(
+                "Room %s: Step 1 - scheduled_target=%s, desired_target=%s",
                 self.room_config.name,
                 scheduled_target,
+                desired_target,
             )
 
             # Check for active override
             active_override = self.override_manager.get_active_override()
             if active_override:
                 desired_target = active_override.temperature
-                _LOGGER.debug(
-                    "Room %s: Override active, desired_target=%s",
+                _LOGGER.warning(
+                    "Room %s: Step 2 - Override active! override_temp=%.1f, desired_target=%s",
                     self.room_config.name,
+                    active_override.temperature,
                     desired_target,
                 )
 
@@ -1478,8 +1480,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             enforce_target = True
             if desired_target is None:
                 enforce_target = False
-                _LOGGER.debug(
-                    "Room %s: No scheduled target, enforce_target=False (Manual mode or no schedule)",
+                _LOGGER.warning(
+                    "Room %s: Step 3 - No target, enforce_target=False",
                     self.room_config.name,
                 )
                 # Use current TRV setting as reference for display
@@ -1496,6 +1498,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
             # 3. Outdoor Temperature Threshold - only if feature is explicitly enabled
             # Note: dont_heat_below_outdoor = 0 means feature is disabled
+            _LOGGER.warning(
+                "Room %s: Step 4 - outdoor_temp=%s, dont_heat_below=%s",
+                self.room_config.name,
+                outdoor_temp,
+                self.room_config.dont_heat_below_outdoor,
+            )
             if (
                 outdoor_temp is not None
                 and self.room_config.dont_heat_below_outdoor > 0
@@ -1508,28 +1516,38 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 )
                 desired_target = frost_protection
                 enforce_target = True  # Safety overrides Manual Mode
-                _LOGGER.info(
-                    "Room %s: Outdoor temp %.1f°C >= threshold %.1f°C, forcing frost protection %.1f°C",
+                _LOGGER.warning(
+                    "Room %s: Step 4 TRIGGERED - outdoor >= threshold, frost=%.1f",
                     self.room_config.name,
-                    outdoor_temp,
-                    self.room_config.dont_heat_below_outdoor,
                     frost_protection,
                 )
 
             # 2. Away Mode
-            if (
+            away_active = (
                 self.hub_coordinator
                 and self.hub_coordinator.should_reduce_heating_for_away()
-            ):
+            )
+            _LOGGER.warning(
+                "Room %s: Step 5 - away_active=%s",
+                self.room_config.name,
+                away_active,
+            )
+            if away_active:
                 frost_protection = self.hub_coordinator.get_frost_protection_temp()
                 desired_target = frost_protection
                 enforce_target = True
-                _LOGGER.debug(
-                    "Room %s: Away mode active, forcing frost protection",
+                _LOGGER.warning(
+                    "Room %s: Step 5 TRIGGERED - away mode, frost=%.1f",
                     self.room_config.name,
+                    frost_protection,
                 )
 
             # 1. Window Open (Highest Priority)
+            _LOGGER.warning(
+                "Room %s: Step 6 - window_should_stop=%s",
+                self.room_config.name,
+                window_state.heating_should_stop,
+            )
             if window_state.heating_should_stop:
                 frost_protection = (
                     self.hub_coordinator.get_frost_protection_temp()
@@ -1539,9 +1557,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # Or usage of specific window open temperature if added to config
                 desired_target = frost_protection
                 enforce_target = True
-                _LOGGER.debug(
-                    "Room %s: Window open, forcing frost protection",
+                _LOGGER.warning(
+                    "Room %s: Step 6 TRIGGERED - window open, frost=%.1f",
                     self.room_config.name,
+                    frost_protection,
                 )
 
             current_target = desired_target
