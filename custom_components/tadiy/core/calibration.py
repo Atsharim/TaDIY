@@ -182,24 +182,46 @@ class CalibrationManager:
         target_temp: float,
         room_temp: float | None = None,
         trv_temp: float | None = None,
+        max_temp: float = 30.0,
     ) -> float:
         """
-        Get calibrated target for a TRV.
+        Get calibrated target for a TRV using offset-based compensation.
+
+        The TRV sensor is typically warmer than the room sensor (closer to radiator).
+        To compensate: calibrated_target = target + (trv_temp - room_temp)
+        
+        Example: target=21°, trv=22°, room=19°
+        - Offset = 22 - 19 = 3°C  
+        - Calibrated = 21 + 3 = 24°C
+        - TRV now heats because 22° < 24°
 
         Args:
             entity_id: TRV entity ID
             target_temp: Desired room temperature
-            room_temp: Current room temperature (for auto mode)
-            trv_temp: Current TRV sensor reading (for auto mode)
+            room_temp: Current room temperature from external sensor
+            trv_temp: Current TRV's internal sensor reading
+            max_temp: Maximum allowed temperature (clamp limit)
 
         Returns:
-            Calibrated target temperature
+            Calibrated target temperature for the TRV
         """
-        if entity_id in self._calibrations:
-            return self._calibrations[entity_id].apply_calibration(
-                target_temp, room_temp, trv_temp
+        # If both sensors available, apply offset compensation
+        if room_temp is not None and trv_temp is not None:
+            offset = trv_temp - room_temp
+            calibrated = target_temp + offset
+            
+            # Clamp to max_temp
+            calibrated = min(calibrated, max_temp)
+            
+            _LOGGER.debug(
+                "TRV %s: Offset compensation - target=%.1f, room=%.1f, trv=%.1f, "
+                "offset=%.1f, calibrated=%.1f",
+                entity_id, target_temp, room_temp, trv_temp, offset, calibrated
             )
-        return target_temp
+            return round(calibrated, 1)
+        
+        # No room sensor: pass target through unchanged
+        return round(target_temp, 1)
 
     def update_auto_calibration(
         self,

@@ -17,6 +17,8 @@ from .const import (
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
+    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_HEATING_CURVE_SLOPE,
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
@@ -48,6 +50,8 @@ from .const import (
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
+    DEFAULT_WINDOW_OPEN_TIMEOUT,
+    DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
@@ -134,6 +138,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 "remove_mode": "Remove Custom Mode",
                 "view_modes": "View All Modes",
                 "panel_settings": "Hub Configuration",
+                "debug_settings": "Debug Settings",
             },
             description_placeholders={"room_count": str(room_count)},
         )
@@ -299,6 +304,14 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             if early_start_max is not None:
                 new_data[CONF_EARLY_START_MAX] = early_start_max
 
+            # Window timeout settings (Hub-level)
+            window_open_timeout = user_input.get(CONF_GLOBAL_WINDOW_OPEN_TIMEOUT)
+            if window_open_timeout is not None:
+                new_data[CONF_GLOBAL_WINDOW_OPEN_TIMEOUT] = int(window_open_timeout)
+            window_close_timeout = user_input.get(CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT)
+            if window_close_timeout is not None:
+                new_data[CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT] = int(window_close_timeout)
+
             # Weather Compensation / Heating Curve settings (Hub-level)
             new_data[CONF_USE_HEATING_CURVE] = user_input.get(
                 CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
@@ -311,13 +324,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             new_data[CONF_USE_WEATHER_PREDICTION] = user_input.get(
                 CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
             )
-
-            # Debug settings
-            new_data[CONF_DEBUG_ROOMS] = user_input.get(CONF_DEBUG_ROOMS, False)
-            new_data[CONF_DEBUG_HUB] = user_input.get(CONF_DEBUG_HUB, False)
-            new_data[CONF_DEBUG_PANEL] = user_input.get(CONF_DEBUG_PANEL, False)
-            new_data[CONF_DEBUG_UI] = user_input.get(CONF_DEBUG_UI, False)
-            new_data[CONF_DEBUG_CARDS] = user_input.get(CONF_DEBUG_CARDS, False)
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
@@ -351,6 +357,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
         current_use_weather_prediction = current_data.get(
             CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
+        )
+        current_window_open_timeout = current_data.get(
+            CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
+        )
+        current_window_close_timeout = current_data.get(
+            CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
         )
 
         # Build schema step-by-step
@@ -452,6 +464,37 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
+        # Window timeout settings
+        schema_dict[
+            vol.Optional(
+                CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+                default=current_window_open_timeout,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=1800,
+                step=30,
+                unit_of_measurement="s",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
+                default=current_window_close_timeout,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=600,
+                step=30,
+                unit_of_measurement="s",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
         # Weather Compensation / Heating Curve
         schema_dict[
             vol.Optional(
@@ -482,23 +525,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         ] = selector.BooleanSelector()
 
-        # Debug settings
-        schema_dict[
-            vol.Optional(CONF_DEBUG_ROOMS, default=current_data.get(CONF_DEBUG_ROOMS, False))
-        ] = selector.BooleanSelector()
-        schema_dict[
-            vol.Optional(CONF_DEBUG_HUB, default=current_data.get(CONF_DEBUG_HUB, False))
-        ] = selector.BooleanSelector()
-        schema_dict[
-            vol.Optional(CONF_DEBUG_PANEL, default=current_data.get(CONF_DEBUG_PANEL, False))
-        ] = selector.BooleanSelector()
-        schema_dict[
-            vol.Optional(CONF_DEBUG_UI, default=current_data.get(CONF_DEBUG_UI, False))
-        ] = selector.BooleanSelector()
-        schema_dict[
-            vol.Optional(CONF_DEBUG_CARDS, default=current_data.get(CONF_DEBUG_CARDS, False))
-        ] = selector.BooleanSelector()
-
         return self.async_show_form(
             step_id="panel_settings",
             data_schema=vol.Schema(schema_dict),
@@ -510,11 +536,104 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     "• Person Entities: Person tracking for location-based heating\n"
                     "• Location Mode: Automatic heating reduction when nobody is home\n"
                     "• Override Timeout: How long manual TRV changes override schedules\n"
-                    "• Early Start Offset: Additional minutes to start heating early\n"
-                    "• Early Start Max: Maximum pre-heating duration\n"
+                    "• Window Timeouts: How long to wait before/after window open/close\n"
+                    "• Early Start: Pre-heating settings\n"
                     "• Heating Curve: Adjust target temperature based on outdoor temperature\n"
-                    "• Heating Curve Slope: Higher = stronger adjustment at low outdoor temps\n"
                     "• Weather Prediction: Pre-heat before cold fronts, reduce before warm fronts"
+                )
+            },
+        )
+
+    async def async_step_debug_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure debug logging settings."""
+        if user_input is not None:
+            new_data = dict(self.config_entry.data)
+            
+            # Master toggle - if disabled, disable all categories
+            debug_enabled = user_input.get("debug_enabled", False)
+            
+            if debug_enabled:
+                # Get selected categories from multi-select
+                selected_categories = user_input.get("debug_categories", [])
+                new_data[CONF_DEBUG_ROOMS] = "rooms" in selected_categories
+                new_data[CONF_DEBUG_HUB] = "hub" in selected_categories
+                new_data[CONF_DEBUG_PANEL] = "panel" in selected_categories
+                new_data[CONF_DEBUG_UI] = "ui" in selected_categories
+                new_data[CONF_DEBUG_CARDS] = "cards" in selected_categories
+            else:
+                # Disable all
+                new_data[CONF_DEBUG_ROOMS] = False
+                new_data[CONF_DEBUG_HUB] = False
+                new_data[CONF_DEBUG_PANEL] = False
+                new_data[CONF_DEBUG_UI] = False
+                new_data[CONF_DEBUG_CARDS] = False
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+
+            # Trigger reload for changes to take effect
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+
+            return self.async_create_entry(title="", data={})
+
+        # Get current settings
+        current_data = self.config_entry.data
+        
+        # Check if any debug is enabled
+        any_debug_enabled = (
+            current_data.get(CONF_DEBUG_ROOMS, False) or
+            current_data.get(CONF_DEBUG_HUB, False) or
+            current_data.get(CONF_DEBUG_PANEL, False) or
+            current_data.get(CONF_DEBUG_UI, False) or
+            current_data.get(CONF_DEBUG_CARDS, False)
+        )
+        
+        # Build list of currently enabled categories
+        enabled_categories = []
+        if current_data.get(CONF_DEBUG_ROOMS, False):
+            enabled_categories.append("rooms")
+        if current_data.get(CONF_DEBUG_HUB, False):
+            enabled_categories.append("hub")
+        if current_data.get(CONF_DEBUG_PANEL, False):
+            enabled_categories.append("panel")
+        if current_data.get(CONF_DEBUG_UI, False):
+            enabled_categories.append("ui")
+        if current_data.get(CONF_DEBUG_CARDS, False):
+            enabled_categories.append("cards")
+
+        schema_dict = {
+            vol.Required("debug_enabled", default=any_debug_enabled): bool,
+        }
+        
+        schema_dict[
+            vol.Optional("debug_categories", default=enabled_categories)
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[
+                    selector.SelectOptionDict(value="rooms", label="Room Logic (heating decisions, targets)"),
+                    selector.SelectOptionDict(value="hub", label="Hub Logic (mode changes, coordination)"),
+                    selector.SelectOptionDict(value="panel", label="Schedule Panel"),
+                    selector.SelectOptionDict(value="ui", label="User Interface"),
+                    selector.SelectOptionDict(value="cards", label="Dashboard Cards"),
+                ],
+                multiple=True,
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        )
+
+        return self.async_show_form(
+            step_id="debug_settings",
+            data_schema=vol.Schema(schema_dict),
+            description_placeholders={
+                "info": (
+                    "Debug Logging:\n\n"
+                    "Enable debug logging to see detailed information in Home Assistant logs.\n\n"
+                    "1. Enable the master toggle\n"
+                    "2. Select which categories to log\n\n"
+                    "Note: Logs appear as INFO level in Home Assistant Core logs."
                 )
             },
         )
