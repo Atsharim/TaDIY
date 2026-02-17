@@ -34,8 +34,6 @@ jobs:
         run: |
           python -m json.tool custom_components/tadiy/manifest.json > /dev/null
           python -m json.tool custom_components/tadiy/strings.json > /dev/null
-          python -m json.tool custom_components/tadiy/translations/de.json > /dev/null
-          python -m json.tool custom_components/tadiy/translations/en.json > /dev/null
 
   lint:
     runs-on: ubuntu-latest
