@@ -72,14 +72,15 @@ from .const import (
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
+    HUB_UPDATE_INTERVAL,
     MAX_CUSTOM_MODES,
     OVERRIDE_TIMEOUT_ALWAYS,
     OVERRIDE_TIMEOUT_NEVER,
+    ROOM_UPDATE_INTERVAL,
     STORAGE_KEY,
     STORAGE_KEY_SCHEDULES,
     STORAGE_VERSION,
     STORAGE_VERSION_SCHEDULES,
-    UPDATE_INTERVAL,
 )
 from .core.control import HeatingController, PIDConfig, PIDHeatingController
 from .core.early_start import HeatUpModel
@@ -114,7 +115,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="TaDIY Hub",
-            update_interval=timedelta(seconds=UPDATE_INTERVAL),
+            update_interval=timedelta(seconds=HUB_UPDATE_INTERVAL),
         )
         self.entry_id = entry_id
         self.config_entry = config_entry
@@ -732,6 +733,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self._commanded_target: float | None = None
         self._commanded_hvac_mode: str = "heat"
 
+        # Change detection: skip heavy work when nothing changed
+        self._last_final_target: float | None = None
+        self._last_enforce: bool = False
+
         # Cached outdoor temperature for heating curve
         self._cached_outdoor_temp: float | None = None
 
@@ -791,7 +796,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name=DOMAIN + "_room_" + self.room_config.name,
-            update_interval=timedelta(seconds=UPDATE_INTERVAL),
+            update_interval=timedelta(seconds=ROOM_UPDATE_INTERVAL),
         )
 
         # Register with room coupling manager (Phase 3.2)
@@ -1541,6 +1546,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # 1. Gather Sensor Data
         fused_temp = self.sensor_manager.get_fused_temperature()
         outdoor_temp = self.sensor_manager.get_outdoor_temperature()
+        self._cached_outdoor_temp = outdoor_temp
         window_open = self.sensor_manager.is_window_open()
         humidity = self.sensor_manager.get_humidity()
 
@@ -1600,15 +1606,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # 6. Apply Target if needed and store commanded target
         if enforce_target and final_target is not None:
-            # Determine if we should heat based on temperature demand
-            # Pass "heat" as intended mode since we ARE enforcing a target
-            # (the decision should be based on temp difference, not current TRV state)
             should_heat = self.orchestrator.calculate_heating_decision(
                 fused_temp=fused_temp,
                 target_temp=final_target,
-                hvac_mode="heat"  # We intend to heat when enforcing a target
+                hvac_mode="heat",
             )
-            
+
             self.debug(
                 "rooms",
                 "Heating decision | fused=%.1f | target=%.1f | should_heat=%s",
@@ -1616,26 +1619,25 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 final_target,
                 should_heat,
             )
-            
+
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)
-            
-            # Track overshoot learning - start cycle when heating begins
-            if hasattr(self, 'overshoot_manager') and should_heat and fused_temp is not None:
+
+            # Overshoot learning
+            if should_heat and fused_temp is not None:
                 self.overshoot_manager.start_heating_cycle(
                     self.room_config.name, fused_temp, final_target
                 )
-            elif hasattr(self, 'overshoot_manager') and not should_heat:
+            elif not should_heat:
                 self.overshoot_manager.end_heating_cycle(self.room_config.name)
-            
-            # Command and Remember: Store what we just commanded
+
             self._commanded_target = final_target
             self._commanded_hvac_mode = "heat" if should_heat else "off"
-            
-            # Heating is active based on our decision, not TRV state
+            self._last_final_target = final_target
+            self._last_enforce = True
             heating_active = should_heat
         else:
-            # Manual mode or no enforcement - use TRV's current target
             self._commanded_target = trv_state["target"]
+            self._last_enforce = False
             heating_active = trv_state["mode"] == "heat"
 
         # 7. Update models (Learning)

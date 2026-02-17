@@ -4,6 +4,7 @@ Features:
 - Update lock to prevent race conditions
 - Context tracking for echo detection
 - Last commanded state tracking
+- Minimum command interval to avoid TRV flooding
 - Detailed debug logging of all TRV commands
 """
 
@@ -19,6 +20,10 @@ from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__package__)
 
+# Minimum interval between command batches to the same TRV.
+# Prevents flooding when nothing has actually changed.
+MIN_COMMAND_INTERVAL_SECONDS: int = 60
+
 
 class TrvManager:
     """Handles communication with TRV devices for a room.
@@ -27,6 +32,7 @@ class TrvManager:
     - _update_lock: Prevents concurrent updates to TRVs
     - _last_command_context: Context for echo detection
     - _last_commanded: Tracks what we last commanded to each TRV
+    - Minimum command interval to avoid TRV flooding
     """
 
     def __init__(self, coordinator: Any) -> None:
@@ -43,6 +49,10 @@ class TrvManager:
         # Track last commanded state per TRV for drift detection
         self._last_commanded: dict[str, dict[str, Any]] = {}
         self._last_command_time: datetime | None = None
+
+        # Track the last *applied* target/mode to skip redundant commands
+        self._last_applied_target: float | None = None
+        self._last_applied_should_heat: bool | None = None
 
     def _debug(self, message: str, *args: Any) -> None:
         """Log TRV debug message using coordinator's logger."""
@@ -94,11 +104,34 @@ class TrvManager:
     ) -> None:
         """Apply target temperature and HVAC mode to all TRVs.
 
-        Uses update lock to prevent race conditions.
+        Skips redundant commands when target and mode are unchanged,
+        and enforces a minimum interval between command batches.
         """
+        # Skip if nothing changed since last apply
+        if (
+            self._last_applied_target is not None
+            and abs(target - self._last_applied_target) < 0.1
+            and self._last_applied_should_heat == should_heat
+        ):
+            # Enforce minimum interval even for "same" state
+            if self._last_command_time is not None:
+                elapsed = (dt_util.utcnow() - self._last_command_time).total_seconds()
+                if elapsed < MIN_COMMAND_INTERVAL_SECONDS:
+                    self._debug(
+                        "Skipping redundant command (target=%.1f, heat=%s, %ds ago)",
+                        target,
+                        should_heat,
+                        int(elapsed),
+                    )
+                    return
+
         # Acquire lock to prevent concurrent TRV updates
         async with self._update_lock:
             await self._apply_target_locked(target, should_heat)
+
+        # Track what we applied
+        self._last_applied_target = target
+        self._last_applied_should_heat = should_heat
 
     async def _apply_target_locked(
         self, target: float, should_heat: bool | None

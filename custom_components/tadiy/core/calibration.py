@@ -216,16 +216,7 @@ class CalibrationManager:
         # If both sensors available, apply offset compensation
         if room_temp is not None and trv_temp is not None:
             offset = trv_temp - room_temp
-            calibrated = target_temp + offset
-            
-            # Clamp to max_temp
-            calibrated = min(calibrated, max_temp)
-            
-            _LOGGER.debug(
-                "TRV %s: Offset compensation - target=%.1f, room=%.1f, trv=%.1f, "
-                "offset=%.1f, calibrated=%.1f",
-                entity_id, target_temp, room_temp, trv_temp, offset, calibrated
-            )
+            calibrated = min(target_temp + offset, max_temp)
             return round(calibrated, 1)
         
         # No room sensor: pass target through unchanged

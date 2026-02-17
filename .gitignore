@@ -115,3 +115,15 @@ Thumbs.db
 secrets.yaml
 known_devices.yaml
 ip_bans.yaml
+
+# Ralph Configuration and State
+.ralph/
+.ralphrc
+
+# Ralph Logs
+ralph.log
+.ralph/live.log
+.ralph/logs/
+
+#Gitignore
+.gitignore

@@ -135,25 +135,17 @@ MIN_HEATING_RATE: Final = 0.05  # Absolute minimum (°C/h)
 MAX_HEATING_RATE: Final = 10.0  # Absolute maximum (°C/h)
 
 # Hysteresis settings (anti-cycling deadband)
-DEFAULT_HYSTERESIS: Final = 0.3  # °C deadband to prevent rapid cycling
-MIN_HYSTERESIS: Final = 0.1  # Minimum hysteresis
-MAX_HYSTERESIS: Final = 2.0  # Maximum hysteresis
+CONF_HYSTERESIS: Final = "hysteresis"
+DEFAULT_HYSTERESIS: Final = 0.5  # °C deadband to prevent rapid cycling
+MIN_HYSTERESIS: Final = 0.1
+MAX_HYSTERESIS: Final = 2.0
 
 # TRV Calibration (automatic by default as per user preference)
 CONF_TRV_CALIBRATION_MODE: Final = "trv_calibration_mode"
 DEFAULT_TRV_CALIBRATION_MODE: Final = "auto"  # auto | manual | disabled
 DEFAULT_TRV_OFFSET: Final = 0.0
-MIN_TRV_OFFSET: Final = -15.0
-MAX_TRV_OFFSET: Final = 15.0
-DEFAULT_TRV_OFFSET: Final = 0.0  # Only used in manual mode
 MIN_TRV_OFFSET: Final = -10.0
 MAX_TRV_OFFSET: Final = 10.0
-
-# Hysteresis settings
-CONF_HYSTERESIS: Final = "hysteresis"
-DEFAULT_HYSTERESIS: Final = 0.3  # °C deadband
-MIN_HYSTERESIS: Final = 0.1
-MAX_HYSTERESIS: Final = 2.0
 
 # PID Control settings
 CONF_USE_PID_CONTROL: Final = "use_pid_control"
@@ -281,9 +273,9 @@ DEFAULT_BOOST_TEMPERATURE: Final = 24.0
 DEFAULT_BOOST_DURATION: Final = 60
 
 # Update intervals
-UPDATE_INTERVAL: Final = 30
+UPDATE_INTERVAL: Final = 60
 HUB_UPDATE_INTERVAL: Final = 60
-ROOM_UPDATE_INTERVAL: Final = 30
+ROOM_UPDATE_INTERVAL: Final = 60
 
 # Storage keys
 STORAGE_VERSION: Final = 1

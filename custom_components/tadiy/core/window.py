@@ -124,7 +124,7 @@ class WindowDetector:
                     timeout_active=True,
                     timeout_ends_at=None,
                 )
-                _LOGGER.warning(
+                _LOGGER.info(
                     "Window OPEN timeout exceeded (%ds) - Heating STOPPED",
                     self._open_timeout.total_seconds(),
                 )
