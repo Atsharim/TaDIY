@@ -228,12 +228,13 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             ),
         }
 
-        # Add optional fields with default only if value exists
-        if current_data.get(CONF_MAIN_TEMP_SENSOR):
+        # Add optional fields with default only if value exists AND is not empty
+        main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR)
+        if main_temp:
             schema_dict[
                 vol.Optional(
                     CONF_MAIN_TEMP_SENSOR,
-                    default=current_data[CONF_MAIN_TEMP_SENSOR],
+                    default=main_temp,
                 )
             ] = selector.EntitySelector(
                 selector.EntitySelectorConfig(
@@ -249,11 +250,13 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
                 )
             )
 
-        if current_data.get(CONF_WINDOW_SENSORS):
+        window_sensors = current_data.get(CONF_WINDOW_SENSORS)
+        # Check for non-empty list ([] is falsy in boolean context, but we need explicit check)
+        if window_sensors and len(window_sensors) > 0:
             schema_dict[
                 vol.Optional(
                     CONF_WINDOW_SENSORS,
-                    default=current_data[CONF_WINDOW_SENSORS],
+                    default=window_sensors,
                 )
             ] = selector.EntitySelector(
                 selector.EntitySelectorConfig(
@@ -269,11 +272,12 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
                 )
             )
 
-        if current_data.get(CONF_OUTDOOR_SENSOR):
+        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
+        if outdoor_sensor:
             schema_dict[
                 vol.Optional(
                     CONF_OUTDOOR_SENSOR,
-                    default=current_data[CONF_OUTDOOR_SENSOR],
+                    default=outdoor_sensor,
                 )
             ] = selector.EntitySelector(
                 selector.EntitySelectorConfig(
