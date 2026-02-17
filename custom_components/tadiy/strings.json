@@ -90,9 +90,8 @@
         "title": "Configure Room: {room_name}",
         "description": "Manage settings for this room.",
         "menu_options": {
-          "room_details": "Room Settings",
-          "schedules": "Edit Schedules",
-          "learning": "Learning Settings"
+          "room_config": "Room Configuration",
+          "manage_schedules": "Manage Schedules"
         }
       },
       "room_details": {
@@ -178,7 +177,8 @@
     "abort": {
       "hub_not_configurable": "Hub settings are managed through device entities. Use the Hub device controls to configure global settings.",
       "coordinator_not_found": "Hub coordinator not found. Please reload the integration.",
-      "no_custom_modes": "There are no custom modes configured. Only default modes (Normal, Homeoffice, Manual, Off) exist. You can add custom modes from the Hub Options menu."
+      "no_custom_modes": "There are no custom modes configured. Only default modes (Normal, Homeoffice, Manual, Off) exist. You can add custom modes from the Hub Options menu.",
+      "use_lovelace_card": "{message}"
     }
   },
   "entity": {
