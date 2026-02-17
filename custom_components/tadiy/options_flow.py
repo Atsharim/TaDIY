@@ -728,7 +728,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
             # Remove empty optional fields instead of storing "" or []
             for key, value in user_input.items():
-                if value in ("", [], None):
+                if value in ("", [], None, "default"):
                     new_data.pop(key, None)
                 else:
                     new_data[key] = value
@@ -915,7 +915,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
 
         # Override Timeout (Room level, includes "always" option)
-        current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "")
+        current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "default")
         schema_dict[
             vol.Optional(
                 CONF_OVERRIDE_TIMEOUT,
@@ -924,7 +924,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    selector.SelectOptionDict(value="", label="Use hub setting"),
+                    selector.SelectOptionDict(value="default", label="Use hub setting"),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEVER,
                         label="Never (manual changes stay forever)",

@@ -1,250 +1,387 @@
 {
   "config": {
     "step": {
-      "user": {
-        "title": "TaDIY - Adaptive Climate Orchestrator",
-        "description": "Richten Sie Ihre TaDIY-Instanz ein",
+      "hub": {
+        "title": "TaDIY Hub einrichten",
+        "description": "TaDIY Hub wird automatisch mit Standardeinstellungen erstellt. Sie können globale Einstellungen über die Hub-Geräteentitäten konfigurieren."
+      },
+      "room": {
+        "title": "Raum hinzufügen",
+        "description": "Neuen Raum für Klimasteuerung konfigurieren.",
         "data": {
-          "name": "Name der Integration"
+          "room_name": "Raumname",
+          "trv_entities": "Thermostate (TRVs)",
+          "main_temp_sensor": "Temperatursensor",
+          "window_sensors": "Fenstersensoren",
+          "outdoor_sensor": "Außentemperatursensor"
+        },
+        "data_description": {
+          "room_name": "Eindeutigen Namen für diesen Raum wählen.",
+          "trv_entities": "Wähle ein oder mehr Klima-Entitäten (TRVs) für diesen Raum.",
+          "main_temp_sensor": "Haupttemperatursensor für diesen Raum (optional).",
+          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
+          "outdoor_sensor": "Außentemperatursensor für wetterabhängige Steuerung (optional)."
         }
       }
     },
     "error": {
-      "cannot_connect": "Verbindung fehlgeschlagen",
-      "invalid_auth": "Ungültige Authentifizierung",
-      "unknown": "Unerwarteter Fehler"
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
+      "room_already_exists": "Ein Raum mit diesem Namen existiert bereits.",
+      "no_hub_found": "Kein Hub gefunden. Bitte erstellen Sie zuerst einen Hub."
     },
     "abort": {
-      "already_configured": "Integration ist bereits konfiguriert"
+      "already_configured": "Dieser TaDIY Hub ist bereits konfiguriert.",
+      "single_instance_allowed": "Es kann nur ein Hub konfiguriert werden.",
+      "no_hub_found": "Kein TaDIY Hub gefunden. Bitte fügen Sie zuerst die Integration hinzu, um den Hub zu erstellen.",
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     }
   },
   "options": {
     "step": {
-      "init": {
-        "title": "TaDIY konfigurieren",
+      "room_config": {
+        "title": "Raum Optionen",
+        "description": "Grundlegende Raumeinstellungen konfigurieren. Wetter- und Early-Start-Einstellungen werden auf Hub-Ebene konfiguriert.",
+        "data": {
+          "room_name": "Raumname",
+          "trv_entities": "Thermostate (TRVs)",
+          "main_temp_sensor": "Temperatursensor",
+          "humidity_sensor": "Luftfeuchtigkeitssensor",
+          "window_sensors": "Fenstersensoren",
+          "outdoor_sensor": "Außentemperatursensor",
+          "override_timeout": "Override Timeout",
+          "hysteresis": "Temperatur Hysterese",
+          "use_pid_control": "PID Regelung aktivieren",
+          "pid_kp": "PID: Proportionalverstärkung (Kp)",
+          "pid_ki": "PID: Integralverstärkung (Ki)",
+          "pid_kd": "PID: Differenzialverstärkung (Kd)",
+          "use_hvac_off_for_low_temp": "HVAC Aus für niedrige Temp (Moes TRVs)",
+          "use_room_coupling": "Raum-Kopplung aktivieren",
+          "adjacent_rooms": "Benachbarte Räume",
+          "coupling_strength": "Kopplungsstärke",
+          "away_temperature": "Abwesenheitstemperatur"
+        },
+        "data_description": {
+          "room_name": "Eindeutigen Namen für diesen Raum wählen.",
+          "trv_entities": "Wähle ein oder mehr Klima-Entitäten (TRVs) für diesen Raum.",
+          "main_temp_sensor": "Haupttemperatursensor für diesen Raum (optional).",
+          "humidity_sensor": "Luftfeuchtigkeitssensor für diesen Raum (optional).",
+          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
+          "outdoor_sensor": "Außentemperatursensor (optional).",
+          "override_timeout": "Wie lange manuelle TRV-Änderungen Zeitpläne überschreiben (leer = Hub-Einstellung verwenden).",
+          "hysteresis": "Temperatur-Totzone zur Vermeidung schneller An/Aus-Zyklen.",
+          "use_pid_control": "PID-Regler für sanftere Temperaturregelung aktivieren.",
+          "use_hvac_off_for_low_temp": "Für Moes TRVs aktivieren, die keine niedrigen Temperaturen unterstützen.",
+          "use_room_coupling": "Wärmeübertragung zwischen benachbarten Räumen berücksichtigen.",
+          "adjacent_rooms": "Räume auswählen, die Wände mit diesem Raum teilen.",
+          "coupling_strength": "Anpassung für Nachbar-Heizung (0.1=subtil, 1.0=stark).",
+          "pid_kp": "Proportional: Reagiert auf aktuelle Abweichung. Höher = schneller aber kann überschwingen.",
+          "pid_ki": "Integral: Beseitigt stationäre Abweichung. Höher = schneller aber kann oszillieren.",
+          "pid_kd": "Differential: Dämpft Oszillationen. Höher = sanfter aber langsamer.",
+          "away_temperature": "Zieltemperatur wenn niemand zu Hause ist (pro Raum)."
+        }
+      },
+      "add_mode": {
+        "title": "Benutzerdefinierten Modus hinzufügen",
+        "description": "Neuen benutzerdefinierten Modus erstellen. Modusnamen werden in Kleinbuchstaben konvertiert. Maximum 10 Modi gesamt.",
+        "data": {
+          "mode_name": "Modusname"
+        },
+        "data_description": {
+          "mode_name": "Namen für den neuen Modus wählen (z.B. urlaub, party, gäste)"
+        }
+      },
+      "remove_mode": {
+        "title": "Benutzerdefinierten Modus entfernen",
+        "description": "Benutzerdefinierten Modus entfernen. Standard-Modi (Normal, Homeoffice, Manual, Off) können nicht entfernt werden.",
+        "data": {
+          "mode_to_remove": "Zu entfernender Modus"
+        }
+      },
+      "view_modes": {
+        "title": "Alle Modi",
+        "description": "{modes_info}"
+      },
+      "panel_settings": {
+        "title": "Globale Einstellungen",
+        "description": "{info}",
+        "data": {
+          "show_panel": "Zeitplan-Panel in Seitenleiste anzeigen",
+          "weather_entity": "Wetter-Entität",
+          "person_entities": "Personen-Entitäten",
+          "location_mode_enabled": "Ortsbasierte Heizung aktivieren (Abwesenheitsmodus)",
+          "global_override_timeout": "Standard Override Timeout",
+          "early_start_offset": "Early Start Offset (min)",
+          "early_start_max": "Max Early Start Dauer (min)",
+          "use_heating_curve": "Heizkurve aktivieren (Wetterausgleich)",
+          "heating_curve_slope": "Heizkurven-Steigung",
+          "use_weather_prediction": "Wettervorhersage aktivieren",
+          "global_window_open_timeout": "Fenster-Offen-Timeout (Sekunden)",
+          "global_window_close_timeout": "Fenster-Schließ-Timeout (Sekunden)"
+        },
+        "data_description": {
+          "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersagedaten.",
+          "person_entities": "Personen-Entitäten für Anwesenheitserkennung und Abwesenheitsmodus.",
+          "early_start_offset": "Zusätzliche Pufferminuten für früheren Heizstart.",
+          "early_start_max": "Maximale Vorheiz-Dauer in Minuten.",
+          "heating_curve_slope": "Höherer Wert = stärkere Zieltemperatur-Anpassung bei niedrigen Außentemperaturen.",
+          "use_weather_prediction": "Vorheizen vor Kaltfronten, Heizung reduzieren vor Warmfronten."
+        }
+      },
+      "init_hub": {
+        "title": "TaDIY Hub",
+        "description": "Heizsystem verwalten. Sie haben {room_count} Raum/Räume konfiguriert.",
         "menu_options": {
-          "global_defaults": "Globale Standardwerte",
-          "add_room": "Raum hinzufügen",
-          "edit_room": "Raum bearbeiten",
-          "delete_room": "Raum löschen"
+          "add_mode": "Benutzerdefinierten Modus hinzufügen",
+          "remove_mode": "Benutzerdefinierten Modus entfernen",
+          "view_modes": "Alle Modi anzeigen",
+          "panel_settings": "Globale Einstellungen",
+          "debug_settings": "Debug-Einstellungen"
         }
       },
-      "global_defaults": {
-        "title": "Globale Standardwerte",
-        "description": "Diese Werte gelten für alle Räume als Standard",
+      "debug_settings": {
+        "title": "Debug-Einstellungen",
+        "description": "{info}",
         "data": {
-          "global_window_open_timeout": "Standard Fenster-Offen-Timeout (Sekunden)",
-          "global_window_close_timeout": "Standard Fenster-Zu-Wartezeit (Sekunden)",
-          "global_dont_heat_below_outdoor": "Nicht heizen unter Außentemperatur (°C)",
-          "global_use_early_start": "Early Start verwenden",
-          "global_learn_heating_rate": "Heizrate lernen"
+          "debug_enabled": "Debug-Logging aktivieren",
+          "debug_categories": "Debug-Kategorien"
+        },
+        "data_description": {
+          "debug_enabled": "Hauptschalter zum Aktivieren/Deaktivieren aller Debug-Logs.",
+          "debug_categories": "Kategorien auswählen, die protokolliert werden sollen."
         }
       },
-      "add_room": {
-        "title": "Raum hinzufügen",
-        "description": "Geben Sie den Namen für den neuen Raum ein",
-        "data": {
-          "room_name": "Raumname"
-        }
-      },
-      "edit_room": {
-        "title": "Raum auswählen",
-        "description": "Wählen Sie den Raum aus, den Sie bearbeiten möchten",
-        "data": {
-          "room": "Raum"
-        }
-      },
-      "edit_room_menu": {
-        "title": "Raum bearbeiten",
-        "menu_options": {
-          "room_details": "Raumdetails",
-          "edit_schedule": "Zeitplan bearbeiten",
-          "save_room": "Speichern und zurück"
-        }
+      "init_room": {
+        "title": "Raum konfigurieren",
+        "description": "Raum-Einstellungen und Zeitpläne verwalten."
       },
       "room_details": {
-        "title": "Raumkonfiguration",
-        "description": "Konfigurieren Sie die Sensoren und Einstellungen für diesen Raum",
+        "title": "Raum-Konfiguration",
+        "description": "Einstellungen für {room_name} konfigurieren.",
         "data": {
-          "trv_entities": "Thermostate (TRVs)",
+          "trv_entities": "TRV-Entitäten (Klima)",
           "main_temp_sensor": "Haupttemperatursensor",
           "window_sensors": "Fenstersensoren",
           "outdoor_sensor": "Außentemperatursensor",
-          "weather_entity": "Wetter-Entität",
-          "window_open_timeout": "Fenster-Offen-Timeout (Sekunden)",
-          "window_close_timeout": "Fenster-Zu-Wartezeit (Sekunden)",
-          "dont_heat_below_outdoor": "Nicht heizen unter Außentemperatur (°C)",
-          "target_temp_step": "Temperaturschrittweite",
+          "window_open_timeout": "Fenster-Offen-Timeout (Überschreiben)",
+          "window_close_timeout": "Fenster-Schließ-Abklingzeit (Überschreiben)",
+          "dont_heat_below_outdoor": "Nicht heizen bei Außentemperatur über (Überschreiben)",
+          "target_temp_step": "Temperaturschritt",
           "tolerance": "Temperaturtoleranz",
-          "use_early_start": "Early Start verwenden",
-          "learn_heating_rate": "Heizrate lernen"
+          "use_early_start": "Early Start (Überschreiben)",
+          "learn_heating_rate": "Heizrate lernen (Überschreiben)",
+          "early_start_offset": "Early Start Puffer (Überschreiben)",
+          "early_start_max": "Maximale Vorheiz-Zeit (Überschreiben)"
+        },
+        "data_description": {
+          "trv_entities": "Ein oder mehr Klima-Entitäten (TRVs) zur Steuerung.",
+          "main_temp_sensor": "Haupttemperatursensor für diesen Raum.",
+          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen.",
+          "outdoor_sensor": "Außentemperatursensor.",
+          "window_open_timeout": "Leer lassen für globalen Wert.",
+          "window_close_timeout": "Leer lassen für globalen Wert.",
+          "dont_heat_below_outdoor": "Leer lassen für globalen Wert.",
+          "use_early_start": "Leer lassen für globalen Wert.",
+          "learn_heating_rate": "Leer lassen für globalen Wert.",
+          "target_temp_step": "Schrittgröße für Temperaturanpassungen.",
+          "tolerance": "Temperaturtoleranz für Steuerungslogik."
         }
       },
-      "edit_schedule": {
-        "title": "Zeitplan bearbeiten",
-        "description": "Wählen Sie den Zeitplan aus, den Sie bearbeiten möchten",
+      "schedules": {
+        "title": "Zeitpläne",
+        "description": "Zeitplan zur Bearbeitung auswählen.",
         "menu_options": {
           "schedule_normal_weekday": "Normal - Werktag (Mo-Fr)",
           "schedule_normal_weekend": "Normal - Wochenende (Sa-So)",
-          "schedule_homeoffice": "Homeoffice (Mo-So)"
+          "schedule_homeoffice": "Home Office (Mo-So)",
+          "schedule_vacation": "Urlaub",
+          "schedule_party": "Party"
         }
       },
-      "schedule_editor_weekday": {
-        "title": "Zeitplan: Normal - Werktag",
-        "menu_options": {
-          "schedule_add_block": "Block hinzufügen",
-          "schedule_view_blocks": "Blöcke anzeigen/löschen",
-          "schedule_save": "Zeitplan speichern"
-        }
-      },
-      "schedule_editor_weekend": {
-        "title": "Zeitplan: Normal - Wochenende",
-        "menu_options": {
-          "schedule_add_block": "Block hinzufügen",
-          "schedule_view_blocks": "Blöcke anzeigen/löschen",
-          "schedule_save": "Zeitplan speichern"
-        }
-      },
-      "schedule_editor_daily": {
-        "title": "Zeitplan: Homeoffice",
-        "menu_options": {
-          "schedule_add_block": "Block hinzufügen",
-          "schedule_view_blocks": "Blöcke anzeigen/löschen",
-          "schedule_save": "Zeitplan speichern"
-        }
-      },
-      "schedule_add_block": {
-        "title": "Zeitblock hinzufügen",
-        "description": "Aktuelle Timeline:\n\n{timeline}\n\nFügen Sie einen neuen Zeitblock hinzu",
+      "edit_schedule": {
+        "title": "{schedule_name} bearbeiten",
+        "description": "Zeitpunkte und Zieltemperaturen konfigurieren. Format: HH:MM - Temperatur (z.B. 06:00 - 21.0)",
         "data": {
-          "start_time": "Startzeit (HH:MM)",
-          "end_time": "Endzeit (HH:MM)",
-          "temperature": "Temperatur (°C oder 'frost'/'off')"
+          "schedule_entry_1": "Zeitpunkt 1",
+          "schedule_entry_2": "Zeitpunkt 2",
+          "schedule_entry_3": "Zeitpunkt 3",
+          "schedule_entry_4": "Zeitpunkt 4",
+          "schedule_entry_5": "Zeitpunkt 5",
+          "schedule_entry_6": "Zeitpunkt 6"
         }
       },
-      "schedule_view_blocks": {
-        "title": "Zeitblöcke verwalten",
-        "description": "Aktuelle Timeline:\n\n{timeline}\n\nWählen Sie einen Block zum Löschen",
+      "learning": {
+        "title": "Lern-Einstellungen",
+        "description": "Automatisches Lernen für {room_name} verwalten.",
         "data": {
-          "delete_block": "Block löschen"
-        }
-      },
-      "schedule_save": {
-        "title": "Zeitplan speichern",
-        "description": "Validierungsfehler:\n\n{errors}\n\nBitte korrigieren Sie die Fehler und versuchen Sie es erneut"
-      },
-      "delete_room": {
-        "title": "Raum löschen",
-        "description": "Wählen Sie den Raum aus, den Sie löschen möchten",
-        "data": {
-          "room": "Raum"
+          "min_heating_rate": "Minimale Heizrate",
+          "max_heating_rate": "Maximale Heizrate",
+          "current_heating_rate": "Aktuelle Heizrate (nur Info)"
+        },
+        "data_description": {
+          "min_heating_rate": "Untere Grenze für gelernte Heizrate (°C/h).",
+          "max_heating_rate": "Obere Grenze für gelernte Heizrate (°C/h).",
+          "current_heating_rate": "Aktuell gelernte Heizrate (schreibgeschützt)."
         }
       }
     },
     "error": {
-      "no_rooms": "Keine Räume konfiguriert",
-      "invalid_time": "Ungültige Zeitangabe. Format: HH:MM",
-      "validation_failed": "Validierung fehlgeschlagen",
-      "schedule_creation_failed": "Zeitplan konnte nicht erstellt werden"
+      "unknown": "Ein unerwarteter Fehler ist aufgetreten.",
+      "invalid_schedule_format": "Ungültiges Zeitplan-Format. Verwenden Sie HH:MM - Temperatur",
+      "empty_name": "Modusname darf nicht leer sein.",
+      "is_default_mode": "Dies ist ein Standard-Modus und existiert bereits.",
+      "already_exists": "Ein Modus mit diesem Namen existiert bereits.",
+      "mode_limit_reached": "Maximale Anzahl an Modi erreicht (10 gesamt).",
+      "add_failed": "Hinzufügen des Modus fehlgeschlagen. Bitte erneut versuchen.",
+      "coordinator_not_found": "Hub-Koordinator nicht gefunden."
     },
     "abort": {
-      "no_rooms": "Keine Räume zum Bearbeiten vorhanden"
-    }
-  },
-  "services": {
-    "force_refresh": {
-      "name": "Aktualisierung erzwingen",
-      "description": "Erzwingt eine sofortige Aktualisierung aller TaDIY-Daten"
-    },
-    "reset_learning": {
-      "name": "Lerndaten zurücksetzen",
-      "description": "Setzt die Heizraten-Lerndaten für einen Raum oder alle Räume zurück",
-      "fields": {
-        "room": {
-          "name": "Raumname",
-          "description": "Name des Raums (leer lassen für alle Räume)"
-        }
-      }
-    },
-    "boost_all_rooms": {
-      "name": "Alle Räume boosten",
-      "description": "Aktiviert Boost-Modus in allen Räumen für eine bestimmte Dauer",
-      "fields": {
-        "temperature": {
-          "name": "Boost-Temperatur",
-          "description": "Zieltemperatur während des Boosts (°C)"
-        },
-        "duration_minutes": {
-          "name": "Dauer",
-          "description": "Dauer des Boosts in Minuten"
-        }
-      }
-    },
-    "set_hub_mode": {
-      "name": "Hub-Modus setzen",
-      "description": "Ändert den TaDIY Hub-Betriebsmodus",
-      "fields": {
-        "mode": {
-          "name": "Modus",
-          "description": "Ziel-Betriebsmodus"
-        }
-      }
+      "hub_not_configurable": "Hub-Einstellungen werden über Geräteentitäten verwaltet. Verwenden Sie die Hub-Gerätesteuerung zur Konfiguration globaler Einstellungen.",
+      "coordinator_not_found": "Hub-Koordinator nicht gefunden. Bitte Integration neu laden.",
+      "no_custom_modes": "Es sind keine benutzerdefinierten Modi konfiguriert. Es existieren nur Standard-Modi (Normal, Homeoffice, Manual, Off). Sie können benutzerdefinierte Modi im Hub-Optionen-Menü hinzufügen.",
+      "use_lovelace_card": "{message}"
     }
   },
   "entity": {
-    "select": {
-      "tadiy_hub_mode": {
-        "name": "TaDIY Hub-Modus",
-        "state": {
-          "normal": "Normal",
-          "homeoffice": "Homeoffice",
-          "manual": "Manuell",
-          "off": "Aus"
-        }
-      }
-    },
-    "number": {
-      "tadiy_frost_protection": {
-        "name": "Frostschutztemperatur"
-      }
-    },
     "sensor": {
-      "main_temperature": {
-        "name": "Haupttemperatur"
+      "current_temperature": {
+        "name": "Aktuelle Temperatur"
+      },
+      "target_temperature": {
+        "name": "Zieltemperatur"
       },
       "outdoor_temperature": {
         "name": "Außentemperatur"
       },
-      "fused_temperature": {
-        "name": "Fusionierte Temperatur"
+      "main_sensor_temperature": {
+        "name": "Hauptsensor-Temperatur"
       },
       "window_state": {
         "name": "Fensterstatus",
         "state": {
-          "open_heating_stopped": "Offen - Heizung gestoppt",
-          "open_within_timeout": "Offen - Innerhalb Timeout",
-          "closed_cooldown": "Geschlossen - Wartezeit",
-          "closed": "Geschlossen"
+          "closed": "Geschlossen",
+          "open_within_timeout": "Offen (Schonfrist)",
+          "open_heating_stopped": "Offen (Heizung gestoppt)",
+          "closed_cooldown": "Geschlossen (Abklingzeit)"
         }
       },
       "heating_rate": {
         "name": "Heizrate"
       },
-      "health": {
-        "name": "Systemstatus",
-        "state": {
-          "healthy": "Gesund",
-          "degraded": "Eingeschränkt",
-          "critical": "Kritisch"
-        }
+      "heating_active": {
+        "name": "Heizung aktiv"
+      },
+      "hub_mode": {
+        "name": "Hub-Modus"
+      },
+      "frost_protection_temp": {
+        "name": "Frostschutztemperatur"
+      }
+    },
+    "climate": {
+      "room": {
+        "name": "{room_name}"
       }
     },
     "button": {
+      "force_refresh": {
+        "name": "Aktualisierung erzwingen"
+      },
       "reset_learning": {
         "name": "Lerndaten zurücksetzen"
       },
-      "boost": {
-        "name": "Boost"
+      "boost_room": {
+        "name": "Raum Boost"
+      },
+      "force_refresh_all": {
+        "name": "Alle aktualisieren"
+      },
+      "reset_all_learning": {
+        "name": "Alle Lerndaten zurücksetzen"
+      },
+      "boost_all_rooms": {
+        "name": "Alle Räume boosten"
+      },
+      "clear_schedule": {
+        "name": "Zeitplan löschen"
+      }
+    },
+    "select": {
+      "hub_mode": {
+        "name": "Hub-Modus",
+        "state": {
+          "normal": "Normal",
+          "homeoffice": "Home Office",
+          "vacation": "Urlaub",
+          "party": "Party"
+        }
+      },
+      "active_schedule": {
+        "name": "Aktiver Zeitplan"
+      }
+    },
+    "number": {
+      "frost_protection_temp": {
+        "name": "Frostschutztemperatur"
+      },
+      "boost_temperature": {
+        "name": "Boost-Temperatur"
+      },
+      "boost_duration": {
+        "name": "Boost-Dauer"
+      }
+    }
+  },
+  "services": {
+    "force_refresh": {
+      "name": "Aktualisierung erzwingen",
+      "description": "Erzwingt eine sofortige Aktualisierung aller Raumdaten und Sensorwerte."
+    },
+    "reset_learning": {
+      "name": "Lerndaten zurücksetzen",
+      "description": "Setzt die gelernten Heizraten-Daten für einen oder alle Räume zurück.",
+      "fields": {
+        "room": {
+          "name": "Raumname",
+          "description": "Name des Raums, für den Lerndaten zurückgesetzt werden sollen. Leer lassen für alle Räume."
+        }
+      }
+    },
+    "set_hub_mode": {
+      "name": "Hub-Modus setzen",
+      "description": "Setzt den Betriebsmodus für den Hub und alle Räume.",
+      "fields": {
+        "mode": {
+          "name": "Modus",
+          "description": "Der gewünschte Hub-Modus (normal, homeoffice, vacation, party)."
+        }
+      }
+    },
+    "boost_all_rooms": {
+      "name": "Alle Räume boosten",
+      "description": "Aktiviert Boost-Modus gleichzeitig für alle Räume.",
+      "fields": {
+        "temperature": {
+          "name": "Zieltemperatur",
+          "description": "Boost-Zieltemperatur in °C."
+        },
+        "duration_minutes": {
+          "name": "Dauer",
+          "description": "Boost-Dauer in Minuten."
+        }
+      }
+    },
+    "set_heating_curve": {
+      "name": "Heizkurve setzen",
+      "description": "Setzt die Heizrate für einen Raum manuell (überschreibt gelernten Wert).",
+      "fields": {
+        "room": {
+          "name": "Raumname",
+          "description": "Name des zu konfigurierenden Raums."
+        },
+        "heating_rate": {
+          "name": "Heizrate",
+          "description": "Heizrate in Grad Celsius pro Stunde."
+        }
       }
     }
   }
