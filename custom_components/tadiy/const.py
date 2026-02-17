@@ -95,6 +95,8 @@ SERVICE_RESET_LEARNING: Final = "reset_learning"
 SERVICE_SET_HUB_MODE: Final = "set_hub_mode"
 SERVICE_BOOST_ALL_ROOMS: Final = "boost_all_rooms"
 SERVICE_SET_HEATING_CURVE: Final = "set_heating_curve"
+SERVICE_GET_SCHEDULE: Final = "get_schedule"
+SERVICE_SET_SCHEDULE: Final = "set_schedule"
 
 # Service attributes
 ATTR_ROOM: Final = "room"
@@ -102,6 +104,9 @@ ATTR_MODE: Final = "mode"
 ATTR_TEMPERATURE: Final = "temperature"
 ATTR_DURATION_MINUTES: Final = "duration_minutes"
 ATTR_HEATING_RATE: Final = "heating_rate"
+ATTR_ENTITY_ID: Final = "entity_id"
+ATTR_SCHEDULE_TYPE: Final = "schedule_type"
+ATTR_BLOCKS: Final = "blocks"
 
 # Hub modes
 HUB_MODE_NORMAL: Final = "normal"
