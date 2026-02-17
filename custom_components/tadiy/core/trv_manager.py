@@ -15,7 +15,7 @@ class TrvManager:
         self.coordinator = coordinator
         self.hass = coordinator.hass
 
-    async def get_states(self) -> dict[str, Any]:
+    def get_current_trv_state(self) -> dict[str, Any]:
         """Get summarized state of all TRVs in the room."""
         config = self.coordinator.room_config
         trv_entity_ids = config.trv_entity_ids

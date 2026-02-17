@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback, Event
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
@@ -110,6 +111,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         hass: HomeAssistant,
         entry_id: str,
         config_data: dict[str, Any],
+        config_entry: ConfigEntry | None = None,
     ) -> None:
         """Initialize the hub coordinator."""
         super().__init__(
@@ -119,6 +121,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=UPDATE_INTERVAL),
         )
         self.entry_id = entry_id
+        self.config_entry = config_entry
         self.config_data = config_data
 
         # Hub state
@@ -693,11 +696,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_overrides_{entry_id}",
         )
 
-        # Modular Managers
         self.sensor_manager = SensorManager(self)
         self.trv_manager = TrvManager(self)
         self.orchestrator = RoomOrchestrator(self)
-        self._logger = TaDIYLogger(self)
+        # self._logger is already initialized at the start of __init__
         self._state_listeners = []
         self._last_trv_targets: dict[str, float] = {}
 

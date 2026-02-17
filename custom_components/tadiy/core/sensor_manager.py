@@ -70,7 +70,8 @@ class SensorManager:
         
         if outdoor_temp is None and self.coordinator.hub_coordinator:
             # Fallback to hub's weather entity
-            weather_entity = self.coordinator.hub_coordinator.config_data.get("weather_entity")
+            from ..const import CONF_WEATHER_ENTITY
+            weather_entity = self.coordinator.hub_coordinator.config_data.get(CONF_WEATHER_ENTITY)
             if weather_entity:
                 state = self.hass.states.get(weather_entity)
                 if state:
