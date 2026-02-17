@@ -24,20 +24,22 @@ class ScheduleBlock:
     """A single schedule block with start time and temperature."""
 
     start_time: time
-    temperature: float | str  # float for temp, "frost" or "off" for special
+    temperature: float | str
 
     def __post_init__(self) -> None:
         """Validate schedule block after initialization."""
         if isinstance(self.temperature, str):
             if self.temperature not in (SCHEDULE_TEMP_FROST, SCHEDULE_TEMP_OFF):
                 raise ValueError(
-                    f"Invalid temperature string: {self.temperature}. "
-                    f"Must be 'frost' or 'off' or a numeric value."
+                    "Invalid temperature string: {}. Must be 'frost' or 'off' or a numeric value.".format(
+                        self.temperature
+                    )
                 )
         elif not MIN_TARGET_TEMP <= self.temperature <= MAX_TARGET_TEMP:
             raise ValueError(
-                f"Temperature {self.temperature}°C out of range "
-                f"({MIN_TARGET_TEMP}°C to {MAX_TARGET_TEMP}°C)"
+                "Temperature {}°C out of range ({}°C to {}°C)".format(
+                    self.temperature, MIN_TARGET_TEMP, MAX_TARGET_TEMP
+                )
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -60,7 +62,7 @@ class ScheduleBlock:
 class DaySchedule:
     """Schedule for a single day type (weekday/weekend/daily)."""
 
-    schedule_type: str  # weekday | weekend | daily
+    schedule_type: str
     blocks: list[ScheduleBlock] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -70,18 +72,18 @@ class DaySchedule:
             SCHEDULE_TYPE_WEEKEND,
             SCHEDULE_TYPE_DAILY,
         ):
-            raise ValueError(f"Invalid schedule type: {self.schedule_type}")
+            raise ValueError("Invalid schedule type: {}".format(self.schedule_type))
 
         # Sort blocks by start time
         self.blocks.sort(key=lambda b: b.start_time)
 
-        # Validate coverage (must start at 00:00, no gaps, end at or after 24:00)
+        # Validate coverage
         self._validate_coverage()
 
     def _validate_coverage(self) -> None:
         """Validate that schedule covers full day without gaps."""
         if not self.blocks:
-            return  # Empty schedule is allowed (will use default)
+            return
 
         # Must start at 00:00
         if self.blocks[0].start_time != time(0, 0):
@@ -94,15 +96,15 @@ class DaySchedule:
 
             if current_end != next_start:
                 raise ValueError(
-                    f"Gap detected between {current_end} and {next_start}. "
-                    "Blocks must be continuous."
+                    "Gap detected between {} and {}. Blocks must be continuous.".format(
+                        current_end, next_start
+                    )
                 )
 
     def _next_block_time(self, current: time, index: int) -> time:
         """Calculate when the next block should start."""
         if index < len(self.blocks) - 1:
             return self.blocks[index + 1].start_time
-        # Last block implicitly ends at 24:00 (00:00 next day)
         return time(0, 0)
 
     def get_temperature(
@@ -126,7 +128,7 @@ class DaySchedule:
                 return frost_protection_temp
             elif active_block.temperature == SCHEDULE_TEMP_OFF:
                 return frost_protection_temp
-        
+
         return float(active_block.temperature)
 
     def get_next_change(
@@ -188,7 +190,6 @@ class RoomSchedule:
                 return self.normal_weekend
         elif mode == "homeoffice":
             return self.homeoffice_daily
-        # manual and off modes don't use schedules
         return None
 
     def to_dict(self) -> dict[str, Any]:
