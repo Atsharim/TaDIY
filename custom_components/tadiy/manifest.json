@@ -1,6 +1,7 @@
 {
   "domain": "tadiy",
   "name": "TaDIY - Adaptive Climate Orchestrator",
+  "icon": "icon.png",
   "codeowners": ["@Atsharim"],
   "config_flow": true,
   "dependencies": [],
@@ -10,5 +11,5 @@
   "issue_tracker": "https://github.com/Atsharim/TaDIY/issues",
   "options_flow": true,
   "requirements": [],
-  "version": "0.0.2"
+  "version": "0.1.0"
 }
