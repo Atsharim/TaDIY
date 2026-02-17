@@ -1,27 +1,34 @@
-"""Config flow for TaDIY integration."""
-
+"""Options flow for TaDIY integration."""
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from homeassistant import config_entries
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers import config_validation as cv, selector
 import voluptuous as vol
 
+from homeassistant.config_entries import ConfigEntry, OptionsFlow
+from homeassistant.core import callback
+from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
+
 from .const import (
-    CONF_DONT_HEAT_BELOW_OUTDOOR,
+    CONF_DONT_HEAT_BELOW,
+    CONF_EARLY_START_MAX,
+    CONF_EARLY_START_OFFSET,
     CONF_GLOBAL_DONT_HEAT_BELOW,
+    CONF_GLOBAL_EARLY_START_MAX,
+    CONF_GLOBAL_EARLY_START_OFFSET,
     CONF_GLOBAL_LEARN_HEATING_RATE,
     CONF_GLOBAL_USE_EARLY_START,
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+    CONF_HUB,
     CONF_LEARN_HEATING_RATE,
     CONF_MAIN_TEMP_SENSOR,
+    CONF_MAX_HEATING_RATE,
+    CONF_MIN_HEATING_RATE,
     CONF_OUTDOOR_SENSOR,
     CONF_ROOM_NAME,
-    CONF_ROOMS,
     CONF_TARGET_TEMP_STEP,
     CONF_TOLERANCE,
     CONF_TRV_ENTITIES,
@@ -30,606 +37,552 @@ from .const import (
     CONF_WINDOW_OPEN_TIMEOUT,
     CONF_WINDOW_SENSORS,
     DEFAULT_DONT_HEAT_BELOW,
+    DEFAULT_EARLY_START_MAX,
+    DEFAULT_EARLY_START_OFFSET,
     DEFAULT_LEARN_HEATING_RATE,
+    DEFAULT_MAX_HEATING_RATE,
+    DEFAULT_MIN_HEATING_RATE,
     DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_TOLERANCE,
     DEFAULT_USE_EARLY_START,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
-    SCHEDULE_TYPE_DAILY,
-    SCHEDULE_TYPE_WEEKDAY,
-    SCHEDULE_TYPE_WEEKEND,
-    TARGET_TEMP_STEP_OPTIONS,
-    TOLERANCE_OPTIONS,
+    HUB_MODE_HOMEOFFICE,
+    HUB_MODE_NORMAL,
+    HUB_MODE_PARTY,
+    HUB_MODE_VACATION,
+    SCHEDULE_HOMEOFFICE,
+    SCHEDULE_NORMAL_WEEKDAY,
+    SCHEDULE_NORMAL_WEEKEND,
+    SCHEDULE_PARTY,
+    SCHEDULE_VACATION,
 )
-
-from .models.schedule import RoomSchedule
-from .ui.schedule_editor import ScheduleEditor
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class TaDIYOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle TaDIY options."""
+def convert_seconds_to_duration(seconds: int | None) -> dict[str, int] | None:
+    """Convert seconds to duration dict."""
+    if seconds is None:
+        return None
+    return {
+        "hours": seconds // 3600,
+        "minutes": (seconds % 3600) // 60,
+        "seconds": seconds % 60,
+    }
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+
+def convert_duration_to_seconds(duration: dict[str, int] | None) -> int | None:
+    """Convert duration dict to seconds."""
+    if duration is None:
+        return None
+    return (
+        duration.get("hours", 0) * 3600
+        + duration.get("minutes", 0) * 60
+        + duration.get("seconds", 0)
+    )
+
+
+class TaDIYOptionsFlowHandler(OptionsFlow):
+    """Handle options flow for TaDIY."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         super().__init__()
-        self._config_entry_data = config_entry
-        self.options = dict(config_entry.options)
-        self.schedule_editor = ScheduleEditor()
-        # State for multi-step flows
-        self.current_room_index: int | None = None
-        self.current_room_data: dict[str, Any] = {}
-        self.schedule_blocks: list[dict[str, Any]] = []
-        self.current_schedule_type: str | None = None
+        self._entry = config_entry
+        self._current_schedule: str | None = None
+    
+    @property
+    def config_entry(self) -> ConfigEntry:
+        """Return config entry."""
+        return self._entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage the options."""
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=[
-                "global_defaults",
-                "add_room",
-                "edit_room",
-                "delete_room",
-            ],
+        """Manage the options - router between Hub and Room."""
+        is_hub = self.config_entry.data.get(CONF_HUB, False)
+        
+        if is_hub:
+            return await self.async_step_init_hub(user_input)
+        else:
+            return await self.async_step_init_room(user_input)
+
+    async def async_step_init_hub(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage Hub options."""
+        # Count rooms
+        room_count = len(
+            [
+                entry
+                for entry in self.hass.config_entries.async_entries(DOMAIN)
+                if not entry.data.get(CONF_HUB, False)
+            ]
         )
+
+        return self.async_show_menu(
+            step_id="init_hub",
+            menu_options=["global_defaults", "hub_mode"],
+            description_placeholders={"room_count": str(room_count)},
+        )
+
+    async def async_step_init_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage Room options."""
+        room_name = self.config_entry.data.get(CONF_ROOM_NAME, "Unknown")
+        
+        return self.async_show_menu(
+            step_id="init_room",
+            menu_options=["room_details", "schedules", "learning"],
+            description_placeholders={"room_name": room_name},
+        )
+
+    # ========== HUB OPTIONS ==========
 
     async def async_step_global_defaults(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Configure global default values."""
+        """Configure global defaults."""
         if user_input is not None:
-            self.options.update(user_input)
-            return self.async_create_entry(title="", data=self.options)
+            # Convert durations
+            if isinstance(user_input.get(CONF_GLOBAL_WINDOW_OPEN_TIMEOUT), dict):
+                user_input[CONF_GLOBAL_WINDOW_OPEN_TIMEOUT] = convert_duration_to_seconds(
+                    user_input[CONF_GLOBAL_WINDOW_OPEN_TIMEOUT]
+                )
+            if isinstance(user_input.get(CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT), dict):
+                user_input[
+                    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT
+                ] = convert_duration_to_seconds(
+                    user_input[CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT]
+                )
 
-        schema = vol.Schema(
-            {
-                vol.Optional(
-                    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
-                    default=self.options.get(
-                        CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
-                    ),
-                ): selector.DurationSelector(
-                    selector.DurationSelectorConfig(enable_day=False)
-                ),
-                vol.Optional(
-                    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
-                    default=self.options.get(
-                        CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
-                    ),
-                ): selector.DurationSelector(
-                    selector.DurationSelectorConfig(enable_day=False)
-                ),
-                vol.Optional(
-                    CONF_GLOBAL_DONT_HEAT_BELOW,
-                    default=self.options.get(
-                        CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
-                    ),
-                ): vol.Coerce(float),
-                vol.Optional(
-                    CONF_GLOBAL_USE_EARLY_START,
-                    default=self.options.get(
-                        CONF_GLOBAL_USE_EARLY_START, DEFAULT_USE_EARLY_START
-                    ),
-                ): cv.boolean,
-                vol.Optional(
-                    CONF_GLOBAL_LEARN_HEATING_RATE,
-                    default=self.options.get(
-                        CONF_GLOBAL_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
-                    ),
-                ): cv.boolean,
-            }
-        )
+            # Update config entry data (not options, as these are global settings)
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={**self.config_entry.data, **user_input},
+            )
+            
+            return self.async_create_entry(title="", data={})
+
+        current_data = self.config_entry.data
 
         return self.async_show_form(
             step_id="global_defaults",
-            data_schema=schema,
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+                        default=convert_seconds_to_duration(
+                            current_data.get(
+                                CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+                                DEFAULT_WINDOW_OPEN_TIMEOUT,
+                            )
+                        ),
+                    ): selector.DurationSelector(
+                        selector.DurationSelectorConfig(enable_day=False)
+                    ),
+                    vol.Optional(
+                        CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
+                        default=convert_seconds_to_duration(
+                            current_data.get(
+                                CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
+                                DEFAULT_WINDOW_CLOSE_TIMEOUT,
+                            )
+                        ),
+                    ): selector.DurationSelector(
+                        selector.DurationSelectorConfig(enable_day=False)
+                    ),
+                    vol.Optional(
+                        CONF_GLOBAL_DONT_HEAT_BELOW,
+                        default=current_data.get(
+                            CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-10,
+                            max=35,
+                            step=0.5,
+                            unit_of_measurement="°C",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_GLOBAL_USE_EARLY_START,
+                        default=current_data.get(
+                            CONF_GLOBAL_USE_EARLY_START, DEFAULT_USE_EARLY_START
+                        ),
+                    ): selector.BooleanSelector(),
+                    vol.Optional(
+                        CONF_GLOBAL_LEARN_HEATING_RATE,
+                        default=current_data.get(
+                            CONF_GLOBAL_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
+                        ),
+                    ): selector.BooleanSelector(),
+                    vol.Optional(
+                        CONF_GLOBAL_EARLY_START_OFFSET,
+                        default=current_data.get(
+                            CONF_GLOBAL_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0,
+                            max=60,
+                            step=5,
+                            unit_of_measurement="min",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_GLOBAL_EARLY_START_MAX,
+                        default=current_data.get(
+                            CONF_GLOBAL_EARLY_START_MAX, DEFAULT_EARLY_START_MAX
+                        ),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=15,
+                            max=240,
+                            step=15,
+                            unit_of_measurement="min",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                }
+            ),
         )
 
-    async def async_step_add_room(
+    async def async_step_hub_mode(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Add a new room."""
+        """Configure hub mode."""
         if user_input is not None:
-            self.current_room_data = {CONF_ROOM_NAME: user_input[CONF_ROOM_NAME]}
-            return await self.async_step_room_details()
+            return self.async_create_entry(title="", data=user_input)
 
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_ROOM_NAME): cv.string,
-            }
-        )
+        current_mode = self.config_entry.options.get("hub_mode", HUB_MODE_NORMAL)
 
         return self.async_show_form(
-            step_id="add_room",
-            data_schema=schema,
+            step_id="hub_mode",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("hub_mode", default=current_mode): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                HUB_MODE_NORMAL,
+                                HUB_MODE_HOMEOFFICE,
+                                HUB_MODE_VACATION,
+                                HUB_MODE_PARTY,
+                            ],
+                            translation_key="hub_mode",
+                        )
+                    ),
+                }
+            ),
         )
 
-    async def async_step_edit_room(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Select room to edit."""
-        rooms = self.options.get(CONF_ROOMS, [])
-
-        if not rooms:
-            return self.async_abort(reason="no_rooms")
-
-        if user_input is not None:
-            room_name = user_input["room"]
-            for idx, room in enumerate(rooms):
-                if room.get(CONF_ROOM_NAME) == room_name:
-                    self.current_room_index = idx
-                    self.current_room_data = dict(room)
-                    break
-            return await self.async_step_edit_room_menu()
-
-        room_names = [room.get(CONF_ROOM_NAME, f"Room {i}") for i, room in enumerate(rooms)]
-
-        schema = vol.Schema(
-            {
-                vol.Required("room"): vol.In(room_names),
-            }
-        )
-
-        return self.async_show_form(
-            step_id="edit_room",
-            data_schema=schema,
-        )
-
-    async def async_step_edit_room_menu(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Menu for editing room."""
-        return self.async_show_menu(
-            step_id="edit_room_menu",
-            menu_options=[
-                "room_details",
-                "edit_schedule",
-                "save_room",
-            ],
-        )
+    # ========== ROOM OPTIONS ==========
 
     async def async_step_room_details(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Configure room details."""
         if user_input is not None:
-            # Convert duration to seconds
-            if CONF_WINDOW_OPEN_TIMEOUT in user_input and isinstance(user_input[CONF_WINDOW_OPEN_TIMEOUT], dict):
-                timeout = user_input[CONF_WINDOW_OPEN_TIMEOUT]
-                user_input[CONF_WINDOW_OPEN_TIMEOUT] = (
-                    timeout.get("hours", 0) * 3600 +
-                    timeout.get("minutes", 0) * 60 +
-                    timeout.get("seconds", 0)
+            # Convert durations
+            if isinstance(user_input.get(CONF_WINDOW_OPEN_TIMEOUT), dict):
+                user_input[CONF_WINDOW_OPEN_TIMEOUT] = convert_duration_to_seconds(
+                    user_input[CONF_WINDOW_OPEN_TIMEOUT]
                 )
-            if CONF_WINDOW_CLOSE_TIMEOUT in user_input and isinstance(user_input[CONF_WINDOW_CLOSE_TIMEOUT], dict):
-                timeout = user_input[CONF_WINDOW_CLOSE_TIMEOUT]
-                user_input[CONF_WINDOW_CLOSE_TIMEOUT] = (
-                    timeout.get("hours", 0) * 3600 +
-                    timeout.get("minutes", 0) * 60 +
-                    timeout.get("seconds", 0)
+            if isinstance(user_input.get(CONF_WINDOW_CLOSE_TIMEOUT), dict):
+                user_input[CONF_WINDOW_CLOSE_TIMEOUT] = convert_duration_to_seconds(
+                    user_input[CONF_WINDOW_CLOSE_TIMEOUT]
                 )
 
-            self.current_room_data.update(user_input)
+            # Update config entry data
+            self.hass.config_entries.async_update_entry(
+                self.config_entry,
+                data={**self.config_entry.data, **user_input},
+            )
+            
+            return self.async_create_entry(title="", data={})
 
-            # If adding new room, go directly to save
-            if self.current_room_index is None:
-                return await self.async_step_save_room()
-
-            # If editing, return to edit menu
-            return await self.async_step_edit_room_menu()
-
-        # Convert seconds to duration dict for display
-        window_open_seconds = self.current_room_data.get(CONF_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT)
-        window_close_seconds = self.current_room_data.get(CONF_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT)
-
-        window_open_duration = {
-            "hours": window_open_seconds // 3600,
-            "minutes": (window_open_seconds % 3600) // 60,
-            "seconds": window_open_seconds % 60
-        }
-        window_close_duration = {
-            "hours": window_close_seconds // 3600,
-            "minutes": (window_close_seconds % 3600) // 60,
-            "seconds": window_close_seconds % 60
-        }
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    CONF_TRV_ENTITIES,
-                    default=self.current_room_data.get(CONF_TRV_ENTITIES, []),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="climate", multiple=True)
-                ),
-                vol.Required(
-                    CONF_MAIN_TEMP_SENSOR,
-                    default=self.current_room_data.get(CONF_MAIN_TEMP_SENSOR),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="sensor",
-                        device_class="temperature"
-                    )
-                ),
-                vol.Optional(
-                    CONF_WINDOW_SENSORS,
-                    default=self.current_room_data.get(CONF_WINDOW_SENSORS, []),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="binary_sensor",
-                        device_class=["opening", "window", "door"],
-                        multiple=True
-                    )
-                ),
-                vol.Optional(
-                    CONF_OUTDOOR_SENSOR,
-                    default=self.current_room_data.get(CONF_OUTDOOR_SENSOR),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="sensor",
-                        device_class="temperature"
-                    )
-                ),
-                vol.Optional(
-                    CONF_WINDOW_OPEN_TIMEOUT,
-                    default=window_open_duration,
-                ): selector.DurationSelector(
-                    selector.DurationSelectorConfig(enable_day=False)
-                ),
-                vol.Optional(
-                    CONF_WINDOW_CLOSE_TIMEOUT,
-                    default=window_close_duration,
-                ): selector.DurationSelector(
-                    selector.DurationSelectorConfig(enable_day=False)
-                ),
-                vol.Optional(
-                    CONF_DONT_HEAT_BELOW_OUTDOOR,
-                    default=self.current_room_data.get(
-                        CONF_DONT_HEAT_BELOW_OUTDOOR, DEFAULT_DONT_HEAT_BELOW
-                    ),
-                ): vol.Coerce(float),
-                vol.Optional(
-                    CONF_TARGET_TEMP_STEP,
-                    default=self.current_room_data.get(
-                        CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
-                    ),
-                ): vol.In(TARGET_TEMP_STEP_OPTIONS),
-                vol.Optional(
-                    CONF_TOLERANCE,
-                    default=self.current_room_data.get(CONF_TOLERANCE, DEFAULT_TOLERANCE),
-                ): vol.In(TOLERANCE_OPTIONS),
-                vol.Optional(
-                    CONF_USE_EARLY_START,
-                    default=self.current_room_data.get(
-                        CONF_USE_EARLY_START, DEFAULT_USE_EARLY_START
-                    ),
-                ): cv.boolean,
-                vol.Optional(
-                    CONF_LEARN_HEATING_RATE,
-                    default=self.current_room_data.get(
-                        CONF_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
-                    ),
-                ): cv.boolean,
-            }
-        )
+        current_data = self.config_entry.data
+        room_name = current_data.get(CONF_ROOM_NAME, "Unknown")
 
         return self.async_show_form(
             step_id="room_details",
-            data_schema=schema,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_TRV_ENTITIES,
+                        default=current_data.get(CONF_TRV_ENTITIES, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="climate",
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_MAIN_TEMP_SENSOR,
+                        default=current_data.get(CONF_MAIN_TEMP_SENSOR),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="sensor",
+                            device_class="temperature",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_WINDOW_SENSORS,
+                        default=current_data.get(CONF_WINDOW_SENSORS, []),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="binary_sensor",
+                            device_class="window",
+                            multiple=True,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_OUTDOOR_SENSOR,
+                        default=current_data.get(CONF_OUTDOOR_SENSOR),
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain="sensor",
+                            device_class="temperature",
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_WINDOW_OPEN_TIMEOUT,
+                        description={"suggested_value": None},
+                    ): selector.DurationSelector(
+                        selector.DurationSelectorConfig(enable_day=False)
+                    ),
+                    vol.Optional(
+                        CONF_WINDOW_CLOSE_TIMEOUT,
+                        description={"suggested_value": None},
+                    ): selector.DurationSelector(
+                        selector.DurationSelectorConfig(enable_day=False)
+                    ),
+                    vol.Optional(
+                        CONF_DONT_HEAT_BELOW,
+                        description={"suggested_value": None},
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=-10,
+                            max=35,
+                            step=0.5,
+                            unit_of_measurement="°C",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_TARGET_TEMP_STEP,
+                        default=current_data.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.1,
+                            max=2.0,
+                            step=0.1,
+                            unit_of_measurement="°C",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_TOLERANCE,
+                        default=current_data.get(CONF_TOLERANCE, DEFAULT_TOLERANCE),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.1,
+                            max=2.0,
+                            step=0.1,
+                            unit_of_measurement="°C",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_USE_EARLY_START,
+                        description={"suggested_value": None},
+                    ): selector.BooleanSelector(),
+                    vol.Optional(
+                        CONF_LEARN_HEATING_RATE,
+                        description={"suggested_value": None},
+                    ): selector.BooleanSelector(),
+                    vol.Optional(
+                        CONF_EARLY_START_OFFSET,
+                        description={"suggested_value": None},
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0,
+                            max=60,
+                            step=5,
+                            unit_of_measurement="min",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_EARLY_START_MAX,
+                        description={"suggested_value": None},
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=15,
+                            max=240,
+                            step=15,
+                            unit_of_measurement="min",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                }
+            ),
+            description_placeholders={"room_name": room_name},
         )
 
-    async def async_step_edit_schedule(
+    async def async_step_schedules(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Select which schedule to edit."""
+        """Show schedule selection menu."""
         return self.async_show_menu(
-            step_id="edit_schedule",
+            step_id="schedules",
             menu_options=[
                 "schedule_normal_weekday",
                 "schedule_normal_weekend",
                 "schedule_homeoffice",
-                "back_to_room_menu",
+                "schedule_vacation",
+                "schedule_party",
             ],
         )
-
-    async def async_step_back_to_room_menu(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Go back to room edit menu."""
-        return await self.async_step_edit_room_menu()
 
     async def async_step_schedule_normal_weekday(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit Normal mode weekday schedule."""
-        self.current_schedule_type = SCHEDULE_TYPE_WEEKDAY
-        return await self._show_schedule_editor("Normal - Weekday (Mo-Fr)")
+        """Edit normal weekday schedule."""
+        return await self._handle_schedule_edit(
+            SCHEDULE_NORMAL_WEEKDAY, "Normal - Wochentag", user_input
+        )
 
     async def async_step_schedule_normal_weekend(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit Normal mode weekend schedule."""
-        self.current_schedule_type = SCHEDULE_TYPE_WEEKEND
-        return await self._show_schedule_editor("Normal - Weekend (Sa-So)")
+        """Edit normal weekend schedule."""
+        return await self._handle_schedule_edit(
+            SCHEDULE_NORMAL_WEEKEND, "Normal - Wochenende", user_input
+        )
 
     async def async_step_schedule_homeoffice(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit Homeoffice mode schedule."""
-        self.current_schedule_type = SCHEDULE_TYPE_DAILY
-        return await self._show_schedule_editor("Homeoffice (Mo-So)")
-
-    async def _show_schedule_editor(self, title: str) -> FlowResult:
-        """Show schedule editor with current blocks."""
-        try:
-            # Load existing schedule from storage
-            coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
-            room_name = self.current_room_data.get(CONF_ROOM_NAME)
-
-            if not room_name:
-                _LOGGER.error("No room name found in current_room_data")
-                return self.async_abort(reason="no_room_name")
-
-            room_schedule = coordinator.schedule_engine._room_schedules.get(room_name)
-
-            if room_schedule:
-                if self.current_schedule_type == SCHEDULE_TYPE_WEEKDAY:
-                    day_schedule = room_schedule.normal_weekday
-                elif self.current_schedule_type == SCHEDULE_TYPE_WEEKEND:
-                    day_schedule = room_schedule.normal_weekend
-                else:  # DAILY
-                    day_schedule = room_schedule.homeoffice_daily
-            else:
-                day_schedule = None
-
-            self.schedule_blocks = self.schedule_editor.day_schedule_to_blocks(day_schedule)
-        except Exception as err:
-            _LOGGER.error("Error loading schedule: %s", err, exc_info=True)
-            self.schedule_blocks = []
-
-        return self.async_show_menu(
-            step_id=f"schedule_menu_{self.current_schedule_type}",
-            menu_options=[
-                "schedule_add_block",
-                "schedule_view_blocks",
-                "schedule_save",
-                "back_to_schedule_list",
-            ],
-            description_placeholders={"title": title},
+        """Edit homeoffice schedule."""
+        return await self._handle_schedule_edit(
+            SCHEDULE_HOMEOFFICE, "Homeoffice", user_input
         )
 
-    async def async_step_back_to_schedule_list(
+    async def async_step_schedule_vacation(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Go back to schedule selection."""
-        return await self.async_step_edit_schedule()
+        """Edit vacation schedule."""
+        return await self._handle_schedule_edit(
+            SCHEDULE_VACATION, "Urlaub", user_input
+        )
 
-    # Add the missing schedule menu steps
-    async def async_step_schedule_menu_weekday(
+    async def async_step_schedule_party(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Handle weekday schedule menu."""
-        return await self._show_schedule_editor("Normal - Weekday (Mo-Fr)")
+        """Edit party schedule."""
+        return await self._handle_schedule_edit(SCHEDULE_PARTY, "Party", user_input)
 
-    async def async_step_schedule_menu_weekend(
-        self, user_input: dict[str, Any] | None = None
+    async def _handle_schedule_edit(
+        self, schedule_key: str, schedule_name: str, user_input: dict[str, Any] | None
     ) -> FlowResult:
-        """Handle weekend schedule menu."""
-        return await self._show_schedule_editor("Normal - Weekend (Sa-So)")
-
-    async def async_step_schedule_menu_daily(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle daily schedule menu."""
-        return await self._show_schedule_editor("Homeoffice (Mo-So)")
-
-    async def async_step_schedule_add_block(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Add a new schedule block."""
-        errors = {}
-
+        """Handle schedule editing."""
         if user_input is not None:
-            # Validate time inputs
-            start_time = self.schedule_editor.parse_time_input(user_input["start_time"])
-            end_time = self.schedule_editor.parse_time_input(user_input["end_time"])
+            # Parse schedule entries
+            # This is simplified - you'll need proper validation
+            schedule_data = {schedule_key: user_input}
+            return self.async_create_entry(title="", data=schedule_data)
 
-            if not start_time:
-                errors["start_time"] = "invalid_time"
-            if not end_time:
-                errors["end_time"] = "invalid_time"
+        # Load current schedule
+        current_schedule = self.config_entry.options.get(schedule_key, [])
 
-            if not errors:
-                # Add block
-                new_block = {
-                    "start": start_time,
-                    "end": end_time,
-                    "temp": user_input["temperature"],
+        # Build schema for up to 6 entries
+        schema_dict = {}
+        for i in range(1, 7):
+            default_val = ""
+            if i <= len(current_schedule):
+                entry = current_schedule[i - 1]
+                default_val = f"{entry.get('time', '')} - {entry.get('temperature', '')}"
+            
+            schema_dict[
+                vol.Optional(f"schedule_entry_{i}", default=default_val)
+            ] = selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+            )
+
+        return self.async_show_form(
+            step_id="edit_schedule",
+            data_schema=vol.Schema(schema_dict),
+            description_placeholders={"schedule_name": schedule_name},
+        )
+
+    async def async_step_learning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure learning settings."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        current_data = self.config_entry.data
+        current_options = self.config_entry.options
+        room_name = current_data.get(CONF_ROOM_NAME, "Unknown")
+
+        # Get current heating rate from coordinator if available
+        coordinator_data = self.hass.data.get(DOMAIN, {}).get(self.config_entry.entry_id)
+        current_heating_rate = DEFAULT_MIN_HEATING_RATE
+        if coordinator_data:
+            coordinator = coordinator_data.get("coordinator")
+            if coordinator and hasattr(coordinator, "data"):
+                current_heating_rate = coordinator.data.get("heating_rate", DEFAULT_MIN_HEATING_RATE)
+
+        return self.async_show_form(
+            step_id="learning",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_MIN_HEATING_RATE,
+                        default=current_options.get(CONF_MIN_HEATING_RATE, DEFAULT_MIN_HEATING_RATE),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.1,
+                            max=5.0,
+                            step=0.1,
+                            unit_of_measurement="°C/h",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        CONF_MAX_HEATING_RATE,
+                        default=current_options.get(CONF_MAX_HEATING_RATE, DEFAULT_MAX_HEATING_RATE),
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.5,
+                            max=10.0,
+                            step=0.5,
+                            unit_of_measurement="°C/h",
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    ),
+                    vol.Optional(
+                        "current_heating_rate",
+                        default=round(current_heating_rate, 2),
+                        description={"suggested_value": round(current_heating_rate, 2)},
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.1,
+                            max=10.0,
+                            step=0.1,
+                            unit_of_measurement="°C/h",
+                            mode=selector.NumberSelectorMode.BOX,
+                            disabled=True,
+                        )
+                    ),
                 }
-
-                self.schedule_blocks.append(new_block)
-                # Sort blocks
-                self.schedule_blocks.sort(key=lambda b: b["start"])
-
-                # Return to editor
-                return await self._show_schedule_editor(
-                    f"Schedule {self.current_schedule_type}"
-                )
-
-        schema = self.schedule_editor.get_add_block_schema(self.schedule_blocks)
-
-        # Render timeline
-        timeline = self.schedule_editor.render_timeline(self.schedule_blocks)
-
-        return self.async_show_form(
-            step_id="schedule_add_block",
-            data_schema=schema,
-            errors=errors,
-            description_placeholders={"timeline": timeline},
+            ),
+            description_placeholders={"room_name": room_name},
         )
-
-    async def async_step_schedule_view_blocks(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """View and delete blocks."""
-        if user_input is not None:
-            if "delete_block" in user_input:
-                block_index = int(user_input["delete_block"])
-                if 0 <= block_index < len(self.schedule_blocks):
-                    del self.schedule_blocks[block_index]
-
-            return await self._show_schedule_editor(
-                f"Schedule {self.current_schedule_type}"
-            )
-
-        # Build block list for selection
-        block_options = {}
-        for idx, block in enumerate(self.schedule_blocks):
-            temp_str = (
-                block["temp"]
-                if isinstance(block["temp"], str)
-                else f"{block['temp']}°C"
-            )
-            block_options[str(idx)] = (
-                f"{block['start']} - {block['end']}: {temp_str}"
-            )
-
-        if not block_options:
-            return await self._show_schedule_editor(
-                f"Schedule {self.current_schedule_type}"
-            )
-
-        schema = vol.Schema(
-            {
-                vol.Optional("delete_block"): vol.In(block_options),
-            }
-        )
-
-        timeline = self.schedule_editor.render_timeline(self.schedule_blocks)
-
-        return self.async_show_form(
-            step_id="schedule_view_blocks",
-            data_schema=schema,
-            description_placeholders={"timeline": timeline},
-        )
-
-    async def async_step_schedule_save(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Save schedule."""
-        # Validate blocks
-        errors_list = self.schedule_editor.validate_blocks(self.schedule_blocks)
-
-        if errors_list:
-            # Show errors
-            return self.async_show_form(
-                step_id="schedule_save",
-                data_schema=vol.Schema({}),
-                errors={"base": "validation_failed"},
-                description_placeholders={"errors": "\n".join(errors_list)},
-            )
-
-        # Convert blocks to DaySchedule
-        try:
-            day_schedule = self.schedule_editor.blocks_to_day_schedule(
-                self.schedule_blocks, self.current_schedule_type
-            )
-        except Exception as err:
-            _LOGGER.error("Failed to create schedule: %s", err)
-            return self.async_show_form(
-                step_id="schedule_save",
-                data_schema=vol.Schema({}),
-                errors={"base": "schedule_creation_failed"},
-            )
-
-        # Save to coordinator
-        coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id]["coordinator"]
-        room_name = self.current_room_data.get(CONF_ROOM_NAME)
-
-        if not room_name:
-            return self.async_abort(reason="no_room_name")
-
-        # Get or create room schedule
-        room_schedule = coordinator.schedule_engine._room_schedules.get(room_name)
-        if not room_schedule:
-            room_schedule = RoomSchedule(room_name=room_name)
-
-        # Update appropriate schedule
-        if self.current_schedule_type == SCHEDULE_TYPE_WEEKDAY:
-            room_schedule.normal_weekday = day_schedule
-        elif self.current_schedule_type == SCHEDULE_TYPE_WEEKEND:
-            room_schedule.normal_weekend = day_schedule
-        else:  # DAILY
-            room_schedule.homeoffice_daily = day_schedule
-
-        # Save
-        coordinator.update_room_schedule(room_name, room_schedule)
-        await coordinator.async_save_schedules()
-
-        _LOGGER.info("Schedule saved for room %s (%s)", room_name, self.current_schedule_type)
-
-        # Return to edit schedule menu
-        return await self.async_step_edit_schedule()
-
-    async def async_step_save_room(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Save room configuration."""
-        rooms = self.options.get(CONF_ROOMS, [])
-
-        if self.current_room_index is not None:
-            # Update existing room
-            rooms[self.current_room_index] = self.current_room_data
-        else:
-            # Add new room
-            rooms.append(self.current_room_data)
-
-        self.options[CONF_ROOMS] = rooms
-
-        # Reset state
-        self.current_room_index = None
-        self.current_room_data = {}
-
-        return self.async_create_entry(title="", data=self.options)
-
-    async def async_step_delete_room(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Delete a room."""
-        rooms = self.options.get(CONF_ROOMS, [])
-
-        if not rooms:
-            return self.async_abort(reason="no_rooms")
-
-        if user_input is not None:
-            room_name = user_input["room"]
-            rooms = [r for r in rooms if r.get(CONF_ROOM_NAME) != room_name]
-            self.options[CONF_ROOMS] = rooms
-
-            # Remove schedule
-            try:
-                coordinator = self.hass.data[DOMAIN][self._config_entry_data.entry_id][
-                    "coordinator"
-                ]
-                if hasattr(coordinator.schedule_engine, 'remove_room_schedule'):
-                    coordinator.schedule_engine.remove_room_schedule(room_name)
-                await coordinator.async_save_schedules()
-            except Exception as err:
-                _LOGGER.error("Error removing room schedule: %s", err)
-
-            return self.async_create_entry(title="", data=self.options)
-
-        room_names = [room.get(CONF_ROOM_NAME, f"Room {i}") for i, room in enumerate(rooms)]
-
-        schema = vol.Schema(
-            {
-                vol.Required("room"): vol.In(room_names),
-            }
-        )
-
-        return self.async_show_form(step_id="delete_room", data_schema=schema)

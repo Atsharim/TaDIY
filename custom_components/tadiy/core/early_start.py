@@ -41,6 +41,10 @@ class HeatUpModel:
             )
         self._running_sum = self.degrees_per_hour * self.sample_count
 
+    def get_heating_rate(self) -> float:
+        """Get current heating rate in °C/h."""
+        return self.degrees_per_hour
+
     def update_with_measurement(
         self,
         temp_increase: float,
