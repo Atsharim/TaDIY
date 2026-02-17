@@ -11,27 +11,13 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_GLOBAL_DONT_HEAT_BELOW,
-    CONF_GLOBAL_EARLY_START_MAX,
-    CONF_GLOBAL_EARLY_START_OFFSET,
-    CONF_GLOBAL_LEARN_HEATING_RATE,
-    CONF_GLOBAL_USE_EARLY_START,
-    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
-    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HUB,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
     CONF_ROOM_NAME,
     CONF_TRV_ENTITIES,
     CONF_WINDOW_SENSORS,
-    DEFAULT_DONT_HEAT_BELOW,
-    DEFAULT_EARLY_START_MAX,
-    DEFAULT_EARLY_START_OFFSET,
     DEFAULT_HUB_MODES,
-    DEFAULT_LEARN_HEATING_RATE,
-    DEFAULT_USE_EARLY_START,
-    DEFAULT_WINDOW_CLOSE_TIMEOUT,
-    DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     MAX_CUSTOM_MODES,
 )
@@ -76,17 +62,8 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
 
         return self.async_show_menu(
             step_id="init_hub",
-            menu_options=["global_defaults", "hub_mode"],
-            description_placeholders={"room_count": str(room_count)},
-        )
-
-    async def async_step_hub_menu(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Hub options menu for custom modes."""
-        return self.async_show_menu(
-            step_id="hub_menu",
             menu_options=["add_mode", "remove_mode", "view_modes"],
+            description_placeholders={"room_count": str(room_count)},
         )
 
     async def async_step_add_mode(
@@ -210,136 +187,6 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             description_placeholders={"modes_info": description},
         )
 
-    async def async_step_global_defaults(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Configure global default settings."""
-        if user_input is not None:
-            # Update hub config entry
-            new_data = dict(self.config_entry.data)
-            new_data.update(user_input)
-
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=new_data,
-            )
-
-            return self.async_create_entry(title="", data={})
-
-        current_data = self.config_entry.data
-
-        return self.async_show_form(
-            step_id="global_defaults",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
-                        default=current_data.get(CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=10,
-                            max=3600,
-                            unit_of_measurement="seconds",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
-                        default=current_data.get(CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=10,
-                            max=3600,
-                            unit_of_measurement="seconds",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_GLOBAL_DONT_HEAT_BELOW,
-                        default=current_data.get(CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=5.0,
-                            max=30.0,
-                            step=0.5,
-                            unit_of_measurement="°C",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_GLOBAL_USE_EARLY_START,
-                        default=current_data.get(CONF_GLOBAL_USE_EARLY_START, DEFAULT_USE_EARLY_START),
-                    ): selector.BooleanSelector(),
-                    vol.Optional(
-                        CONF_GLOBAL_LEARN_HEATING_RATE,
-                        default=current_data.get(CONF_GLOBAL_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE),
-                    ): selector.BooleanSelector(),
-                    vol.Optional(
-                        CONF_GLOBAL_EARLY_START_OFFSET,
-                        default=current_data.get(CONF_GLOBAL_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=0,
-                            max=60,
-                            unit_of_measurement="minutes",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_GLOBAL_EARLY_START_MAX,
-                        default=current_data.get(CONF_GLOBAL_EARLY_START_MAX, DEFAULT_EARLY_START_MAX),
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=10,
-                            max=240,
-                            unit_of_measurement="minutes",
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                }
-            ),
-        )
-
-    async def async_step_hub_mode(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Change hub mode."""
-        # Get coordinator
-        entry_data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
-        if not entry_data:
-            return self.async_abort(reason="coordinator_not_found")
-
-        coordinator = entry_data.get("coordinator")
-        if not coordinator:
-            return self.async_abort(reason="coordinator_not_found")
-
-        if user_input is not None:
-            mode = user_input.get("hub_mode")
-            if mode:
-                coordinator.set_hub_mode(mode)
-                await coordinator.async_save_schedules()
-                await coordinator.async_request_refresh()
-            return self.async_create_entry(title="", data={})
-
-        # Get available modes from coordinator
-        available_modes = coordinator.get_custom_modes()
-
-        return self.async_show_form(
-            step_id="hub_mode",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        "hub_mode",
-                        default=coordinator.get_hub_mode(),
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=available_modes,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
-            ),
-        )
 
     async def async_step_room_config(
         self, user_input: dict[str, Any] | None = None
