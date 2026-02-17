@@ -60,9 +60,14 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             if not entry.data.get(CONF_HUB, False)
         )
 
+        # Hardcoded labels as workaround for translation caching issues
         return self.async_show_menu(
             step_id="init_hub",
-            menu_options=["add_mode", "remove_mode", "view_modes"],
+            menu_options={
+                "add_mode": "Add Custom Mode",
+                "remove_mode": "Remove Custom Mode",
+                "view_modes": "View All Modes",
+            },
             description_placeholders={"room_count": str(room_count)},
         )
 
@@ -230,7 +235,8 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
 
         # Add optional fields - ALWAYS provide explicit default to avoid 400 Bad Request
         # EntitySelectors need a valid default value, never None or undefined
-        main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR, "")
+        # CRITICAL: Use `or ""` to handle None values in stored config
+        main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR) or ""
         schema_dict[
             vol.Optional(
                 CONF_MAIN_TEMP_SENSOR,
@@ -243,11 +249,11 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             )
         )
 
-        window_sensors = current_data.get(CONF_WINDOW_SENSORS, [])
+        window_sensors = current_data.get(CONF_WINDOW_SENSORS) or []
         schema_dict[
             vol.Optional(
                 CONF_WINDOW_SENSORS,
-                default=window_sensors if window_sensors else [],
+                default=window_sensors,
             )
         ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -256,7 +262,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             )
         )
 
-        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR, "")
+        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR) or ""
         schema_dict[
             vol.Optional(
                 CONF_OUTDOOR_SENSOR,
