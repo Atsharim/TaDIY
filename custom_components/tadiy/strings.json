@@ -136,6 +136,15 @@
           "global_learn_heating_rate": "Learn Heating Rate",
           "global_early_start_offset": "Early Start Buffer",
           "global_early_start_max": "Maximum Pre-heating Time"
+        },
+        "data_description": {
+          "global_window_open_timeout": "How long a window can be open before heating stops.",
+          "global_window_close_timeout": "Wait time after window closes before resuming heating.",
+          "global_dont_heat_below": "Stop heating when outdoor temperature exceeds this value.",
+          "global_use_early_start": "Enable intelligent pre-heating to reach target temperature on time.",
+          "global_learn_heating_rate": "Automatically learn how fast your rooms heat up.",
+          "global_early_start_offset": "Safety buffer for early start calculations.",
+          "global_early_start_max": "Maximum time for pre-heating (prevents starting too early)."
         }
       },
       "hub_mode": {
