@@ -1,15 +1,13 @@
 {
   "domain": "tadiy",
   "name": "TaDIY - Adaptive Climate Orchestrator",
-  "version": "0.1.9",
   "codeowners": ["@Atsharim"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/Atsharim/TaDIY",
-  "iot_class": "local_polling",
-  "integration_type": "hub",
+  "integration_type": "device",
+  "iot_class": "calculated",
   "issue_tracker": "https://github.com/Atsharim/TaDIY/issues",
-  "options_flow": true,
   "requirements": [],
-  "zeroconf": []
+  "version": "0.1.9"
 }
