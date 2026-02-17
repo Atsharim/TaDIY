@@ -113,7 +113,7 @@ DEFAULT_EARLY_START_MAX: Final = 120  # 2 hours max pre-heat
 DEFAULT_MIN_HEATING_RATE: Final = 0.5  # °C/h - für Options Flow
 DEFAULT_MAX_HEATING_RATE: Final = 3.0  # °C/h - für Options Flow
 DEFAULT_HEATING_RATE: Final = 1.0
-DEFAULT_FROST_PROTECTION_TEMP: Final = 5.0
+DEFAULT_FROST_PROTECTION_TEMP: Final = 12.0  # DEBUG: Raised to identify if this is the source
 
 # Heating rate limits (validation boundaries)
 MIN_HEATING_RATE: Final = 0.05  # Absolute minimum (°C/h)
