@@ -12,7 +12,7 @@ from ..const import (
     MODE_MANUAL,
     MODE_OFF,
 )
-from ..models.schedule import RoomSchedule
+from .schedule_model import RoomSchedule
 
 _LOGGER = logging.getLogger(__name__)
 
