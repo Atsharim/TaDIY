@@ -41,6 +41,13 @@ CONF_LOCATION_MODE_ENABLED: Final = (
 CONF_CUSTOM_MODES: Final = "custom_modes"  # Additional custom modes for hub
 CONF_SHOW_PANEL: Final = "show_panel"  # Show schedules panel in sidebar
 
+# Debug Configuration
+CONF_DEBUG_ROOMS: Final = "debug_rooms"
+CONF_DEBUG_HUB: Final = "debug_hub"
+CONF_DEBUG_PANEL: Final = "debug_panel"
+CONF_DEBUG_UI: Final = "debug_ui"
+CONF_DEBUG_CARDS: Final = "debug_cards"
+
 # Global defaults (Hub-level)
 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: Final = "global_window_open_timeout"
 CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT: Final = "global_window_close_timeout"

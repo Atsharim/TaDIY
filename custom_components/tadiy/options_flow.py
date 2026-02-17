@@ -21,22 +21,11 @@ from .const import (
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
-    CONF_LOCATION_MODE_ENABLED,
-    CONF_MAIN_TEMP_SENSOR,
-    CONF_OUTDOOR_SENSOR,
-    CONF_OVERRIDE_TIMEOUT,
-    CONF_PERSON_ENTITIES,
-    CONF_PID_KD,
-    CONF_PID_KI,
-    CONF_PID_KP,
-    CONF_ROOM_NAME,
-    CONF_SHOW_PANEL,
-    CONF_TRV_ENTITIES,
-    CONF_USE_HEATING_CURVE,
-    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
-    CONF_USE_PID_CONTROL,
-    CONF_USE_ROOM_COUPLING,
-    CONF_USE_WEATHER_PREDICTION,
+    CONF_DEBUG_ROOMS,
+    CONF_DEBUG_HUB,
+    CONF_DEBUG_PANEL,
+    CONF_DEBUG_UI,
+    CONF_DEBUG_CARDS,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
     DEFAULT_COUPLING_STRENGTH,
@@ -307,6 +296,13 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
             )
 
+            # Debug settings
+            new_data[CONF_DEBUG_ROOMS] = user_input.get(CONF_DEBUG_ROOMS, False)
+            new_data[CONF_DEBUG_HUB] = user_input.get(CONF_DEBUG_HUB, False)
+            new_data[CONF_DEBUG_PANEL] = user_input.get(CONF_DEBUG_PANEL, False)
+            new_data[CONF_DEBUG_UI] = user_input.get(CONF_DEBUG_UI, False)
+            new_data[CONF_DEBUG_CARDS] = user_input.get(CONF_DEBUG_CARDS, False)
+
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
@@ -468,6 +464,23 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 CONF_USE_WEATHER_PREDICTION,
                 default=current_use_weather_prediction,
             )
+        ] = selector.BooleanSelector()
+
+        # Debug settings
+        schema_dict[
+            vol.Optional(CONF_DEBUG_ROOMS, default=current_data.get(CONF_DEBUG_ROOMS, False))
+        ] = selector.BooleanSelector()
+        schema_dict[
+            vol.Optional(CONF_DEBUG_HUB, default=current_data.get(CONF_DEBUG_HUB, False))
+        ] = selector.BooleanSelector()
+        schema_dict[
+            vol.Optional(CONF_DEBUG_PANEL, default=current_data.get(CONF_DEBUG_PANEL, False))
+        ] = selector.BooleanSelector()
+        schema_dict[
+            vol.Optional(CONF_DEBUG_UI, default=current_data.get(CONF_DEBUG_UI, False))
+        ] = selector.BooleanSelector()
+        schema_dict[
+            vol.Optional(CONF_DEBUG_CARDS, default=current_data.get(CONF_DEBUG_CARDS, False))
         ] = selector.BooleanSelector()
 
         return self.async_show_form(
