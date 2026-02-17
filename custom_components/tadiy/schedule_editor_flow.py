@@ -17,8 +17,6 @@ class ScheduleEditorMixin:
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Show information about using the Lovelace card for schedule editing."""
-        from homeassistant.const import CONF_ENTITY_ID
-
         # Get room entity_id
         room_name = self.config_entry.data.get("room_name", "unknown")
         entity_id = f"climate.{room_name.lower().replace(' ', '_')}"
