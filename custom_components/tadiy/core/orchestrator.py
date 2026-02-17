@@ -81,6 +81,12 @@ class RoomOrchestrator:
             away_temp = self.room_config.away_temperature
             # Use gradual reduction: grace period → partial → full away
             loc_mgr = self.coordinator.hub_coordinator.location_manager
+            self.coordinator.debug(
+                "rooms",
+                "Away mode active: %s/%s persons home",
+                loc_mgr.get_location_state().person_count_home,
+                loc_mgr.get_location_state().person_count_total,
+            )
             gradual_target = loc_mgr.get_gradual_away_target(
                 scheduled_target or 20.0, away_temp
             )

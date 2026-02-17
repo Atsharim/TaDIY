@@ -79,7 +79,7 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         value_fn=lambda data: (
             round(data.heating_rate, 2) if data and data.heating_rate else None
         ),
-        available_fn=lambda data: data is not None and data.heating_rate is not None,
+        available_fn=lambda data: data is not None,
         attr_fn=lambda data: (
             {
                 "sample_count": data.heating_rate_sample_count
@@ -843,6 +843,13 @@ class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Accumulate heating time and update HA state."""
         from homeassistant.util import dt as dt_util
+
+        # Initialize from persisted stats if this is first update
+        if self._last_date is None:
+            stats = self.coordinator.heating_stats
+            self._today_seconds = stats.get("today_seconds", 0.0)
+            self._last_date = stats.get("last_date", None)
+            self._daily_history = stats.get("daily_history", {})
 
         now = dt_util.now()
         today_str = now.strftime("%Y-%m-%d")

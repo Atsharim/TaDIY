@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from .core.logger import TaDIYLogger
+from .const import MIN_TEMP, MAX_TEMP
 from .core.sensor_manager import SensorManager
 from .core.trv_manager import TrvManager
 from .core.orchestrator import RoomOrchestrator
@@ -742,6 +743,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_heating_stats_{entry_id}",
         )
         self.heating_stats: dict[str, Any] = {}
+        # Load heating stats from storage on startup
+        self.hass.async_create_task(self.async_load_heating_stats())
 
         self.sensor_manager = SensorManager(self)
         self.trv_manager = TrvManager(self)
@@ -1116,6 +1119,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             )
         else:
             self.heating_stats = {}
+        self.async_update_listeners()
 
     async def async_save_heating_stats(self) -> None:
         """Save heating statistics to storage."""
@@ -1706,6 +1710,18 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # 6. Apply Target if needed and store commanded target
         if enforce_target and final_target is not None:
+            # Validate target within min/max range
+            clamped_target = max(MIN_TEMP, min(final_target, MAX_TEMP))
+            if clamped_target != final_target:
+                _LOGGER.warning(
+                    "TRV target temperature clamped from %.1f°C to %.1f°C (range: %.1f-%.1f°C)",
+                    final_target,
+                    clamped_target,
+                    MIN_TEMP,
+                    MAX_TEMP
+                )
+                final_target = clamped_target
+        
             should_heat = self.orchestrator.calculate_heating_decision(
                 fused_temp=fused_temp,
                 target_temp=final_target,
