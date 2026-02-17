@@ -61,14 +61,14 @@
   "options": {
     "step": {
       "room_config": {
-        "title": "Room Configuration",
+        "title": "Room Options",
         "description": "Configure basic room settings. Advanced settings are available through device entities.",
         "data": {
           "room_name": "Room Name",
-          "trv_entities": "TRV Entities",
-          "main_temp_sensor": "Main Temperature Sensor",
-          "window_sensors": "Window Sensors",
-          "outdoor_sensor": "Outdoor Temperature Sensor"
+          "trv_entities": "Choose TRV Entities",
+          "main_temp_sensor": "Choose Main Temperature Sensor",
+          "window_sensors": "Choose Window Sensors",
+          "outdoor_sensor": "Choose Outdoor Temperature Sensor"
         },
         "data_description": {
           "room_name": "Unique name for this room.",
@@ -77,6 +77,36 @@
           "window_sensors": "Binary sensors to detect open windows/doors (optional).",
           "outdoor_sensor": "Outdoor temperature sensor (optional)."
         }
+      },
+      "hub_menu": {
+        "title": "Hub Options",
+        "description": "Manage custom modes for the TaDIY Hub.",
+        "menu_options": {
+          "add_mode": "Add Custom Mode",
+          "remove_mode": "Remove Custom Mode",
+          "view_modes": "View All Modes"
+        }
+      },
+      "add_mode": {
+        "title": "Add Custom Mode",
+        "description": "Create a new custom mode. Mode names will be converted to lowercase. Maximum {max_modes} modes total.",
+        "data": {
+          "mode_name": "Mode Name"
+        },
+        "data_description": {
+          "mode_name": "Name of the new mode (e.g., vacation, party, guests)"
+        }
+      },
+      "remove_mode": {
+        "title": "Remove Custom Mode",
+        "description": "Remove a custom mode. Default modes (Normal, Homeoffice, Manual, Off) cannot be removed.",
+        "data": {
+          "mode_to_remove": "Mode to Remove"
+        }
+      },
+      "view_modes": {
+        "title": "All Modes",
+        "description": "{modes_info}"
       },
       "init_hub": {
         "title": "Configure TaDIY Hub",
@@ -190,10 +220,18 @@
     },
     "error": {
       "unknown": "An unexpected error occurred.",
-      "invalid_schedule_format": "Invalid schedule format. Use HH:MM - Temperature"
+      "invalid_schedule_format": "Invalid schedule format. Use HH:MM - Temperature",
+      "empty_name": "Mode name cannot be empty.",
+      "is_default_mode": "This is a default mode and already exists.",
+      "already_exists": "A mode with this name already exists.",
+      "mode_limit_reached": "Maximum number of modes reached (10 total).",
+      "add_failed": "Failed to add mode. Please try again.",
+      "coordinator_not_found": "Hub coordinator not found."
     },
     "abort": {
-      "hub_not_configurable": "Hub settings are managed through device entities. Use the Hub device controls to configure global settings."
+      "hub_not_configurable": "Hub settings are managed through device entities. Use the Hub device controls to configure global settings.",
+      "coordinator_not_found": "Hub coordinator not found. Please reload the integration.",
+      "no_custom_modes": "No custom modes to remove. Only default modes exist."
     }
   },
   "entity": {

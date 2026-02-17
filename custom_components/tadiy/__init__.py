@@ -21,7 +21,6 @@ from .const import (
     DEFAULT_BOOST_DURATION,
     DEFAULT_BOOST_TEMPERATURE,
     DOMAIN,
-    HUB_MODES,
     MAX_BOOST_DURATION,
     MAX_BOOST_TEMP,
     MAX_HEATING_RATE,
@@ -60,7 +59,7 @@ SERVICE_BOOST_ALL_SCHEMA = vol.Schema({
         vol.Coerce(int), vol.Range(min=MIN_BOOST_DURATION, max=MAX_BOOST_DURATION)
     ),
 })
-SERVICE_SET_HUB_MODE_SCHEMA = vol.Schema({vol.Required(ATTR_MODE): vol.In(HUB_MODES)})
+SERVICE_SET_HUB_MODE_SCHEMA = vol.Schema({vol.Required(ATTR_MODE): cv.string})
 SERVICE_SET_HEATING_CURVE_SCHEMA = vol.Schema({
     vol.Required(ATTR_ROOM): cv.string,
     vol.Required(ATTR_HEATING_RATE): vol.All(
@@ -178,11 +177,14 @@ async def async_register_services(
 
     async def handle_set_hub_mode(call: ServiceCall) -> None:
         mode = call.data.get(ATTR_MODE)
-        if mode not in HUB_MODES:
-            _LOGGER.error("Invalid mode: %s", mode)
+        available_modes = hub_coordinator.get_custom_modes()
+
+        if mode not in available_modes:
+            _LOGGER.error("Invalid mode: %s (available: %s)", mode, available_modes)
             return
 
-        hub_coordinator.hub_mode = mode
+        hub_coordinator.set_hub_mode(mode)
+        await hub_coordinator.async_save_schedules()
         await hub_coordinator.async_request_refresh()
 
         for entry_id, data in hass.data[DOMAIN].items():
