@@ -1,158 +1,95 @@
-"""Coordinator for TaDIY - Adaptive Climate Orchestrator."""
+"""Coordinator for TaDIY integration."""
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
+import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, State
-from homeassistant.helpers.storage import Store
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util import dt as dt_util
 
-from .const import (
-    CONF_MAIN_TEMP_SENSOR,
-    CONF_OUTDOOR_SENSOR,
-    CONF_ROOMS,
-    CONF_ROOM_NAME,
-    CONF_TRV_ENTITIES,
-    CONF_WEATHER_ENTITY,
-    CONF_WINDOW_SENSORS,
-    DOMAIN,
-)
-from .core.temperature import calculate_fused_temperature, SensorReading
-from .core.window import WindowState
-from .models.room import RoomConfig, RoomData
+from .const import CONF_ROOMS, DOMAIN, UPDATE_INTERVAL
 
 _LOGGER = logging.getLogger(__name__)
 
-UPDATE_INTERVAL = timedelta(seconds=30)
 
+class TaDIYCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """TaDIY data coordinator."""
 
-class TaDIYDataUpdateCoordinator(DataUpdateCoordinator[dict[str, RoomData]]):
-    """Coordinator for TaDIY data management."""
-
-    def __init__(
-        self, 
-        hass: HomeAssistant, 
-        entry: ConfigEntry,
-        store: Store[dict[str, Any]]
-    ) -> None:
+    def __init__(self, hass: HomeAssistant, entry_id: str, rooms: list[dict]) -> None:
         """Initialize coordinator."""
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=UPDATE_INTERVAL,
+            update_interval=timedelta(seconds=UPDATE_INTERVAL),
         )
-        self.entry = entry
-        self.store = store
-        self.rooms: list[RoomConfig] = []
-        self._load_rooms_from_options()
-        _LOGGER.debug("TaDIY Coordinator initialized with %d rooms", len(self.rooms))
+        self.entry_id = entry_id
+        self.rooms = rooms
 
-    def _load_rooms_from_options(self) -> None:
-        """Load room configurations from options."""
-        rooms_data = self.entry.options.get(CONF_ROOMS, [])
-        self.rooms = [
-            RoomConfig(
-                name=room[CONF_ROOM_NAME],
-                trv_entity_ids=room[CONF_TRV_ENTITIES],
-                main_temp_sensor_id=room[CONF_MAIN_TEMP_SENSOR],
-                window_sensor_ids=room.get(CONF_WINDOW_SENSORS, []),
-                weather_entity_id=room.get(CONF_WEATHER_ENTITY, ""),
-                outdoor_sensor_id=room.get(CONF_OUTDOOR_SENSOR, ""),
-            )
-            for room in rooms_data
-        ]
-        _LOGGER.info("Loaded %d room(s) from config", len(self.rooms))
+    async def _async_update_data(self) -> dict[str, Any]:
+        """Fetch data from sensors."""
+        try:
+            data = {"rooms": {}}
+            
+            for room in self.rooms:
+                room_name = room.get("room_name", "Unknown")
+                room_data = await self._fetch_room_data(room)
+                data["rooms"][room_name] = room_data
+            
+            return data
+        except Exception as err:
+            raise UpdateFailed(f"Error fetching TaDIY data: {err}") from err
 
-    async def _async_update_data(self) -> dict[str, RoomData]:
-        """Fetch data from TRVs and sensors."""
-        if not self.rooms:
-            _LOGGER.debug("No rooms configured, skipping update")
-            return {}
+    async def _fetch_room_data(self, room: dict) -> dict[str, Any]:
+        """Fetch data for a single room."""
+        room_data = {
+            "main_temp": None,
+            "outdoor_temp": None,
+            "window_state": "closed",
+            "trv_states": [],
+        }
 
-        room_data: dict[str, RoomData] = {}
+        # Get main temperature
+        main_temp_sensor = room.get("main_temp_sensor")
+        if main_temp_sensor:
+            state = self.hass.states.get(main_temp_sensor)
+            if state and state.state not in ("unknown", "unavailable"):
+                try:
+                    room_data["main_temp"] = float(state.state)
+                except (ValueError, TypeError):
+                    pass
 
-        for room in self.rooms:
-            try:
-                data = await self._update_room(room)
-                room_data[room.name] = data
-            except Exception as err:
-                _LOGGER.warning("Error updating room %s: %s", room.name, err)
-                continue
+        # Get outdoor temperature
+        outdoor_sensor = room.get("outdoor_sensor")
+        if outdoor_sensor:
+            state = self.hass.states.get(outdoor_sensor)
+            if state and state.state not in ("unknown", "unavailable"):
+                try:
+                    room_data["outdoor_temp"] = float(state.state)
+                except (ValueError, TypeError):
+                    pass
+
+        # Check window sensors
+        window_sensors = room.get("window_sensors", [])
+        if window_sensors:
+            any_open = False
+            for sensor in window_sensors:
+                state = self.hass.states.get(sensor)
+                if state and state.state == "on":
+                    any_open = True
+                    break
+            room_data["window_state"] = "open" if any_open else "closed"
+
+        # Get TRV states
+        trv_entities = room.get("trv_entities", [])
+        for trv in trv_entities:
+            state = self.hass.states.get(trv)
+            if state:
+                room_data["trv_states"].append({
+                    "entity_id": trv,
+                    "state": state.state,
+                    "attributes": dict(state.attributes),
+                })
 
         return room_data
-
-    async def _update_room(self, room: RoomConfig) -> RoomData:
-        """Update data for a single room."""
-        
-        # Temperatur vom Haupt-Sensor
-        main_temp = self._get_sensor_value(room.main_temp_sensor_id)
-        
-        # TRV-Daten sammeln
-        trv_states = [self.hass.states.get(trv_id) for trv_id in room.trv_entity_ids]
-        trv_temps = [
-            float(state.attributes.get("current_temperature", 0))
-            for state in trv_states if state
-        ]
-        
-        # Temperatur-Fusion (Haupt-Sensor + TRVs gewichtet)
-        readings = [SensorReading(room.main_temp_sensor_id, main_temp, weight=2.0)]
-        for i, temp in enumerate(trv_temps):
-            if temp > 0:
-                readings.append(SensorReading(room.trv_entity_ids[i], temp, weight=1.0))
-        
-        fused_temp = calculate_fused_temperature(readings) or main_temp
-
-        # Fenster-Status
-        window_state = self._check_windows(room)
-
-        # Außen-Temperatur
-        outdoor_temp = None
-        if room.outdoor_sensor_id:
-            outdoor_temp = self._get_sensor_value(room.outdoor_sensor_id)
-
-        return RoomData(
-            room_name=room.name,
-            current_temperature=fused_temp,
-            main_sensor_temperature=main_temp,
-            trv_temperatures=trv_temps,
-            window_state=window_state,
-            outdoor_temperature=outdoor_temp,
-            last_update=dt_util.utcnow(),
-        )
-
-    def _get_sensor_value(self, entity_id: str) -> float:
-        """Get numeric sensor value."""
-        state = self.hass.states.get(entity_id)
-        if not state or state.state in ("unknown", "unavailable"):
-            return 0.0
-        try:
-            return float(state.state)
-        except (ValueError, TypeError):
-            return 0.0
-
-    def _check_windows(self, room: RoomConfig) -> WindowState:
-        """Check window sensors (OR logic)."""
-        if not room.window_sensor_ids:
-            return WindowState(is_open=False, reason="no_sensors")
-
-        for sensor_id in room.window_sensor_ids:
-            state = self.hass.states.get(sensor_id)
-            if state and state.state == "on":
-                return WindowState(
-                    is_open=True,
-                    last_change=dt_util.parse_datetime(state.last_changed),
-                    reason=f"sensor_{sensor_id}_open"
-                )
-
-        return WindowState(is_open=False, reason="all_closed")
-
-    async def async_reload_rooms(self) -> None:
-        """Reload room configs and refresh data."""
-        self._load_rooms_from_options()
-        await self.async_refresh()
-        _LOGGER.info("Rooms reloaded and data refreshed")
