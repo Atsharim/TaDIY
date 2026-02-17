@@ -421,7 +421,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             old_mode = self.hub_mode
             self.hub_mode = mode
             _LOGGER.debug("Hub mode set to: %s", mode)
-            
+
             # Clear all room overrides on mode change
             if old_mode != mode:
                 self._clear_all_room_overrides()
@@ -433,7 +433,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
     def _clear_all_room_overrides(self) -> None:
         """Clear overrides in all room coordinators on mode change."""
         from . import DOMAIN
-        
+
         count = 0
         for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
             if isinstance(entry_data, dict) and entry_data.get("type") == "room":
@@ -444,10 +444,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     if cleared > 0:
                         # Persist the cleared state
                         self.hass.async_create_task(coordinator.async_save_overrides())
-        
+
         if count > 0:
             _LOGGER.info("Mode change: Cleared %d override(s) across all rooms", count)
-
 
     def get_custom_modes(self) -> list[str]:
         """Get list of available custom modes."""
@@ -665,6 +664,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         self.current_room_data: RoomData | None = None
         self._heat_model = HeatUpModel(room_name=self.room_config.name)
+        self._heat_model.set_debug_callback(self._debug_callback)
 
         # Thermal Mass Model for cooling rate learning
         from .core.thermal_mass import ThermalMassModel
@@ -681,9 +681,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         self.pid_autotuner = PIDAutoTuner(room_name=self.room_config.name)
 
-        self.schedule_engine = ScheduleEngine(
-            debug_callback=self._debug_callback
-        )
+        self.schedule_engine = ScheduleEngine(debug_callback=self._debug_callback)
         self.schedule_store = Store(
             hass,
             STORAGE_VERSION_SCHEDULES,
@@ -695,7 +693,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # TRV Calibration Manager
         from .core.calibration import CalibrationManager
 
-        self.calibration_manager = CalibrationManager()
+        self.calibration_manager = CalibrationManager(debug_callback=self._debug_callback)
         self.calibration_store = Store(
             hass,
             STORAGE_VERSION,
@@ -713,9 +711,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         )
 
         # Override Manager
-        self.override_manager = OverrideManager(
-            debug_callback=self._debug_callback
-        )
+        self.override_manager = OverrideManager(debug_callback=self._debug_callback)
         self.override_store = Store(
             hass,
             STORAGE_VERSION,
@@ -750,7 +746,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 ki=room_data.get(CONF_PID_KI, DEFAULT_PID_KI),
                 kd=room_data.get(CONF_PID_KD, DEFAULT_PID_KD),
             )
-            self.heating_controller = PIDHeatingController(pid_config)
+            self.heating_controller = PIDHeatingController(
+                pid_config, debug_fn=self._debug_callback
+            )
             self.heating_controller.set_hysteresis(hysteresis)
             _LOGGER.info(
                 "Initialized PID controller for room %s (Kp=%.2f, Ki=%.3f, Kd=%.2f, hysteresis=%.2f°C)",
@@ -761,7 +759,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 hysteresis,
             )
         else:
-            self.heating_controller = HeatingController(hysteresis=hysteresis)
+            self.heating_controller = HeatingController(
+                hysteresis=hysteresis, debug_fn=self._debug_callback
+            )
             _LOGGER.debug(
                 "Initialized basic controller for room %s (hysteresis=%.2f°C)",
                 self.room_config.name,
@@ -966,7 +966,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         try:
             from .core.calibration import CalibrationManager
 
-            self.calibration_manager = CalibrationManager.from_dict(data)
+            self.calibration_manager = CalibrationManager.from_dict(
+                data, debug_callback=self._debug_callback
+            )
             _LOGGER.debug("Loaded calibrations for room: %s", self.room_config.name)
         except (ValueError, KeyError) as err:
             _LOGGER.warning(
@@ -1114,7 +1116,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     ki=data.get("pid_ki", DEFAULT_PID_KI),
                     kd=data.get("pid_kd", DEFAULT_PID_KD),
                 )
-                self.heating_controller = PIDHeatingController(pid_config)
+                self.heating_controller = PIDHeatingController(
+                    pid_config, debug_fn=self._debug_callback
+                )
                 _LOGGER.info(
                     "Switched to PID controller for room %s (Kp=%.2f, Ki=%.3f, Kd=%.2f)",
                     self.room_config.name,
@@ -1127,7 +1131,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             ):
                 # Switch to basic controller
                 hysteresis = self.heating_controller.hysteresis
-                self.heating_controller = HeatingController(hysteresis=hysteresis)
+                self.heating_controller = HeatingController(
+                    hysteresis=hysteresis, debug_fn=self._debug_callback
+                )
                 _LOGGER.info(
                     "Switched to basic controller for room %s", self.room_config.name
                 )
@@ -1290,9 +1296,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     def get_current_temperature(self) -> float | None:
         """Get current room temperature (fused from all sensors)."""
-        if hasattr(self, 'current_room_data') and self.current_room_data:
+        if hasattr(self, "current_room_data") and self.current_room_data:
             return self.current_room_data.current_temperature
-        return getattr(self, '_last_fused_temp', None)
+        return getattr(self, "_last_fused_temp", None)
 
     def get_scheduled_target(self) -> float | None:
         """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
@@ -1302,7 +1308,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             self.room_config.name, mode
         )
 
-        self.debug("rooms", "get_scheduled_target - mode=%s, target=%s", mode, base_target)
+        self.debug(
+            "rooms", "get_scheduled_target - mode=%s, target=%s", mode, base_target
+        )
 
         # Apply heating curve if enabled and outdoor temp available
         if (
@@ -1367,15 +1375,15 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 base_target = adjusted
 
         # Apply overshoot compensation if learned (helps On/Off TRVs and old radiators)
-        if base_target is not None and hasattr(self, 'overshoot_manager'):
+        if base_target is not None and hasattr(self, "overshoot_manager"):
             current_temp = self.get_current_temperature()
             outdoor_temp = self._cached_outdoor_temp
-            
+
             # Update overshoot tracking with current temperature
             self.overshoot_manager.update_temperature(
                 self.room_config.name, current_temp, outdoor_temp
             )
-            
+
             # Get compensated target
             compensated = self.overshoot_manager.get_compensated_target(
                 self.room_config.name, base_target
@@ -1383,7 +1391,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             if abs(compensated - base_target) > 0.05:
                 _LOGGER.debug(
                     "Room %s: Overshoot compensation applied: base=%.1f°C, compensated=%.1f°C",
-                    self.room_config.name, base_target, compensated
+                    self.room_config.name,
+                    base_target,
+                    compensated,
                 )
                 base_target = compensated
 
@@ -1420,8 +1430,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # If this event was caused by our own command, ignore it
         if self.trv_manager.is_own_context(event.context):
             _LOGGER.debug(
-                "TRV %s: Ignoring echo of our own command (context match)",
-                entity_id
+                "TRV %s: Ignoring echo of our own command (context match)", entity_id
             )
             return
 
@@ -1431,7 +1440,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         if new_temp_attr is None or old_temp_attr is None:
             return
-
 
         try:
             new_temp = float(new_temp_attr)
@@ -1444,29 +1452,34 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             return
 
         # Check if the new temperature matches what we last commanded (Calibrated Echo Detection)
-        # This is critical because we might have sent a calibrated value (e.g. 26) 
+        # This is critical because we might have sent a calibrated value (e.g. 26)
         # that differs from the schedule (e.g. 21). We shouldn't treat 26 as a manual override
         # if 26 is exactly what we asked for.
         last_commanded = self.trv_manager.get_last_commanded(entity_id)
         if last_commanded and last_commanded.get("temperature") is not None:
-             last_sent_temp = last_commanded["temperature"]
-             # If new temp matches last sent command, it's just the TRV obeying us
-             if abs(new_temp - last_sent_temp) < 0.2:
-                 _LOGGER.debug(
-                     "TRV %s: State matches last commanded value (%.1f), ignoring as echo", 
-                     entity_id, last_sent_temp
-                 )
-                 # Update known state to prevent future false positives
-                 self._last_trv_targets[entity_id] = new_temp
-                 return
-        
+            last_sent_temp = last_commanded["temperature"]
+            # If new temp matches last sent command, it's just the TRV obeying us
+            if abs(new_temp - last_sent_temp) < 0.2:
+                _LOGGER.debug(
+                    "TRV %s: State matches last commanded value (%.1f), ignoring as echo",
+                    entity_id,
+                    last_sent_temp,
+                )
+                # Update known state to prevent future false positives
+                self._last_trv_targets[entity_id] = new_temp
+                return
+
         # Get hub mode to determine reference value and timeout
         hub_mode = self.get_hub_mode()
-        
+
         # Determine reference value based on mode
         if hub_mode == "off":
             # Off mode: reference is frost protection
-            reference_target = self.hub_coordinator.get_frost_protection_temp() if self.hub_coordinator else 5.0
+            reference_target = (
+                self.hub_coordinator.get_frost_protection_temp()
+                if self.hub_coordinator
+                else 5.0
+            )
             override_timeout = "2h"  # 2 hour temporary override in off mode
         elif hub_mode == "manual":
             # Manual mode: reference is last commanded target
@@ -1476,17 +1489,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # Schedule mode: reference is scheduled target
             reference_target = self.get_scheduled_target()
             override_timeout = self.get_override_timeout()
-        
+
         # If no reference value available, cannot create override
         if reference_target is None:
             _LOGGER.debug(
                 "TRV %s: No reference temperature available for override detection",
-                entity_id
+                entity_id,
             )
             return
 
         # If timeout mode is "always", reject manual overrides (only in schedule mode)
-        if hub_mode not in ("manual", "off") and override_timeout == OVERRIDE_TIMEOUT_ALWAYS:
+        if (
+            hub_mode not in ("manual", "off")
+            and override_timeout == OVERRIDE_TIMEOUT_ALWAYS
+        ):
             _LOGGER.info(
                 "Manual override detected for %s but timeout mode is 'always', "
                 "will restore scheduled temperature",
@@ -1513,7 +1529,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # Create override record
                 _LOGGER.info(
                     "TRV %s: Creating override in %s mode (reference=%.1f, override=%.1f, timeout=%s)",
-                    entity_id, hub_mode, reference_target, new_temp, override_timeout
+                    entity_id,
+                    hub_mode,
+                    reference_target,
+                    new_temp,
+                    override_timeout,
                 )
                 self.override_manager.create_override(
                     entity_id=entity_id,
@@ -1528,7 +1548,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # Update last known target
         self._last_trv_targets[entity_id] = new_temp
-
 
     def check_window_override(self, current_target: float) -> bool:
         """Check if window open overrides heating."""
@@ -1553,13 +1572,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # 2. Get Hub and TRV states
         hub_mode = self.get_hub_mode()
         trv_state = self.trv_manager.get_current_trv_state()
-        
+
         # 3. Handle Window Logic
         window_state = self._calculate_window_state(window_open)
-        
+
         # 4. Determine Target Temperature
         scheduled_target = self.get_scheduled_target()
-        
+
         # Check for expired overrides first
         expired = self.override_manager.check_expired_overrides()
         if expired:
@@ -1583,7 +1602,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             active_override_target=override_target,
             hub_mode=hub_mode,
             outdoor_temp=outdoor_temp,
-            window_should_stop=window_state.heating_should_stop
+            window_should_stop=window_state.heating_should_stop,
         )
 
         self.debug(
@@ -1596,10 +1615,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # 5. Inhibit selection bounce (Grace Period)
         # If we are in grace period, we ignore the TRV's reported target and stick to what we sent
         if self.orchestrator.is_in_grace_period():
-            self.debug("rooms", "Grace Period Active: Prioritizing target %.1f over TRV %.1f", 
-                       final_target, trv_state["target"])
+            self.debug(
+                "rooms",
+                "Grace Period Active: Prioritizing target %.1f over TRV %.1f",
+                final_target,
+                trv_state["target"],
+            )
         else:
-            # If TRV target changed significantly and we AREN'T enforcing a schedule, 
+            # If TRV target changed significantly and we AREN'T enforcing a schedule,
             # we should detect this as a manual change (echo detection)
             # This is partly handled by setup_state_listeners, but we sync here too.
             pass
@@ -1642,56 +1665,67 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # 7. Update models (Learning)
         if fused_temp is not None:
-             # Heat-up Model Tracking (Learning heating rate)
-             if heating_active:
-                 prev_temp = getattr(self, "_last_fused_temp", None)
-                 prev_time = getattr(self, "_last_temp_time", None)
-                 now = dt_util.utcnow()
-                 
-                 if prev_temp is not None and prev_time is not None:
-                     time_delta = (now - prev_time).total_seconds() / 60.0
-                     if time_delta >= 5.0:
-                         temp_increase = fused_temp - prev_temp
-                         if temp_increase > 0.01:
-                             try:
-                                 self._heat_model.update_with_measurement(temp_increase, time_delta)
-                             except ValueError:
-                                 pass
-                             self._last_temp_time = now
-                 
-                 if not getattr(self, "_last_temp_time", None):
-                     self._last_temp_time = now
-             
-             # Thermal Mass Model Tracking (Learning cooling rate)
-             self._thermal_mass_model.start_cooling_measurement(fused_temp, heating_active)
-             if not heating_active:
-                 if self._thermal_mass_model.update_with_cooling_measurement(fused_temp, outdoor_temp):
-                     self.hass.async_create_task(self.async_save_thermal_mass())
-             
-             self._last_fused_temp = fused_temp
+            # Heat-up Model Tracking (Learning heating rate)
+            if heating_active:
+                prev_temp = getattr(self, "_last_fused_temp", None)
+                prev_time = getattr(self, "_last_temp_time", None)
+                now = dt_util.utcnow()
+
+                if prev_temp is not None and prev_time is not None:
+                    time_delta = (now - prev_time).total_seconds() / 60.0
+                    if time_delta >= 5.0:
+                        temp_increase = fused_temp - prev_temp
+                        if temp_increase > 0.01:
+                            try:
+                                self._heat_model.update_with_measurement(
+                                    temp_increase, time_delta
+                                )
+                            except ValueError:
+                                pass
+                            self._last_temp_time = now
+
+                if not getattr(self, "_last_temp_time", None):
+                    self._last_temp_time = now
+
+            # Thermal Mass Model Tracking (Learning cooling rate)
+            self._thermal_mass_model.start_cooling_measurement(
+                fused_temp, heating_active
+            )
+            if not heating_active:
+                if self._thermal_mass_model.update_with_cooling_measurement(
+                    fused_temp, outdoor_temp
+                ):
+                    self.hass.async_create_task(self.async_save_thermal_mass())
+
+            self._last_fused_temp = fused_temp
 
         # 8. Create RoomData using COMMANDED target (not TRV feedback)
         room_data = RoomData(
             room_name=self.room_config.name,
             current_temperature=fused_temp if fused_temp is not None else 20.0,
-            main_sensor_temperature=self.sensor_manager._get_sensor_value(self.room_config.main_temp_sensor_id) or 0.0,
+            main_sensor_temperature=self.sensor_manager._get_sensor_value(
+                self.room_config.main_temp_sensor_id
+            )
+            or 0.0,
             trv_temperatures=trv_state["all_targets"],
             window_state=window_state,
             outdoor_temperature=outdoor_temp,
             target_temperature=self._commanded_target,  # Use commanded target!
-            hvac_mode=self._commanded_hvac_mode if enforce_target else trv_state["mode"],
+            hvac_mode=self._commanded_hvac_mode
+            if enforce_target
+            else trv_state["mode"],
             humidity=humidity,
             heating_active=heating_active,
             heating_rate=self._heat_model.get_heating_rate(),
             heating_rate_sample_count=self._heat_model.sample_count,
             heating_rate_confidence=self._heat_model.get_confidence(),
             override_active=active_override is not None,
-            override_count=1 if active_override else 0
+            override_count=1 if active_override else 0,
         )
-        
+
         # Increment update counter
         self._update_count += 1
-        
+
         self.current_room_data = room_data
         return room_data
 

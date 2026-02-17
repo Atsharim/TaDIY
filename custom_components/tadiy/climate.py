@@ -102,7 +102,11 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             return HVACMode.HEAT if commanded == "heat" else HVACMode.OFF
         # Fallback to coordinator data
         if self.coordinator.data:
-            return HVACMode.HEAT if self.coordinator.data.hvac_mode == "heat" else HVACMode.OFF
+            return (
+                HVACMode.HEAT
+                if self.coordinator.data.hvac_mode == "heat"
+                else HVACMode.OFF
+            )
         return HVACMode.OFF
 
     @property
@@ -144,11 +148,15 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
 
         # Unified override logic: same as hardware changes
         hub_mode = self.coordinator.get_hub_mode()
-        
+
         # Determine reference value and timeout based on mode
         if hub_mode == "off":
             # Off mode: 2h temporary override
-            reference_target = self.coordinator.hub_coordinator.get_frost_protection_temp() if self.coordinator.hub_coordinator else 5.0
+            reference_target = (
+                self.coordinator.hub_coordinator.get_frost_protection_temp()
+                if self.coordinator.hub_coordinator
+                else 5.0
+            )
             override_timeout = "2h"
             next_block_time = None
         elif hub_mode == "manual":
@@ -184,7 +192,6 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             override_timeout,
         )
 
-
         # Get current room temperature for auto-calibration
         room_temp = (
             self.coordinator.current_room_data.current_temperature
@@ -215,8 +222,11 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                 # Get calibrated target with offset compensation
                 calibrated_temp = (
                     self.coordinator.calibration_manager.get_calibrated_target(
-                        trv_entity_id, temperature, room_temp, trv_temp, 
-                        max_temp=self.max_temp
+                        trv_entity_id,
+                        temperature,
+                        room_temp,
+                        trv_temp,
+                        max_temp=self.max_temp,
                     )
                 )
 
@@ -276,7 +286,9 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                 _LOGGER.error("Failed to set HVAC mode for %s: %s", trv_entity_id, err)
 
         # Update commanded mode (convert enum to string) and refresh state
-        self.coordinator._commanded_hvac_mode = "heat" if hvac_mode == HVACMode.HEAT else "off"
+        self.coordinator._commanded_hvac_mode = (
+            "heat" if hvac_mode == HVACMode.HEAT else "off"
+        )
         self.async_write_ha_state()
 
     @callback

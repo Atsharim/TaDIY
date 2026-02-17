@@ -32,6 +32,7 @@ class HeatUpModel:
     sample_count: int = 0
     last_updated: datetime | None = None
     _running_sum: float = field(default=0.0, init=False, repr=False)
+    _debug_fn: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Validate heating model."""
@@ -41,6 +42,17 @@ class HeatUpModel:
                 f"and {MAX_HEATING_RATE}"
             )
         self._running_sum = self.degrees_per_hour * self.sample_count
+
+    def set_debug_callback(self, callback) -> None:
+        """Set the debug callback for TaDIY logging."""
+        self._debug_fn = callback
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log via TaDIY debug system if available, else fallback to _LOGGER."""
+        if self._debug_fn:
+            self._debug_fn("early_start", message, args)
+        else:
+            _LOGGER.debug(message, *args)
 
     def get_heating_rate(self) -> float:
         """Get current heating rate in °C/h."""
@@ -59,7 +71,7 @@ class HeatUpModel:
             time_minutes: Time period in minutes
         """
         if time_minutes <= 0:
-            _LOGGER.warning(
+            self._debug(
                 "%s: Invalid time_minutes %.2f, skipping update",
                 self.room_name,
                 time_minutes,
@@ -67,7 +79,7 @@ class HeatUpModel:
             return
 
         if temp_increase < MIN_TEMP_INCREASE:
-            _LOGGER.debug(
+            self._debug(
                 "%s: Temperature increase too small (%.3f°C), skipping",
                 self.room_name,
                 temp_increase,
@@ -77,7 +89,7 @@ class HeatUpModel:
         rate_per_hour = (temp_increase / time_minutes) * 60
 
         if not MIN_HEATING_RATE <= rate_per_hour <= MAX_HEATING_RATE:
-            _LOGGER.warning(
+            self._debug(
                 "%s: Heating rate %.2f°C/h out of plausible range, skipping",
                 self.room_name,
                 rate_per_hour,
@@ -85,7 +97,7 @@ class HeatUpModel:
             return
 
         if rate_per_hour > (temp_increase / time_minutes) * 60 * 2:
-            _LOGGER.warning(
+            self._debug(
                 "%s: Heating rate suspiciously high (%.2f°C/h), skipping",
                 self.room_name,
                 rate_per_hour,
@@ -106,7 +118,7 @@ class HeatUpModel:
 
         self.last_updated = dt_util.utcnow()
 
-        _LOGGER.info(
+        self._debug(
             "%s: Heating rate updated: %.2f -> %.2f °C/h "
             "(measured: %.2f °C/h over %.1f min, sample %d)",
             self.room_name,
@@ -162,9 +174,17 @@ class HeatUpModel:
 class EarlyStartCalculator:
     """Calculate early start times based on learned heating rates."""
 
-    def __init__(self, heat_model: HeatUpModel) -> None:
+    def __init__(self, heat_model: HeatUpModel, debug_callback=None) -> None:
         """Initialize calculator with a heating model."""
         self._heat_model = heat_model
+        self._debug_fn = debug_callback
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log via TaDIY debug system if available, else fallback to _LOGGER."""
+        if self._debug_fn:
+            self._debug_fn("early_start", message, args)
+        else:
+            _LOGGER.debug(message, *args)
 
     def calculate_start_time(
         self,
@@ -184,8 +204,8 @@ class EarlyStartCalculator:
             Datetime when heating should start
         """
         if target_temp <= current_temp:
-            _LOGGER.debug(
-                "%s: Already at or above target (%.1f°C >= %.1f°C)",
+            self._debug(
+                "%s: Already at or above target (%.1f >= %.1f)",
                 self._heat_model.room_name,
                 current_temp,
                 target_temp,
@@ -198,7 +218,7 @@ class EarlyStartCalculator:
         confidence = self._heat_model.get_confidence()
         if confidence < 0.5:
             safety_factor = 1.5
-            _LOGGER.debug(
+            self._debug(
                 "%s: Low confidence (%.1f%%), applying safety factor %.1fx",
                 self._heat_model.room_name,
                 confidence * 100,
@@ -208,15 +228,15 @@ class EarlyStartCalculator:
 
         start_time = target_time - timedelta(hours=hours_needed)
 
-        _LOGGER.info(
-            "%s: Early start calculated: %.1f°C -> %.1f°C (Δ%.1f°C) "
-            "needs %.2fh at %.2f°C/h, start at %s",
+        self._debug(
+            "%s: Early start: %.1f -> %.1f (delta=%.1f) "
+            "rate=%.2f°C/h needs=%.1fmin start=%s",
             self._heat_model.room_name,
             current_temp,
             target_temp,
             temp_delta,
-            hours_needed,
             self._heat_model.degrees_per_hour,
+            hours_needed * 60,
             start_time.strftime("%H:%M:%S"),
         )
 

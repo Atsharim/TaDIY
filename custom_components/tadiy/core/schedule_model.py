@@ -112,6 +112,7 @@ class DaySchedule:
     ) -> float:
         """Get temperature for given time."""
         import logging
+
         _LOGGER = logging.getLogger(__name__)
 
         if not self.blocks:
@@ -220,6 +221,7 @@ class RoomSchedule:
     ) -> DaySchedule | None:
         """Get appropriate schedule for given mode and datetime."""
         import logging
+
         _LOGGER = logging.getLogger(__name__)
 
         if dt is None:

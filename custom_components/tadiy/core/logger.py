@@ -21,6 +21,9 @@ class TaDIYLogger:
         "trv": "debug_trv",
         "sensors": "debug_sensors",
         "schedule": "debug_schedule",
+        "heating": "debug_heating",
+        "calibration": "debug_calibration",
+        "early_start": "debug_early_start",
         "verbose": "debug_verbose",
     }
 
@@ -46,8 +49,7 @@ class TaDIYLogger:
             if room_name:
                 prefix += f"({room_name}) "
 
-            # Use INFO level so it shows without DEBUG in configuration.yaml
-            _LOGGER.info(f"{prefix}{message}", *args)
+            _LOGGER.info(prefix + message, *args)
 
     def _is_enabled(self, category: str) -> bool:
         """Check if a debug category is enabled in hub config."""
@@ -83,6 +85,7 @@ class TaDIYLogger:
         if not hub and hasattr(self.context, "hass"):
             try:
                 from ..const import DOMAIN
+
                 domain_data = self.context.hass.data.get(DOMAIN)
                 if domain_data and isinstance(domain_data, dict):
                     hub = domain_data.get("hub_coordinator")

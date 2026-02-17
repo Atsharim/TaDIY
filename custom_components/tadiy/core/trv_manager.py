@@ -201,12 +201,16 @@ class TrvManager:
                     and trv_temp
                     and hasattr(self.coordinator, "calibration_manager")
                 ):
-                    calibrated = self.coordinator.calibration_manager.get_calibrated_target(
-                        trv_id,
-                        target,
-                        room_temp,
-                        trv_temp,
-                        max_temp=config.max_temp if hasattr(config, "max_temp") else 30.0,
+                    calibrated = (
+                        self.coordinator.calibration_manager.get_calibrated_target(
+                            trv_id,
+                            target,
+                            room_temp,
+                            trv_temp,
+                            max_temp=config.max_temp
+                            if hasattr(config, "max_temp")
+                            else 30.0,
+                        )
                     )
                     calibration_offset = calibrated - target
 
@@ -228,9 +232,9 @@ class TrvManager:
                     )
 
                 # Apply temperature if changed
-                temp_changed = current_temp is None or abs(
-                    float(current_temp) - calibrated
-                ) > 0.1
+                temp_changed = (
+                    current_temp is None or abs(float(current_temp) - calibrated) > 0.1
+                )
 
                 if temp_changed:
                     self._debug(
@@ -303,7 +307,10 @@ class TrvManager:
 
         # Check temperature drift (only if we commanded heat mode)
         if last["hvac_mode"] == "heat" and last["temperature"] is not None:
-            if current_temp is not None and abs(current_temp - last["temperature"]) > 0.5:
+            if (
+                current_temp is not None
+                and abs(current_temp - last["temperature"]) > 0.5
+            ):
                 self._debug(
                     "%s: Temp drift detected - commanded %.1f, actual %.1f",
                     trv_id,

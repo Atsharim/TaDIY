@@ -51,6 +51,9 @@ CONF_DEBUG_TRV: Final = "debug_trv"
 CONF_DEBUG_SENSORS: Final = "debug_sensors"
 CONF_DEBUG_SCHEDULE: Final = "debug_schedule"
 CONF_DEBUG_VERBOSE: Final = "debug_verbose"
+CONF_DEBUG_HEATING: Final = "debug_heating"
+CONF_DEBUG_CALIBRATION: Final = "debug_calibration"
+CONF_DEBUG_EARLY_START: Final = "debug_early_start"
 
 # Global defaults (Hub-level)
 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: Final = "global_window_open_timeout"

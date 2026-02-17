@@ -32,6 +32,9 @@ from .const import (
     CONF_DEBUG_TRV,
     CONF_DEBUG_SENSORS,
     CONF_DEBUG_SCHEDULE,
+    CONF_DEBUG_HEATING,
+    CONF_DEBUG_CALIBRATION,
+    CONF_DEBUG_EARLY_START,
     CONF_DEBUG_VERBOSE,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -571,6 +574,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 new_data[CONF_DEBUG_TRV] = "trv" in selected_categories
                 new_data[CONF_DEBUG_SENSORS] = "sensors" in selected_categories
                 new_data[CONF_DEBUG_SCHEDULE] = "schedule" in selected_categories
+                new_data[CONF_DEBUG_HEATING] = "heating" in selected_categories
+                new_data[CONF_DEBUG_CALIBRATION] = "calibration" in selected_categories
+                new_data[CONF_DEBUG_EARLY_START] = "early_start" in selected_categories
                 new_data[CONF_DEBUG_VERBOSE] = "verbose" in selected_categories
             else:
                 # Disable all
@@ -582,6 +588,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 new_data[CONF_DEBUG_TRV] = False
                 new_data[CONF_DEBUG_SENSORS] = False
                 new_data[CONF_DEBUG_SCHEDULE] = False
+                new_data[CONF_DEBUG_HEATING] = False
+                new_data[CONF_DEBUG_CALIBRATION] = False
+                new_data[CONF_DEBUG_EARLY_START] = False
                 new_data[CONF_DEBUG_VERBOSE] = False
 
             self.hass.config_entries.async_update_entry(
@@ -598,15 +607,18 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Check if any debug is enabled
         any_debug_enabled = (
-            current_data.get(CONF_DEBUG_ROOMS, False) or
-            current_data.get(CONF_DEBUG_HUB, False) or
-            current_data.get(CONF_DEBUG_PANEL, False) or
-            current_data.get(CONF_DEBUG_UI, False) or
-            current_data.get(CONF_DEBUG_CARDS, False) or
-            current_data.get(CONF_DEBUG_TRV, False) or
-            current_data.get(CONF_DEBUG_SENSORS, False) or
-            current_data.get(CONF_DEBUG_SCHEDULE, False) or
-            current_data.get(CONF_DEBUG_VERBOSE, False)
+            current_data.get(CONF_DEBUG_ROOMS, False)
+            or current_data.get(CONF_DEBUG_HUB, False)
+            or current_data.get(CONF_DEBUG_PANEL, False)
+            or current_data.get(CONF_DEBUG_UI, False)
+            or current_data.get(CONF_DEBUG_CARDS, False)
+            or current_data.get(CONF_DEBUG_TRV, False)
+            or current_data.get(CONF_DEBUG_SENSORS, False)
+            or current_data.get(CONF_DEBUG_SCHEDULE, False)
+            or current_data.get(CONF_DEBUG_HEATING, False)
+            or current_data.get(CONF_DEBUG_CALIBRATION, False)
+            or current_data.get(CONF_DEBUG_EARLY_START, False)
+            or current_data.get(CONF_DEBUG_VERBOSE, False)
         )
 
         # Build list of currently enabled categories
@@ -627,6 +639,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             enabled_categories.append("sensors")
         if current_data.get(CONF_DEBUG_SCHEDULE, False):
             enabled_categories.append("schedule")
+        if current_data.get(CONF_DEBUG_HEATING, False):
+            enabled_categories.append("heating")
+        if current_data.get(CONF_DEBUG_CALIBRATION, False):
+            enabled_categories.append("calibration")
+        if current_data.get(CONF_DEBUG_EARLY_START, False):
+            enabled_categories.append("early_start")
         if current_data.get(CONF_DEBUG_VERBOSE, False):
             enabled_categories.append("verbose")
 
@@ -634,23 +652,56 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             vol.Required("debug_enabled", default=any_debug_enabled): bool,
         }
 
-        schema_dict[
-            vol.Optional("debug_categories", default=enabled_categories)
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=[
-                    selector.SelectOptionDict(value="trv", label="TRV Commands (temperatures sent to TRVs, calibration)"),
-                    selector.SelectOptionDict(value="sensors", label="Sensor Fusion (temperature readings, sources)"),
-                    selector.SelectOptionDict(value="schedule", label="Schedule Logic (active blocks, next change)"),
-                    selector.SelectOptionDict(value="rooms", label="Room Logic (heating decisions, targets)"),
-                    selector.SelectOptionDict(value="hub", label="Hub Logic (mode changes, coordination)"),
-                    selector.SelectOptionDict(value="panel", label="Schedule Panel"),
-                    selector.SelectOptionDict(value="ui", label="User Interface"),
-                    selector.SelectOptionDict(value="cards", label="Dashboard Cards"),
-                    selector.SelectOptionDict(value="verbose", label="VERBOSE (Enable ALL - very detailed)"),
-                ],
-                multiple=True,
-                mode=selector.SelectSelectorMode.LIST,
+        schema_dict[vol.Optional("debug_categories", default=enabled_categories)] = (
+            selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        selector.SelectOptionDict(
+                            value="trv",
+                            label="TRV Commands (temperatures sent to TRVs, calibration)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="sensors",
+                            label="Sensor Fusion (temperature readings, sources)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="schedule",
+                            label="Schedule Logic (active blocks, next change)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="heating",
+                            label="Heating Controller (hysteresis, trend, cycle guard)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="calibration",
+                            label="Calibration (TRV offset, boost, adaptive)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="early_start",
+                            label="Early Start (heating rate, learning, preheating)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="rooms",
+                            label="Room Logic (heating decisions, targets)",
+                        ),
+                        selector.SelectOptionDict(
+                            value="hub", label="Hub Logic (mode changes, coordination)"
+                        ),
+                        selector.SelectOptionDict(
+                            value="panel", label="Schedule Panel"
+                        ),
+                        selector.SelectOptionDict(value="ui", label="User Interface"),
+                        selector.SelectOptionDict(
+                            value="cards", label="Dashboard Cards"
+                        ),
+                        selector.SelectOptionDict(
+                            value="verbose",
+                            label="VERBOSE (Enable ALL - very detailed)",
+                        ),
+                    ],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
             )
         )
 

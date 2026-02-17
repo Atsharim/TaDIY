@@ -11,6 +11,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import logging
+from typing import Any, Callable
 
 from homeassistant.util import dt as dt_util
 
@@ -26,11 +27,12 @@ MIN_CYCLE_SECONDS: int = 300
 TREND_WINDOW_SIZE: int = 6
 
 # Minimum temperature delta (°C) between readings to consider meaningful.
-# Readings within this band are treated as noise and ignored for decisions.
-NOISE_FLOOR: float = 0.05
+# Typical sensor noise is ±0.1°C; readings within this band are ignored.
+NOISE_FLOOR: float = 0.1
 
 # Trend threshold (°C per reading) below which trend is considered flat.
-TREND_DEAD_ZONE: float = 0.03
+# Must exceed sensor noise divided by window size to avoid false trends.
+TREND_DEAD_ZONE: float = 0.05
 
 
 class HeatingController:
@@ -46,7 +48,11 @@ class HeatingController:
        before allowing a state change, filtering single-sample spikes.
     """
 
-    def __init__(self, hysteresis: float = DEFAULT_HYSTERESIS) -> None:
+    def __init__(
+        self,
+        hysteresis: float = DEFAULT_HYSTERESIS,
+        debug_fn: Callable[[str, str, tuple], None] | None = None,
+    ) -> None:
         self.hysteresis = hysteresis
         self._heating_active = False
         self._last_state_change: datetime | None = None
@@ -56,6 +62,14 @@ class HeatingController:
         # Consecutive readings that agree on a state change before we flip.
         self._flip_confirm_count: int = 0
         self._flip_confirm_target: int = 2
+        self._debug_fn = debug_fn
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log via TaDIY debug system if available, else fallback to _LOGGER."""
+        if self._debug_fn:
+            self._debug_fn("heating", message, args)
+        else:
+            _LOGGER.debug(message, *args)
 
     def should_heat(
         self,
@@ -93,24 +107,40 @@ class HeatingController:
             if current_temp < turn_on_threshold:
                 desired = True
 
-        # --- Trend guard (global, not just in deadband) ---
-        if desired != self._heating_active and len(self._temp_history) >= 3:
+        # --- Trend guard (deadband only) ---
+        # Only suppress state changes when temperature is *inside* the
+        # hysteresis deadband.  Outside the band the hysteresis decision
+        # is authoritative — overriding it causes overshoot.
+        in_deadband = turn_on_threshold <= current_temp < turn_off_threshold
+        if (
+            desired != self._heating_active
+            and in_deadband
+            and len(self._temp_history) >= 3
+        ):
             trend = self._get_trend()
 
             if abs(trend) > TREND_DEAD_ZONE:
                 if self._heating_active and not desired and trend > TREND_DEAD_ZONE:
-                    # Temp still rising → don't turn off yet
-                    _LOGGER.debug(
-                        "Trend guard: suppressing OFF (trend=+%.3f°C/reading)",
+                    self._debug(
+                        "Trend guard: suppressing OFF (trend=+%.3f°C/reading) | "
+                        "current=%.2f°C | target=%.2f°C | band=[%.2f, %.2f]",
                         trend,
+                        current_temp,
+                        target_temp,
+                        turn_on_threshold,
+                        turn_off_threshold,
                     )
                     desired = True
                     self._flip_confirm_count = 0
                 elif not self._heating_active and desired and trend < -TREND_DEAD_ZONE:
-                    # Temp still falling → don't turn on yet
-                    _LOGGER.debug(
-                        "Trend guard: suppressing ON (trend=%.3f°C/reading)",
+                    self._debug(
+                        "Trend guard: suppressing ON (trend=%.3f°C/reading) | "
+                        "current=%.2f°C | target=%.2f°C | band=[%.2f, %.2f]",
                         trend,
+                        current_temp,
+                        target_temp,
+                        turn_on_threshold,
+                        turn_off_threshold,
                     )
                     desired = False
                     self._flip_confirm_count = 0
@@ -119,12 +149,15 @@ class HeatingController:
         if desired != self._heating_active:
             self._flip_confirm_count += 1
             if self._flip_confirm_count < self._flip_confirm_target:
-                _LOGGER.debug(
-                    "Confirm gate: %s->%s needs %d/%d confirmations",
+                self._debug(
+                    "Confirm gate: %s->%s needs %d/%d confirmations | "
+                    "current=%.2f°C | target=%.2f°C",
                     "ON" if self._heating_active else "OFF",
                     "ON" if desired else "OFF",
                     self._flip_confirm_count,
                     self._flip_confirm_target,
+                    current_temp,
+                    target_temp,
                 )
                 return (self._heating_active, target_temp)
         else:
@@ -136,21 +169,40 @@ class HeatingController:
             if self._last_state_change is not None:
                 elapsed = (now - self._last_state_change).total_seconds()
                 if elapsed < MIN_CYCLE_SECONDS:
-                    _LOGGER.debug(
-                        "Cycle guard: suppressed %s->%s (%.0fs < %ds)",
+                    self._debug(
+                        "Cycle guard: suppressed %s->%s (%.0fs < %ds) | "
+                        "current=%.2f°C | target=%.2f°C",
                         "ON" if self._heating_active else "OFF",
                         "ON" if desired else "OFF",
                         elapsed,
                         MIN_CYCLE_SECONDS,
+                        current_temp,
+                        target_temp,
                     )
                     return (self._heating_active, target_temp)
 
             self._heating_active = desired
             self._last_state_change = now
             self._flip_confirm_count = 0
-            _LOGGER.debug(
-                "Heating %s (current=%.2f°C, target=%.2f°C, band=[%.2f, %.2f])",
-                "ON" if desired else "OFF",
+
+            trend = self._get_trend()
+            self._debug(
+                "Decision=%s | current=%.2f°C | target=%.2f°C | "
+                "band=[%.2f, %.2f] | hysteresis=%.2f°C | trend=%+.3f°C/reading",
+                "HEAT" if desired else "OFF",
+                current_temp,
+                target_temp,
+                turn_on_threshold,
+                turn_off_threshold,
+                self.hysteresis,
+                trend,
+            )
+        else:
+            # No state change - log current state periodically
+            self._debug(
+                "Steady state=%s | current=%.2f°C | target=%.2f°C | "
+                "band=[%.2f, %.2f]",
+                "HEAT" if self._heating_active else "OFF",
                 current_temp,
                 target_temp,
                 turn_on_threshold,
@@ -200,7 +252,7 @@ class HeatingController:
     def set_hysteresis(self, hysteresis: float) -> None:
         """Update hysteresis value."""
         self.hysteresis = hysteresis
-        _LOGGER.debug("Hysteresis updated to %.2f°C", hysteresis)
+        self._debug("Hysteresis updated to %.2f°C", hysteresis)
 
     def reset(self) -> None:
         """Reset controller state (call when mode changes)."""
@@ -208,7 +260,7 @@ class HeatingController:
         self._last_state_change = None
         self._temp_history.clear()
         self._flip_confirm_count = 0
-        _LOGGER.debug("Controller reset")
+        self._debug("Controller reset")
 
 
 @dataclass
@@ -228,8 +280,9 @@ class PIDHeatingController(HeatingController):
         self,
         pid_config: PIDConfig | None = None,
         hysteresis: float = DEFAULT_HYSTERESIS,
+        debug_fn: Callable[[str, str, tuple], None] | None = None,
     ) -> None:
-        super().__init__(hysteresis)
+        super().__init__(hysteresis, debug_fn=debug_fn)
         self.config = pid_config or PIDConfig()
         self._integral = 0.0
         self._last_error = 0.0
@@ -274,13 +327,17 @@ class PIDHeatingController(HeatingController):
 
         output = p_term + i_term + d_term
 
-        _LOGGER.debug(
-            "PID: error=%.2f°C, P=%.2f, I=%.2f, D=%.2f, output=%.2f",
+        self._debug(
+            "PID output=%.2f | error=%.2f°C | P=%.2f I=%.2f D=%.2f | "
+            "integral=%.2f | current=%.2f°C | target=%.2f°C",
+            output,
             error,
             p_term,
             i_term,
             d_term,
-            output,
+            self._integral,
+            current_temp,
+            target_temp,
         )
 
         return output
