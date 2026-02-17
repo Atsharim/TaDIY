@@ -192,7 +192,6 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             description_placeholders={"modes_info": description},
         )
 
-
     async def async_step_room_config(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
