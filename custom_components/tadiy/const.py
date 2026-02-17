@@ -218,6 +218,8 @@ ICON_MODE: Final = "mdi:home-automation"
 ICON_TEMPERATURE: Final = "mdi:thermometer"
 ICON_WINDOW: Final = "mdi:window-open-variant"
 ICON_LEARNING: Final = "mdi:brain"
+ICON_COMFORT: Final = "mdi:home-thermometer-outline"
+ICON_ENERGY: Final = "mdi:lightning-bolt"
 
 # Services
 SERVICE_FORCE_REFRESH: Final = "force_refresh"

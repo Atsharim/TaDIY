@@ -48,7 +48,12 @@ class LocationState:
 class LocationManager:
     """Manage location-based control."""
 
-    def __init__(self, hass: HomeAssistant, person_entity_ids: list[str]) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        person_entity_ids: list[str],
+        debug_callback=None,
+    ) -> None:
         """Initialize location manager."""
         self.hass = hass
         self.person_entity_ids = person_entity_ids or []
@@ -56,6 +61,7 @@ class LocationManager:
         self._manual_override: bool | None = (
             None  # None = auto, True = force home, False = force away
         )
+        self._debug_fn = debug_callback
 
     def get_location_state(self) -> LocationState:
         """Get current location state."""
@@ -144,20 +150,25 @@ class LocationManager:
 
         return self._location_state
 
-    def is_away_mode_active(self) -> bool:
-        """
-        Check if away mode should be active (nobody home).
+    def _debug(self, message: str, *args) -> None:
+        """Log debug message if callback is set."""
+        if self._debug_fn:
+            self._debug_fn("hub", message, args)
+        else:
+            _LOGGER.debug(message, *args)
 
-        Returns:
-            True if all persons are away
-        """
-        return not self._location_state.anyone_home
+    def is_away_mode_active(self) -> bool:
+        """Check if away mode should be active (nobody home)."""
+        active = not self._location_state.anyone_home
+        self._debug(
+            "Away mode: %s (home=%d/%d, override=%s)",
+            "ACTIVE" if active else "inactive",
+            self._location_state.person_count_home,
+            self._location_state.person_count_total,
+            self._manual_override,
+        )
+        return active
 
     def should_reduce_heating(self) -> bool:
-        """
-        Check if heating should be reduced due to away mode.
-
-        Returns:
-            True if heating should be reduced
-        """
+        """Check if heating should be reduced due to away mode."""
         return self.is_away_mode_active()

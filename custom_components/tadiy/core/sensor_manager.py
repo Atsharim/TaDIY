@@ -8,11 +8,12 @@ jitter and prevent erratic heating decisions.
 from __future__ import annotations
 
 import logging
+import time as _time
 from typing import Any, NamedTuple
 
 _LOGGER = logging.getLogger(__package__)
 
-TRV_SENSOR_WEIGHT = 0.3
+TRV_SENSOR_WEIGHT_DEFAULT = 0.3
 
 # EMA smoothing factor: lower = more smoothing, higher = more responsive.
 # 0.2 means 20% new value, 80% previous — filters ±0.1°C jitter while
@@ -37,6 +38,20 @@ class SensorReading(NamedTuple):
     weight: float = 1.0
 
 
+def calculate_dynamic_trv_weight(main_temp: float, trv_temp: float) -> float:
+    """Calculate dynamic TRV sensor weight based on deviation from main sensor.
+
+    When the TRV sensor is close to the main sensor, it's more trustworthy.
+    When it deviates strongly (heated by radiator), reduce its influence.
+    """
+    diff = abs(main_temp - trv_temp)
+    if diff < 0.5:
+        return 1.0  # Both sensors agree
+    if diff < 1.5:
+        return 0.5  # Moderate deviation
+    return 0.1  # Strong deviation — TRV biased by radiator heat
+
+
 def calculate_fused_temperature(readings: list[SensorReading]) -> float | None:
     """Calculate weighted average temperature from multiple sensors."""
     if not readings:
@@ -53,12 +68,21 @@ def calculate_fused_temperature(readings: list[SensorReading]) -> float | None:
 class SensorManager:
     """Handles sensor data reading and fusion for a room."""
 
+    # Temperature-based window detection thresholds
+    TEMP_DROP_THRESHOLD: float = 0.5  # °C drop in window to trigger detection
+    TEMP_DROP_WINDOW: float = 300.0  # seconds (5 minutes)
+    TEMP_DROP_CONFIRM: int = 2  # consecutive drops needed
+
     def __init__(self, coordinator: Any) -> None:
         """Initialize the sensor manager."""
         self.coordinator = coordinator
         self.hass = coordinator.hass
         self._ema_value: float | None = None
         self._consecutive_spikes: int = 0
+        # Temperature-based window detection state
+        self._temp_drop_history: list[tuple[float, float]] = []  # (temp, timestamp)
+        self._temp_drop_detected: bool = False
+        self._temp_drop_count: int = 0
 
     def _debug(self, message: str, *args: Any) -> None:
         """Log sensor debug message using coordinator's logger."""
@@ -68,24 +92,68 @@ class SensorManager:
     def get_fused_temperature(self) -> float | None:
         """Get the current room temperature from available sensors.
 
-        Applies a dual-stage filter (spike rejection + EMA) to produce
-        a stable temperature reading for the heating controller.
+        Uses sensor fusion when both main and TRV sensors are available:
+        the main sensor gets a fixed high weight while TRV weights are
+        calculated dynamically based on their deviation from the main sensor.
+
+        Falls back to TRV-only fusion when the main sensor is unavailable.
+        Applies a dual-stage filter (spike rejection + EMA) on the result.
         """
         config = self.coordinator.room_config
         raw_temp: float | None = None
 
-        # Try main sensor first
         main_temp = self._get_sensor_value(config.main_temp_sensor_id)
+
         if main_temp is not None:
-            raw_temp = main_temp
             self._debug(
                 "Temperature: MAIN SENSOR %s = %.2f",
                 config.main_temp_sensor_id,
                 main_temp,
             )
+
+            # Build fusion list: main sensor + TRV sensors with dynamic weights
+            readings: list[SensorReading] = [
+                SensorReading(
+                    entity_id=config.main_temp_sensor_id,
+                    temperature=main_temp,
+                    weight=10.0,
+                )
+            ]
+
+            for trv_id in config.trv_entity_ids:
+                state = self.hass.states.get(trv_id)
+                if state:
+                    try:
+                        current = state.attributes.get("current_temperature")
+                        if current is not None:
+                            trv_temp = float(current)
+                            weight = calculate_dynamic_trv_weight(main_temp, trv_temp)
+                            readings.append(
+                                SensorReading(
+                                    entity_id=trv_id,
+                                    temperature=trv_temp,
+                                    weight=weight,
+                                )
+                            )
+                            self._debug(
+                                "TRV sensor %s = %.2f (dynamic weight: %.1f, diff: %.1f)",
+                                trv_id,
+                                trv_temp,
+                                weight,
+                                abs(main_temp - trv_temp),
+                            )
+                    except (ValueError, TypeError):
+                        self._debug("TRV sensor %s: invalid value", trv_id)
+
+            raw_temp = calculate_fused_temperature(readings)
+            self._debug(
+                "Temperature: FUSED from %d sensor(s) = %.2f",
+                len(readings),
+                raw_temp or 0,
+            )
         else:
-            # Fallback to TRVs
-            trv_readings = []
+            # Fallback: TRV sensors only (no main sensor)
+            trv_readings: list[SensorReading] = []
             for trv_id in config.trv_entity_ids:
                 state = self.hass.states.get(trv_id)
                 if state:
@@ -95,14 +163,14 @@ class SensorManager:
                             reading = SensorReading(
                                 entity_id=trv_id,
                                 temperature=float(current),
-                                weight=TRV_SENSOR_WEIGHT,
+                                weight=TRV_SENSOR_WEIGHT_DEFAULT,
                             )
                             trv_readings.append(reading)
                             self._debug(
-                                "TRV sensor %s = %.2f (weight: %.1f)",
+                                "TRV sensor %s = %.2f (fallback weight: %.1f)",
                                 trv_id,
                                 float(current),
-                                TRV_SENSOR_WEIGHT,
+                                TRV_SENSOR_WEIGHT_DEFAULT,
                             )
                     except (ValueError, TypeError):
                         self._debug("TRV sensor %s: invalid value", trv_id)
@@ -111,7 +179,7 @@ class SensorManager:
             if trv_readings:
                 raw_temp = calculate_fused_temperature(trv_readings)
                 self._debug(
-                    "Temperature: FUSED from %d TRV(s) = %.2f",
+                    "Temperature: FUSED from %d TRV(s) = %.2f (no main sensor)",
                     len(trv_readings),
                     raw_temp or 0,
                 )
@@ -236,18 +304,69 @@ class SensorManager:
         return humidity
 
     def is_window_open(self) -> bool:
-        """Check if any window is open."""
+        """Check if any window is open (sensor or temperature-based detection)."""
+        # 1. Check physical window sensors
         window_ids = self.coordinator.room_config.window_sensor_ids
-        if not window_ids:
-            return False
+        if window_ids:
+            for entity_id in window_ids:
+                state = self.hass.states.get(entity_id)
+                if state and state.state == "on":
+                    self._debug("Window: %s is OPEN (sensor)", entity_id)
+                    return True
 
-        for entity_id in window_ids:
-            state = self.hass.states.get(entity_id)
-            if state and state.state == "on":
-                self._debug("Window: %s is OPEN", entity_id)
-                return True
+        # 2. Check temperature-based detection (works without window sensors)
+        if self._temp_drop_detected:
+            self._debug("Window: OPEN (temperature drop detected)")
+            return True
 
         return False
+
+    def update_temp_drop_detection(self, current_temp: float | None) -> None:
+        """Track temperature drops to detect open windows without sensors.
+
+        Call this every update cycle with the current fused temperature.
+        A rapid drop (>TEMP_DROP_THRESHOLD in TEMP_DROP_WINDOW seconds)
+        confirmed TEMP_DROP_CONFIRM times triggers the detection.  The
+        detection clears when temperature stabilises or rises.
+        """
+        if current_temp is None:
+            return
+
+        now = _time.monotonic()
+        self._temp_drop_history.append((current_temp, now))
+
+        # Prune entries older than the detection window
+        cutoff = now - self.TEMP_DROP_WINDOW
+        self._temp_drop_history = [
+            (t, ts) for t, ts in self._temp_drop_history if ts >= cutoff
+        ]
+
+        if len(self._temp_drop_history) < 2:
+            return
+
+        oldest_temp = self._temp_drop_history[0][0]
+        drop = oldest_temp - current_temp
+
+        if drop >= self.TEMP_DROP_THRESHOLD:
+            self._temp_drop_count += 1
+            if self._temp_drop_count >= self.TEMP_DROP_CONFIRM:
+                if not self._temp_drop_detected:
+                    self._debug(
+                        "Window: Temp drop DETECTED (%.1f°C in %.0fs, count=%d)",
+                        drop,
+                        now - self._temp_drop_history[0][1],
+                        self._temp_drop_count,
+                    )
+                self._temp_drop_detected = True
+        else:
+            # Temperature stabilised or rising — clear detection
+            if self._temp_drop_detected:
+                self._debug(
+                    "Window: Temp drop CLEARED (temp stabilised at %.1f°C)",
+                    current_temp,
+                )
+            self._temp_drop_detected = False
+            self._temp_drop_count = 0
 
     def _get_sensor_value(self, entity_id: str | None) -> float | None:
         """Get numeric value from sensor."""

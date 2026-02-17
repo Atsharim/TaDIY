@@ -19,7 +19,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ICON_TEMPERATURE, ICON_LEARNING
+from .const import DOMAIN, ICON_TEMPERATURE, ICON_LEARNING, ICON_COMFORT, ICON_ENERGY
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -222,6 +222,12 @@ async def async_setup_entry(
 
         # Add override diagnostic sensor
         entities.append(TaDIYOverrideDetailSensor(coordinator, entry))
+
+        # Add room comfort sensor
+        entities.append(TaDIYRoomComfortSensor(coordinator, entry))
+
+        # Add heating time sensor
+        entities.append(TaDIYHeatingTimeSensor(coordinator, entry))
 
         _LOGGER.info("Added %d room sensor entities", len(entities))
 
@@ -599,4 +605,215 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+# --- Comfort zone definitions ---
+COMFORT_TEMP_MIN = 20.0
+COMFORT_TEMP_MAX = 22.0
+COMFORT_TEMP_COLD = 18.0
+COMFORT_TEMP_WARM = 23.0
+COMFORT_HUMIDITY_MIN = 40.0
+COMFORT_HUMIDITY_MAX = 60.0
+COMFORT_HUMIDITY_DRY = 30.0
+COMFORT_HUMIDITY_WET = 70.0
+
+
+def _calculate_comfort(
+    temperature: float | None, humidity: float | None
+) -> dict[str, Any]:
+    """Calculate room comfort level, score, and color."""
+    if temperature is None:
+        return {
+            "comfort_level": "unknown",
+            "comfort_score": 0,
+            "comfort_color": "#9E9E9E",
+            "temperature": None,
+            "humidity": None,
+            "comfort_position": {"x": 50, "y": 50},
+        }
+
+    # Temperature score (0-100): optimal at 20-22, drops off outside
+    if COMFORT_TEMP_MIN <= temperature <= COMFORT_TEMP_MAX:
+        temp_score = 100.0
+    elif temperature < COMFORT_TEMP_COLD:
+        temp_score = max(0.0, 100.0 - (COMFORT_TEMP_COLD - temperature) * 20.0)
+    elif temperature < COMFORT_TEMP_MIN:
+        temp_score = 100.0 - (COMFORT_TEMP_MIN - temperature) * 25.0
+    elif temperature <= COMFORT_TEMP_WARM:
+        temp_score = 100.0 - (temperature - COMFORT_TEMP_MAX) * 25.0
+    else:
+        temp_score = max(0.0, 100.0 - (temperature - COMFORT_TEMP_WARM) * 20.0)
+
+    # Humidity score (0-100): optimal at 40-60%, drops off outside
+    if humidity is not None:
+        if COMFORT_HUMIDITY_MIN <= humidity <= COMFORT_HUMIDITY_MAX:
+            hum_score = 100.0
+        elif humidity < COMFORT_HUMIDITY_DRY:
+            hum_score = max(0.0, 100.0 - (COMFORT_HUMIDITY_DRY - humidity) * 5.0)
+        elif humidity < COMFORT_HUMIDITY_MIN:
+            hum_score = 100.0 - (COMFORT_HUMIDITY_MIN - humidity) * 5.0
+        elif humidity <= COMFORT_HUMIDITY_WET:
+            hum_score = 100.0 - (humidity - COMFORT_HUMIDITY_MAX) * 5.0
+        else:
+            hum_score = max(0.0, 100.0 - (humidity - COMFORT_HUMIDITY_WET) * 5.0)
+
+        # Combined score: 60% temperature, 40% humidity
+        score = round(temp_score * 0.6 + hum_score * 0.4)
+    else:
+        hum_score = None
+        score = round(temp_score)
+
+    # Determine primary comfort level
+    if score >= 80:
+        level = "optimal"
+        color = "#4CAF50"  # green
+    elif temperature > COMFORT_TEMP_WARM:
+        level = "too_warm"
+        color = "#FF9800"  # orange
+    elif temperature < COMFORT_TEMP_COLD:
+        level = "too_cold"
+        color = "#2196F3"  # blue
+    elif humidity is not None and humidity < COMFORT_HUMIDITY_DRY:
+        level = "too_dry"
+        color = "#FFC107"  # amber
+    elif humidity is not None and humidity > COMFORT_HUMIDITY_WET:
+        level = "too_humid"
+        color = "#9C27B0"  # purple
+    else:
+        level = "moderate"
+        color = "#8BC34A"  # light green
+
+    # Position on a circle indicator (x: humidity axis, y: temperature axis)
+    pos_x = 50
+    if humidity is not None:
+        pos_x = max(0, min(100, int((humidity - 20) / 60 * 100)))
+    pos_y = max(0, min(100, int((30 - temperature) / 20 * 100)))
+
+    return {
+        "comfort_level": level,
+        "comfort_score": max(0, min(100, score)),
+        "comfort_color": color,
+        "temperature": round(temperature, 1),
+        "humidity": round(humidity, 1) if humidity is not None else None,
+        "comfort_position": {"x": pos_x, "y": pos_y},
+        "temp_score": round(temp_score, 1),
+        "humidity_score": round(hum_score, 1) if hum_score is not None else None,
+    }
+
+
+class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):
+    """Sensor that combines temperature and humidity into a comfort score."""
+
+    _attr_has_entity_name = True
+    _attr_icon = ICON_COMFORT
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_room_comfort"
+        self._attr_name = "Room Comfort"
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
+
+    @property
+    def native_value(self) -> int | None:
+        """Return comfort score 0-100."""
+        data = self.coordinator.data
+        if data is None:
+            return None
+        return _calculate_comfort(
+            data.current_temperature,
+            data.humidity,
+        )["comfort_score"]
+
+    @property
+    def native_unit_of_measurement(self) -> str:
+        """Return the unit."""
+        return "%"
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not self.coordinator.last_update_success:
+            return False
+        return self.coordinator.data is not None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return comfort details as attributes."""
+        data = self.coordinator.data
+        if data is None:
+            return {}
+        return _calculate_comfort(
+            data.current_temperature,
+            data.humidity,
+        )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self.async_write_ha_state()
+
+
+class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
+    """Tracks cumulative heating time for the room today."""
+
+    _attr_has_entity_name = True
+    _attr_icon = ICON_ENERGY
+    _attr_native_unit_of_measurement = "h"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_heating_time_today"
+        self._attr_name = "Heating Time Today"
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
+        self._today_seconds: float = 0.0
+        self._last_heating_check: float | None = None
+        self._last_date: str | None = None
+
+    @property
+    def native_value(self) -> float:
+        """Return heating hours today."""
+        return round(self._today_seconds / 3600.0, 2)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return heating time details."""
+        data = self.coordinator.data
+        return {
+            "heating_active": data.heating_active if data else False,
+            "seconds_today": round(self._today_seconds),
+        }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Accumulate heating time and update HA state."""
+        from homeassistant.util import dt as dt_util
+
+        now = dt_util.now()
+        today_str = now.strftime("%Y-%m-%d")
+
+        # Reset counter at midnight
+        if self._last_date is not None and self._last_date != today_str:
+            self._today_seconds = 0.0
+            self._last_heating_check = None
+
+        self._last_date = today_str
+
+        # Accumulate heating time
+        data = self.coordinator.data
+        if data is not None and data.heating_active:
+            now_ts = now.timestamp()
+            if self._last_heating_check is not None:
+                elapsed = now_ts - self._last_heating_check
+                # Only accumulate reasonable intervals (max 5 minutes)
+                if 0 < elapsed <= 300:
+                    self._today_seconds += elapsed
+            self._last_heating_check = now_ts
+        else:
+            self._last_heating_check = None
+
         self.async_write_ha_state()

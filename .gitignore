@@ -125,5 +125,11 @@ ralph.log
 .ralph/live.log
 .ralph/logs/
 
+# Roo Code / Cline AI Assistant (internal state only)
+.roo/
+.cline/
+roo-cline/
+.roo-cline/
+
 #Gitignore
 .gitignore

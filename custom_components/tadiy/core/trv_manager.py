@@ -18,6 +18,8 @@ from typing import Any
 from homeassistant.core import Context
 from homeassistant.util import dt as dt_util
 
+from .trv_profiles import TRVProfile, detect_trv_profile, get_profile
+
 _LOGGER = logging.getLogger(__package__)
 
 # Minimum interval between command batches to the same TRV.
@@ -54,6 +56,9 @@ class TrvManager:
         self._last_applied_target: float | None = None
         self._last_applied_should_heat: bool | None = None
 
+        # Cached TRV profiles (detected once, reused)
+        self._trv_profiles: dict[str, TRVProfile] = {}
+
     def _debug(self, message: str, *args: Any) -> None:
         """Log TRV debug message using coordinator's logger."""
         if hasattr(self.coordinator, "debug"):
@@ -64,6 +69,20 @@ class TrvManager:
         if context is None or self._last_command_context is None:
             return False
         return context.id == self._last_command_context.id
+
+    def get_trv_profile(self, trv_id: str) -> TRVProfile:
+        """Get (or auto-detect) the TRV profile for an entity."""
+        if trv_id not in self._trv_profiles:
+            state = self.hass.states.get(trv_id)
+            profile_name = detect_trv_profile(trv_id, state)
+            self._trv_profiles[trv_id] = get_profile(profile_name)
+            self._debug(
+                "%s: Detected TRV profile '%s' (%s)",
+                trv_id,
+                profile_name,
+                self._trv_profiles[trv_id].manufacturer,
+            )
+        return self._trv_profiles[trv_id]
 
     def get_last_commanded(self, trv_id: str) -> dict[str, Any] | None:
         """Get last commanded state for a TRV."""
@@ -164,12 +183,12 @@ class TrvManager:
                     self._debug("%s: SKIPPED - state unavailable", trv_id)
                     continue
 
+                profile = self.get_trv_profile(trv_id)
                 current_hvac = state.state
                 current_temp = state.attributes.get("temperature")
 
-                # Determine desired HVAC mode
+                # Determine desired HVAC mode using profile-aware logic
                 if config.use_hvac_off_for_low_temp:
-                    # Moes Logic: Use HVAC OFF for low temps
                     if target <= frost_temp:
                         desired_hvac = "off"
                     elif should_heat is not None:
@@ -177,8 +196,22 @@ class TrvManager:
                     else:
                         desired_hvac = "heat"
                 else:
-                    # Standard TRVs: Set mode based on heating decision
                     desired_hvac = "heat" if should_heat else "off"
+
+                # Fallback: if TRV doesn't support the desired HVAC mode,
+                # use temperature-based control instead
+                supported_modes = state.attributes.get("hvac_modes", profile.hvac_modes)
+                if desired_hvac not in supported_modes:
+                    self._debug(
+                        "%s: HVAC '%s' not supported (available: %s), using temp fallback",
+                        trv_id,
+                        desired_hvac,
+                        supported_modes,
+                    )
+                    if desired_hvac == "off":
+                        # Can't turn off via HVAC mode — set to minimum temp
+                        desired_hvac = "heat"
+                        target = profile.min_temp
 
                 # Get room temp from coordinator
                 room_temp = self.coordinator.get_current_temperature()

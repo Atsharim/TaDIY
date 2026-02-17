@@ -95,10 +95,6 @@ from .core.window import WindowState
 
 _LOGGER = logging.getLogger(__name__)
 
-# Sensor fusion weights
-MAIN_SENSOR_WEIGHT: float = 10.0
-TRV_SENSOR_WEIGHT: float = 0.1
-
 
 class TaDIYHubCoordinator(DataUpdateCoordinator):
     """Coordinator for TaDIY Hub (global configuration)."""
@@ -1566,8 +1562,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         fused_temp = self.sensor_manager.get_fused_temperature()
         outdoor_temp = self.sensor_manager.get_outdoor_temperature()
         self._cached_outdoor_temp = outdoor_temp
-        window_open = self.sensor_manager.is_window_open()
         humidity = self.sensor_manager.get_humidity()
+
+        # Update temperature-based window detection before checking window state
+        self.sensor_manager.update_temp_drop_detection(fused_temp)
+        window_open = self.sensor_manager.is_window_open()
 
         # 2. Get Hub and TRV states
         hub_mode = self.get_hub_mode()
