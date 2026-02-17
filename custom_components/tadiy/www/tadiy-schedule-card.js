@@ -12,6 +12,8 @@ class TaDiyScheduleCard extends HTMLElement {
     this._editingBlocks = [];
     this._selectedMode = 'normal';
     this._selectedScheduleType = 'weekday';
+    this._isEditing = false;
+    this._availableModes = [];
   }
 
   setConfig(config) {
@@ -21,11 +23,35 @@ class TaDiyScheduleCard extends HTMLElement {
     this._config = config;
     this._selectedMode = config.default_mode || 'normal';
     this._selectedScheduleType = config.default_schedule_type || 'weekday';
+    this.loadAvailableModes();
     this.loadSchedule();
   }
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._availableModes.length) {
+      this.loadAvailableModes();
+    }
+    this.render();
+  }
+
+  async loadAvailableModes() {
+    if (!this._hass) return;
+
+    // Get hub entity to find custom modes
+    const hubEntity = Object.values(this._hass.states).find(
+      entity => entity.entity_id.includes('select') &&
+                entity.entity_id.includes('hub_mode') &&
+                entity.attributes.integration === 'tadiy'
+    );
+
+    if (hubEntity && hubEntity.attributes.options) {
+      this._availableModes = hubEntity.attributes.options;
+    } else {
+      // Fallback to default modes
+      this._availableModes = ['normal', 'homeoffice', 'manual', 'off'];
+    }
+
     this.render();
   }
 
@@ -33,7 +59,7 @@ class TaDiyScheduleCard extends HTMLElement {
     if (!this._hass || !this._config) return;
 
     try {
-      // Load schedule via service call
+      // FIXED: Correct service call format for Home Assistant
       const result = await this._hass.callService(
         'tadiy',
         'get_schedule',
@@ -42,13 +68,12 @@ class TaDiyScheduleCard extends HTMLElement {
           mode: this._selectedMode,
           schedule_type: this._selectedScheduleType,
         },
-        true  // return_response
+        { return_response: true }  // FIXED: Correct format
       );
 
       if (result && result.response && result.response.blocks) {
         this._editingBlocks = result.response.blocks;
       } else {
-        // Default schedule
         this._editingBlocks = this.getDefaultSchedule();
       }
     } catch (error) {
@@ -75,7 +100,6 @@ class TaDiyScheduleCard extends HTMLElement {
         { start_time: '23:00', end_time: '23:59', temperature: 18.0 },
       ];
     } else {
-      // daily
       return [
         { start_time: '00:00', end_time: '06:00', temperature: 18.0 },
         { start_time: '06:00', end_time: '22:00', temperature: 21.0 },
@@ -86,13 +110,13 @@ class TaDiyScheduleCard extends HTMLElement {
 
   getTemperatureColor(temperature) {
     if (typeof temperature === 'string') {
-      return '#6c757d'; // Gray for OFF
+      return '#6c757d';
     }
-    if (temperature <= 15) return '#0d6efd'; // Blue
-    if (temperature <= 18) return '#0dcaf0'; // Cyan
-    if (temperature <= 20) return '#20c997'; // Teal
-    if (temperature <= 22) return '#fd7e14'; // Orange
-    return '#dc3545'; // Red
+    if (temperature <= 15) return '#0d6efd';
+    if (temperature <= 18) return '#0dcaf0';
+    if (temperature <= 20) return '#20c997';
+    if (temperature <= 22) return '#fd7e14';
+    return '#dc3545';
   }
 
   formatTemperature(temperature) {
@@ -103,6 +127,12 @@ class TaDiyScheduleCard extends HTMLElement {
       return 'FROST';
     }
     return `${temperature.toFixed(1)}°C`;
+  }
+
+  // FIXED: Ensure minutes are always two digits
+  formatTime(time) {
+    const [hours, minutes] = time.split(':');
+    return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
   }
 
   generateTimeline() {
@@ -116,7 +146,6 @@ class TaDiyScheduleCard extends HTMLElement {
       const startTotal = startH * 60 + startM;
       let endTotal = endH * 60 + endM;
 
-      // Handle 23:59 as end of day
       if (endH === 23 && endM === 59) {
         endTotal = 24 * 60;
       }
@@ -133,7 +162,7 @@ class TaDiyScheduleCard extends HTMLElement {
         <div class="timeline-block" style="flex: 0 0 ${percentage.toFixed(2)}%; background: ${color};">
           <div class="timeline-content">
             <div class="timeline-temp">${tempDisplay}</div>
-            <div class="timeline-time">${block.start_time}-${block.end_time}</div>
+            <div class="timeline-time">${this.formatTime(block.start_time)}-${this.formatTime(block.end_time)}</div>
           </div>
         </div>
       `;
@@ -163,6 +192,9 @@ class TaDiyScheduleCard extends HTMLElement {
     }
 
     const roomName = entity.attributes.friendly_name || 'Room';
+
+    // Generate mode buttons dynamically
+    const modeButtons = this.generateModeButtons();
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -229,6 +261,9 @@ class TaDiyScheduleCard extends HTMLElement {
         }
         .blocks-container {
           margin-top: 16px;
+          max-height: ${this._isEditing ? '1000px' : '0'};
+          overflow: hidden;
+          transition: max-height 0.3s ease-in-out;
         }
         .block-editor {
           display: grid;
@@ -304,6 +339,10 @@ class TaDiyScheduleCard extends HTMLElement {
           background: #28a745;
           color: white;
         }
+        .btn-warning {
+          background: #ffc107;
+          color: black;
+        }
         .btn:hover {
           opacity: 0.9;
         }
@@ -320,43 +359,76 @@ class TaDiyScheduleCard extends HTMLElement {
         </div>
 
         <div class="mode-selector">
-          <button class="mode-btn ${this._selectedMode === 'normal' && this._selectedScheduleType === 'weekday' ? 'active' : ''}"
-                  @click="${() => this.selectSchedule('normal', 'weekday')}">
-            Normal - Weekday
-          </button>
-          <button class="mode-btn ${this._selectedMode === 'normal' && this._selectedScheduleType === 'weekend' ? 'active' : ''}"
-                  @click="${() => this.selectSchedule('normal', 'weekend')}">
-            Normal - Weekend
-          </button>
-          <button class="mode-btn ${this._selectedMode === 'homeoffice' ? 'active' : ''}"
-                  @click="${() => this.selectSchedule('homeoffice', 'daily')}">
-            Homeoffice
-          </button>
+          ${modeButtons}
         </div>
 
         ${this.generateTimeline()}
 
-        <div class="blocks-container">
-          ${this._editingBlocks.map((block, index) => this.renderBlockEditor(block, index)).join('')}
-        </div>
+        ${this._isEditing ? `
+          <div class="blocks-container">
+            ${this._editingBlocks.map((block, index) => this.renderBlockEditor(block, index)).join('')}
+          </div>
 
-        <div class="actions">
-          <button class="btn btn-success" @click="${() => this.addBlock()}">
-            ➕ Add Block
-          </button>
-          <button class="btn btn-primary" @click="${() => this.saveSchedule()}">
-            💾 Save
-          </button>
-          <button class="btn btn-secondary" @click="${() => this.loadSchedule()}">
-            🔄 Reset
-          </button>
-        </div>
+          <div class="actions">
+            <button class="btn btn-success" data-action="add">
+              ➕ Add Block
+            </button>
+            <button class="btn btn-primary" data-action="save">
+              💾 Save
+            </button>
+            <button class="btn btn-secondary" data-action="reset">
+              🔄 Reset
+            </button>
+            <button class="btn btn-warning" data-action="back">
+              ◀ Back
+            </button>
+          </div>
 
-        <div id="validation-error" class="validation-error"></div>
+          <div id="validation-error" class="validation-error"></div>
+        ` : `
+          <div class="actions">
+            <button class="btn btn-primary" data-action="edit">
+              ✏️ Edit Schedule
+            </button>
+          </div>
+        `}
       </ha-card>
     `;
 
     this.attachEventListeners();
+  }
+
+  generateModeButtons() {
+    let html = '';
+
+    // Normal mode has weekday/weekend split
+    const isNormalWeekday = this._selectedMode === 'normal' && this._selectedScheduleType === 'weekday';
+    const isNormalWeekend = this._selectedMode === 'normal' && this._selectedScheduleType === 'weekend';
+
+    html += `
+      <button class="mode-btn ${isNormalWeekday ? 'active' : ''}" data-mode="normal" data-type="weekday">
+        Normal - Weekday
+      </button>
+      <button class="mode-btn ${isNormalWeekend ? 'active' : ''}" data-mode="normal" data-type="weekend">
+        Normal - Weekend
+      </button>
+    `;
+
+    // Add other modes (excluding normal, manual, off)
+    for (const mode of this._availableModes) {
+      if (mode === 'normal' || mode === 'manual' || mode === 'off') continue;
+
+      const isActive = this._selectedMode === mode;
+      const displayName = mode.charAt(0).toUpperCase() + mode.slice(1);
+
+      html += `
+        <button class="mode-btn ${isActive ? 'active' : ''}" data-mode="${mode}" data-type="daily">
+          ${displayName}
+        </button>
+      `;
+    }
+
+    return html;
   }
 
   renderBlockEditor(block, index) {
@@ -368,7 +440,7 @@ class TaDiyScheduleCard extends HTMLElement {
           <span class="input-label">Start</span>
           <input type="time"
                  class="start-time"
-                 value="${block.start_time}"
+                 value="${this.formatTime(block.start_time)}"
                  data-index="${index}">
         </div>
 
@@ -376,7 +448,7 @@ class TaDiyScheduleCard extends HTMLElement {
           <span class="input-label">End</span>
           <input type="time"
                  class="end-time"
-                 value="${block.end_time}"
+                 value="${this.formatTime(block.end_time)}"
                  data-index="${index}">
         </div>
 
@@ -398,11 +470,38 @@ class TaDiyScheduleCard extends HTMLElement {
 
   attachEventListeners() {
     // Mode buttons
-    this.shadowRoot.querySelectorAll('.mode-btn').forEach((btn, index) => {
+    this.shadowRoot.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        if (index === 0) this.selectSchedule('normal', 'weekday');
-        else if (index === 1) this.selectSchedule('normal', 'weekend');
-        else if (index === 2) this.selectSchedule('homeoffice', 'daily');
+        const mode = btn.dataset.mode;
+        const type = btn.dataset.type;
+        this.selectSchedule(mode, type);
+      });
+    });
+
+    // Action buttons
+    this.shadowRoot.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+
+        switch (action) {
+          case 'edit':
+            this._isEditing = true;
+            this.render();
+            break;
+          case 'back':
+            this._isEditing = false;
+            this.render();
+            break;
+          case 'add':
+            this.addBlock();
+            break;
+          case 'save':
+            this.saveSchedule();
+            break;
+          case 'reset':
+            this.loadSchedule();
+            break;
+        }
       });
     });
 
@@ -425,51 +524,30 @@ class TaDiyScheduleCard extends HTMLElement {
 
     // Delete buttons
     this.shadowRoot.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const index = parseInt(e.target.dataset.index);
+      btn.addEventListener('click', () => {
+        const index = parseInt(btn.dataset.index);
         this.deleteBlock(index);
       });
     });
-
-    // Action buttons
-    const actions = this.shadowRoot.querySelectorAll('.actions .btn');
-    actions[0]?.addEventListener('click', () => this.addBlock());
-    actions[1]?.addEventListener('click', () => this.saveSchedule());
-    actions[2]?.addEventListener('click', () => this.loadSchedule());
   }
 
   selectSchedule(mode, scheduleType) {
     this._selectedMode = mode;
     this._selectedScheduleType = scheduleType;
+    this._isEditing = false;
     this.loadSchedule();
   }
 
   addBlock() {
-    // Add a new block at the end
     const lastBlock = this._editingBlocks[this._editingBlocks.length - 1];
-    if (lastBlock && lastBlock.end_time === '23:59') {
-      // Split the last block in half
-      const [startH, startM] = lastBlock.start_time.split(':').map(Number);
-      const startMinutes = startH * 60 + startM;
-      const midMinutes = Math.floor((startMinutes + 24 * 60) / 2);
-      const midH = Math.floor(midMinutes / 60) % 24;
-      const midM = midMinutes % 60;
-      const midTime = `${String(midH).padStart(2, '0')}:${String(midM).padStart(2, '0')}`;
+    const newStart = lastBlock ? lastBlock.end_time : '12:00';
 
-      lastBlock.end_time = midTime;
-      this._editingBlocks.push({
-        start_time: midTime,
-        end_time: '23:59',
-        temperature: lastBlock.temperature,
-      });
-    } else {
-      // Default: add a 1-hour block
-      this._editingBlocks.push({
-        start_time: '22:00',
-        end_time: '23:59',
-        temperature: 18.0,
-      });
-    }
+    this._editingBlocks.push({
+      start_time: newStart,
+      end_time: '23:59',
+      temperature: 21.0
+    });
+
     this.render();
   }
 
@@ -478,99 +556,80 @@ class TaDiyScheduleCard extends HTMLElement {
       this.showError('Cannot delete the last block');
       return;
     }
+
     this._editingBlocks.splice(index, 1);
     this.render();
   }
 
   validateBlocks() {
+    if (this._editingBlocks.length === 0) {
+      return { valid: false, error: 'At least one block is required' };
+    }
+
     // Sort blocks by start time
-    this._editingBlocks.sort((a, b) => a.start_time.localeCompare(b.start_time));
+    const sorted = [...this._editingBlocks].sort((a, b) => {
+      const [aH, aM] = a.start_time.split(':').map(Number);
+      const [bH, bM] = b.start_time.split(':').map(Number);
+      return (aH * 60 + aM) - (bH * 60 + bM);
+    });
 
-    // Check first block starts at 00:00
-    if (this._editingBlocks[0].start_time !== '00:00') {
-      return 'First block must start at 00:00';
-    }
+    // Check for overlaps
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const [endH, endM] = sorted[i].end_time.split(':').map(Number);
+      const [nextStartH, nextStartM] = sorted[i + 1].start_time.split(':').map(Number);
 
-    // Check last block ends at 23:59
-    const lastBlock = this._editingBlocks[this._editingBlocks.length - 1];
-    if (lastBlock.end_time !== '23:59') {
-      return 'Last block must end at 23:59';
-    }
+      const endMinutes = endH * 60 + endM;
+      const nextStartMinutes = nextStartH * 60 + nextStartM;
 
-    // Check for gaps and overlaps
-    for (let i = 0; i < this._editingBlocks.length - 1; i++) {
-      const current = this._editingBlocks[i];
-      const next = this._editingBlocks[i + 1];
-
-      if (current.end_time !== next.start_time) {
-        if (current.end_time < next.start_time) {
-          return `Gap between ${current.end_time} and ${next.start_time}`;
-        } else {
-          return `Overlap between blocks ${i + 1} and ${i + 2}`;
-        }
-      }
-
-      // Check block time range
-      if (current.start_time >= current.end_time) {
-        return `Block ${i + 1} has invalid time range`;
+      if (endMinutes > nextStartMinutes) {
+        return { valid: false, error: `Block ${i + 1} overlaps with block ${i + 2}` };
       }
     }
 
-    return null;
-  }
-
-  showError(message) {
-    const errorDiv = this.shadowRoot.getElementById('validation-error');
-    if (errorDiv) {
-      errorDiv.textContent = message;
-      setTimeout(() => {
-        errorDiv.textContent = '';
-      }, 5000);
-    }
+    return { valid: true };
   }
 
   async saveSchedule() {
-    // Validate
-    const error = this.validateBlocks();
-    if (error) {
-      this.showError(error);
+    const validation = this.validateBlocks();
+    if (!validation.valid) {
+      this.showError(validation.error);
       return;
     }
 
     try {
-      // Save via service call
-      await this._hass.callService('tadiy', 'set_schedule', {
-        entity_id: this._config.entity,
-        mode: this._selectedMode,
-        schedule_type: this._selectedScheduleType,
-        blocks: this._editingBlocks,
-      });
+      await this._hass.callService(
+        'tadiy',
+        'set_schedule',
+        {
+          entity_id: this._config.entity,
+          mode: this._selectedMode,
+          schedule_type: this._selectedScheduleType,
+          blocks: this._editingBlocks,
+        }
+      );
 
       this.showError('✓ Schedule saved successfully');
+      this._isEditing = false;
+      this.render();
     } catch (error) {
       console.error('Failed to save schedule:', error);
       this.showError('Failed to save schedule: ' + (error.message || error));
     }
   }
 
+  showError(message) {
+    const errorEl = this.shadowRoot.getElementById('validation-error');
+    if (errorEl) {
+      errorEl.textContent = message;
+      setTimeout(() => {
+        errorEl.textContent = '';
+      }, 5000);
+    }
+  }
+
   getCardSize() {
-    return 6;
+    return this._isEditing ? 10 : 4;
   }
 }
 
 customElements.define('tadiy-schedule-card', TaDiyScheduleCard);
-
-// Add card to custom cards list
-window.customCards = window.customCards || [];
-window.customCards.push({
-  type: 'tadiy-schedule-card',
-  name: 'TaDIY Schedule Card',
-  description: 'Interactive schedule editor for TaDIY heating controller',
-  preview: true,
-});
-
-console.info(
-  '%c TaDIY Schedule Card %c v1.0.0 ',
-  'background-color: #28a745; color: white; font-weight: bold;',
-  'background-color: #333; color: white;'
-);
