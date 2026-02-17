@@ -33,13 +33,12 @@ async def async_setup_entry(
         coordinator = entry_data["coordinator"]
         room_name = coordinator.room_config.name
         trv_entities = coordinator.room_config.trv_entity_ids
-        
-        entities = []
-        for trv_entity_id in trv_entities:
-            entities.append(TaDIYClimateEntity(coordinator, room_name, trv_entity_id, entry))
-        
+
+        # Create ONE unified climate entity per room that controls all TRVs
+        entities = [TaDIYClimateEntity(coordinator, room_name, trv_entities, entry)]
+
         async_add_entities(entities)
-        _LOGGER.info("Added %d climate entities for room: %s", len(entities), room_name)
+        _LOGGER.info("Added unified climate entity for room: %s (controlling %d TRVs)", room_name, len(trv_entities))
 
 
 class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
@@ -55,13 +54,13 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     _attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
     _enable_turn_on_off_backwards_compatibility = False
 
-    def __init__(self, coordinator, room_name: str, trv_entity_id: str, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator, room_name: str, trv_entity_ids: list[str], entry: ConfigEntry) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
         self._room_name = room_name
-        self._trv_entity_id = trv_entity_id
-        self._attr_unique_id = "{}_climate_{}".format(entry.entry_id, trv_entity_id.split('.')[-1])
-        self._attr_name = "{} - {}".format(room_name, trv_entity_id.split('.')[-1])
+        self._trv_entity_ids = trv_entity_ids
+        self._attr_unique_id = f"{entry.entry_id}_climate"
+        self._attr_name = room_name
         self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     @property
@@ -101,34 +100,40 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         return 0.5
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
-        """Set new target temperature."""
+        """Set new target temperature for all TRVs in this room."""
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
 
-        try:
-            await self.hass.services.async_call(
-                "climate",
-                "set_temperature",
-                {"entity_id": self._trv_entity_id, "temperature": temperature},
-                blocking=True,
-            )
-            await self.coordinator.async_request_refresh()
-        except Exception as err:
-            _LOGGER.error("Failed to set temperature for %s: %s", self._trv_entity_id, err)
+        # Set temperature for all TRVs in the room
+        for trv_entity_id in self._trv_entity_ids:
+            try:
+                await self.hass.services.async_call(
+                    "climate",
+                    "set_temperature",
+                    {"entity_id": trv_entity_id, "temperature": temperature},
+                    blocking=True,
+                )
+            except Exception as err:
+                _LOGGER.error("Failed to set temperature for %s: %s", trv_entity_id, err)
+
+        await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
-        """Set new target hvac mode."""
-        try:
-            await self.hass.services.async_call(
-                "climate",
-                "set_hvac_mode",
-                {"entity_id": self._trv_entity_id, "hvac_mode": hvac_mode},
-                blocking=True,
-            )
-            await self.coordinator.async_request_refresh()
-        except Exception as err:
-            _LOGGER.error("Failed to set HVAC mode for %s: %s", self._trv_entity_id, err)
+        """Set new target hvac mode for all TRVs in this room."""
+        # Set HVAC mode for all TRVs in the room
+        for trv_entity_id in self._trv_entity_ids:
+            try:
+                await self.hass.services.async_call(
+                    "climate",
+                    "set_hvac_mode",
+                    {"entity_id": trv_entity_id, "hvac_mode": hvac_mode},
+                    blocking=True,
+                )
+            except Exception as err:
+                _LOGGER.error("Failed to set HVAC mode for %s: %s", trv_entity_id, err)
+
+        await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:
