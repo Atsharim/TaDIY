@@ -169,11 +169,36 @@ class RoomSchedule:
     normal_weekday: DaySchedule | None = None
     normal_weekend: DaySchedule | None = None
     homeoffice_daily: DaySchedule | None = None
+    custom_schedules: dict[str, DaySchedule] = field(default_factory=dict)
+    use_normal_for_modes: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         """Validate room schedule."""
         if not self.room_name:
             raise ValueError("Room name cannot be empty")
+
+    def set_custom_schedule(self, mode: str, schedule: DaySchedule) -> None:
+        """Set schedule for a custom mode."""
+        self.custom_schedules[mode] = schedule
+
+    def get_custom_schedule(self, mode: str) -> DaySchedule | None:
+        """Get schedule for a custom mode."""
+        return self.custom_schedules.get(mode)
+
+    def remove_custom_schedule(self, mode: str) -> None:
+        """Remove schedule for a custom mode."""
+        self.custom_schedules.pop(mode, None)
+
+    def set_use_normal(self, mode: str, use_normal: bool) -> None:
+        """Set whether a mode should use normal schedule."""
+        if use_normal:
+            self.use_normal_for_modes.add(mode)
+        else:
+            self.use_normal_for_modes.discard(mode)
+
+    def should_use_normal(self, mode: str) -> bool:
+        """Check if mode should use normal schedule."""
+        return mode in self.use_normal_for_modes
 
     def get_schedule_for_mode(
         self, mode: str, dt: datetime | None = None
@@ -181,6 +206,10 @@ class RoomSchedule:
         """Get appropriate schedule for given mode and datetime."""
         if dt is None:
             dt = dt_util.now()
+
+        # Check if mode should use normal schedule
+        if self.should_use_normal(mode):
+            mode = "normal"
 
         if mode == "normal":
             # Weekday: Monday (0) to Friday (4)
@@ -190,7 +219,9 @@ class RoomSchedule:
                 return self.normal_weekend
         elif mode == "homeoffice":
             return self.homeoffice_daily
-        return None
+        else:
+            # Custom mode
+            return self.get_custom_schedule(mode)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -203,11 +234,31 @@ class RoomSchedule:
         if self.homeoffice_daily:
             result["homeoffice_daily"] = self.homeoffice_daily.to_dict()
 
+        # Save custom schedules
+        if self.custom_schedules:
+            result["custom_schedules"] = {
+                mode: schedule.to_dict()
+                for mode, schedule in self.custom_schedules.items()
+            }
+
+        # Save use_normal flags
+        if self.use_normal_for_modes:
+            result["use_normal_for_modes"] = list(self.use_normal_for_modes)
+
         return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RoomSchedule:
         """Create from dictionary."""
+        # Load custom schedules
+        custom_schedules = {}
+        if "custom_schedules" in data:
+            for mode, schedule_data in data["custom_schedules"].items():
+                custom_schedules[mode] = DaySchedule.from_dict(schedule_data)
+
+        # Load use_normal flags
+        use_normal_for_modes = set(data.get("use_normal_for_modes", []))
+
         return cls(
             room_name=data["room_name"],
             normal_weekday=(
@@ -225,4 +276,6 @@ class RoomSchedule:
                 if "homeoffice_daily" in data
                 else None
             ),
+            custom_schedules=custom_schedules,
+            use_normal_for_modes=use_normal_for_modes,
         )
