@@ -138,8 +138,10 @@ class TrvManager:
                         context=self._last_command_context,
                     )
                 
-                # Apply temperature if in heat mode and temp differs
-                if desired_hvac == "heat":
+                # Apply temperature (Always apply target, even in OFF mode for safety)
+                # Why? Some TRVs don't fully close in OFF mode, or user might have a dumb TRV
+                # where we simulate OFF by setting low temp. Also ensures display matches reality.
+                if True:
                     # Get calibrated target with offset compensation
                     calibrated = target
                     
@@ -182,7 +184,7 @@ class TrvManager:
                 # Track what we commanded (using the FINAL CALIBRATED value)
                 self._last_commanded[trv_id] = {
                     "hvac_mode": desired_hvac,
-                    "temperature": calibrated if desired_hvac == "heat" else None,
+                    "temperature": calibrated,
                     "timestamp": self._last_command_time,
                 }
                         
