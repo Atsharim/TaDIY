@@ -77,13 +77,21 @@
         "title": "All Modes",
         "description": "{modes_info}"
       },
+      "panel_settings": {
+        "title": "Panel Settings",
+        "description": "{info}",
+        "data": {
+          "show_panel": "Show Schedules Panel in Sidebar"
+        }
+      },
       "init_hub": {
         "title": "Manage TaDIY Hub Modes",
         "description": "Manage custom operating modes for your heating system. You have {room_count} room(s) configured.",
         "menu_options": {
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
-          "view_modes": "View All Modes"
+          "view_modes": "View All Modes",
+          "panel_settings": "Panel Settings"
         }
       },
       "init_room": {
