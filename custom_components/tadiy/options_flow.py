@@ -359,56 +359,90 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
 
         current_data = self.config_entry.data
 
-        # Show ONLY basic config fields
+        # Build schema dynamically to avoid default=None for EntitySelectors
+        schema_dict = {
+            vol.Required(
+                CONF_ROOM_NAME,
+                default=current_data.get(CONF_ROOM_NAME, ""),
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(
+                    type=selector.TextSelectorType.TEXT,
+                    autocomplete=None,
+                )
+            ),
+            vol.Required(
+                CONF_TRV_ENTITIES,
+                default=current_data.get(CONF_TRV_ENTITIES, []),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="climate",
+                    multiple=True,
+                )
+            ),
+        }
+
+        # Add optional fields with default only if value exists
+        if current_data.get(CONF_MAIN_TEMP_SENSOR):
+            schema_dict[
+                vol.Optional(
+                    CONF_MAIN_TEMP_SENSOR,
+                    default=current_data[CONF_MAIN_TEMP_SENSOR],
+                )
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            )
+        else:
+            schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            )
+
+        if current_data.get(CONF_WINDOW_SENSORS):
+            schema_dict[
+                vol.Optional(
+                    CONF_WINDOW_SENSORS,
+                    default=current_data[CONF_WINDOW_SENSORS],
+                )
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="binary_sensor",
+                    multiple=True,
+                )
+            )
+        else:
+            schema_dict[vol.Optional(CONF_WINDOW_SENSORS)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="binary_sensor",
+                    multiple=True,
+                )
+            )
+
+        if current_data.get(CONF_OUTDOOR_SENSOR):
+            schema_dict[
+                vol.Optional(
+                    CONF_OUTDOOR_SENSOR,
+                    default=current_data[CONF_OUTDOOR_SENSOR],
+                )
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            )
+        else:
+            schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
+            )
+
         return self.async_show_form(
             step_id="room_config",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONF_ROOM_NAME,
-                        default=current_data.get(CONF_ROOM_NAME, ""),
-                    ): selector.TextSelector(
-                        selector.TextSelectorConfig(
-                            type=selector.TextSelectorType.TEXT,
-                            autocomplete=None,
-                        )
-                    ),
-                    vol.Required(
-                        CONF_TRV_ENTITIES,
-                        default=current_data.get(CONF_TRV_ENTITIES, []),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="climate",
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_MAIN_TEMP_SENSOR,
-                        default=current_data.get(CONF_MAIN_TEMP_SENSOR),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="sensor",
-                            device_class="temperature",
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_WINDOW_SENSORS,
-                        default=current_data.get(CONF_WINDOW_SENSORS, []),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="binary_sensor",
-                            multiple=True,
-                        )
-                    ),
-                    vol.Optional(
-                        CONF_OUTDOOR_SENSOR,
-                        default=current_data.get(CONF_OUTDOOR_SENSOR),
-                    ): selector.EntitySelector(
-                        selector.EntitySelectorConfig(
-                            domain="sensor",
-                            device_class="temperature",
-                        )
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
         )
