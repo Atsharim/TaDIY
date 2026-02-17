@@ -47,6 +47,10 @@ CONF_DEBUG_HUB: Final = "debug_hub"
 CONF_DEBUG_PANEL: Final = "debug_panel"
 CONF_DEBUG_UI: Final = "debug_ui"
 CONF_DEBUG_CARDS: Final = "debug_cards"
+CONF_DEBUG_TRV: Final = "debug_trv"
+CONF_DEBUG_SENSORS: Final = "debug_sensors"
+CONF_DEBUG_SCHEDULE: Final = "debug_schedule"
+CONF_DEBUG_VERBOSE: Final = "debug_verbose"
 
 # Global defaults (Hub-level)
 CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: Final = "global_window_open_timeout"

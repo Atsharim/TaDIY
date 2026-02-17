@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+from typing import Callable, Any
 
 from homeassistant.util import dt as dt_util
 
@@ -20,26 +21,44 @@ _LOGGER = logging.getLogger(__name__)
 class ScheduleEngine:
     """Engine for calculating target temperatures based on schedules and mode."""
 
-    def __init__(self, frost_protection_temp: float = DEFAULT_FROST_PROTECTION_TEMP):
-        """Initialize schedule engine."""
+    def __init__(
+        self,
+        frost_protection_temp: float = DEFAULT_FROST_PROTECTION_TEMP,
+        debug_callback: Callable[[str, str, tuple], None] | None = None,
+    ):
+        """Initialize schedule engine.
+
+        Args:
+            frost_protection_temp: Default frost protection temperature
+            debug_callback: Optional callback for debug logging (category, message, args)
+        """
         self._frost_protection_temp = frost_protection_temp
         self._room_schedules: dict[str, RoomSchedule] = {}
+        self._debug_callback = debug_callback
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log debug message if callback is set."""
+        if self._debug_callback:
+            self._debug_callback("schedule", message, args)
+
+    def set_debug_callback(
+        self, callback: Callable[[str, str, tuple], None] | None
+    ) -> None:
+        """Set the debug callback."""
+        self._debug_callback = callback
 
     def set_frost_protection_temp(self, temp: float) -> None:
         """Set frost protection temperature."""
         self._frost_protection_temp = temp
-        _LOGGER.debug("Frost protection temperature set to %.1f°C", temp)
 
     def update_room_schedule(self, room_name: str, schedule: RoomSchedule) -> None:
         """Update schedule for a room."""
         self._room_schedules[room_name] = schedule
-        _LOGGER.debug("Schedule updated for room: %s", room_name)
 
     def remove_room_schedule(self, room_name: str) -> None:
         """Remove schedule for a room."""
         if room_name in self._room_schedules:
             del self._room_schedules[room_name]
-            _LOGGER.debug("Schedule removed for room: %s", room_name)
 
     def get_target_temperature(
         self,
@@ -56,78 +75,76 @@ class ScheduleEngine:
             dt: Datetime to check (defaults to now)
 
         Returns:
-            Target temperature in °C, or None if manual mode or no schedule
+            Target temperature in C, or None if manual mode or no schedule
         """
         if dt is None:
             dt = dt_util.now()
 
         # Manual mode: Don't provide scheduled temperature
         if mode == MODE_MANUAL:
-            _LOGGER.debug(
-                "Manual mode active, no scheduled temperature for %s", room_name
-            )
+            self._debug("Manual mode active - no scheduled temperature")
             return None
 
         # Off mode: Always frost protection
         if mode == MODE_OFF:
-            _LOGGER.debug(
-                "Off mode active, returning frost protection %.1f°C for %s",
+            self._debug(
+                "Off mode active - using frost protection %.1f",
                 self._frost_protection_temp,
-                room_name,
             )
             return self._frost_protection_temp
 
         # Normal or Homeoffice: Use schedules
         room_schedule = self._room_schedules.get(room_name)
         if not room_schedule:
-            _LOGGER.warning(
-                "No schedule found for room: %s (available rooms: %s)",
-                room_name,
-                list(self._room_schedules.keys()),
-            )
+            self._debug("No schedule found for room")
             return None
 
-        _LOGGER.info(
-            "Schedule lookup: room=%s, mode=%s, weekday=%s, is_weekday=%s",
-            room_name,
-            mode,
-            dt.strftime("%A"),
-            dt.weekday() < 5,
-        )
+        is_weekday = dt.weekday() < 5
+        current_time = dt.time()
 
         day_schedule = room_schedule.get_schedule_for_mode(mode, dt)
+        schedule_source = mode
+
         if not day_schedule:
             # Custom mode without own schedule: Fall back to normal schedule
-            _LOGGER.debug(
-                "No schedule defined for room %s in mode %s, falling back to normal",
-                room_name,
-                mode,
-            )
-            # Try to use normal schedule as fallback
             day_schedule = room_schedule.get_schedule_for_mode("normal", dt)
+            schedule_source = "normal (fallback)"
             if not day_schedule:
-                _LOGGER.warning(
-                    "No schedule found for room %s in mode %s or normal fallback "
-                    "(weekday=%s, weekend=%s, homeoffice=%s)",
-                    room_name,
-                    mode,
-                    room_schedule.normal_weekday is not None,
-                    room_schedule.normal_weekend is not None,
-                    room_schedule.homeoffice_daily is not None,
-                )
+                self._debug("No schedule for mode %s or normal fallback", mode)
                 return None
 
-        current_time = dt.time()
         target_temp = day_schedule.get_temperature(
             current_time, self._frost_protection_temp
         )
 
-        _LOGGER.debug(
-            "Scheduled temperature for %s at %s: %.1f°C (mode: %s)",
-            room_name,
-            current_time.strftime("%H:%M"),
+        # Find active block info for logging
+        active_block_start = None
+        active_block_end = None
+        for i, block in enumerate(day_schedule.blocks):
+            block_time = block.time
+            next_block_time = (
+                day_schedule.blocks[i + 1].time
+                if i + 1 < len(day_schedule.blocks)
+                else None
+            )
+
+            if block_time <= current_time:
+                if next_block_time is None or current_time < next_block_time:
+                    active_block_start = block_time.strftime("%H:%M")
+                    active_block_end = (
+                        next_block_time.strftime("%H:%M")
+                        if next_block_time
+                        else "24:00"
+                    )
+                    break
+
+        self._debug(
+            "Active block: %s-%s -> %.1f (%s, %s)",
+            active_block_start or "00:00",
+            active_block_end or "24:00",
             target_temp,
-            mode,
+            schedule_source,
+            "weekday" if is_weekday else "weekend",
         )
 
         return target_temp
@@ -195,6 +212,12 @@ class ScheduleEngine:
         # Resolve special temps
         if isinstance(next_temp, str):
             next_temp = self._frost_protection_temp
+
+        self._debug(
+            "Next change: %s -> %.1f",
+            next_dt.strftime("%H:%M"),
+            float(next_temp),
+        )
 
         return (next_dt, float(next_temp))
 
