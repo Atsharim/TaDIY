@@ -757,7 +757,7 @@ class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):
 
 
 class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
-    """Tracks cumulative heating time for the room today."""
+    """Tracks cumulative heating time with persistent daily/weekly/monthly stats."""
 
     _attr_has_entity_name = True
     _attr_icon = ICON_ENERGY
@@ -770,23 +770,74 @@ class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_heating_time_today"
         self._attr_name = "Heating Time Today"
         self._attr_device_info = get_device_info(entry, coordinator.hass)
-        self._today_seconds: float = 0.0
         self._last_heating_check: float | None = None
         self._last_date: str | None = None
+        self._save_counter: int = 0
+
+        # Restore from persistent storage
+        stats = getattr(coordinator, "heating_stats", {}) or {}
+        self._today_seconds: float = stats.get("today_seconds", 0.0)
+        self._last_date = stats.get("last_date", None)
+        # Daily history: {date_str: seconds} - keep last 31 days
+        self._daily_history: dict[str, float] = stats.get("daily_history", {})
 
     @property
     def native_value(self) -> float:
         """Return heating hours today."""
         return round(self._today_seconds / 3600.0, 2)
 
+    def _week_hours(self) -> float:
+        """Sum heating hours for the current ISO week."""
+        from homeassistant.util import dt as dt_util
+        from datetime import timedelta
+
+        now = dt_util.now()
+        monday = now - timedelta(days=now.weekday())
+        total = self._today_seconds
+        for i in range(1, 7):
+            day = (monday + timedelta(days=i - 1)).strftime("%Y-%m-%d")
+            if day != self._last_date:
+                total += self._daily_history.get(day, 0.0)
+        return round(total / 3600.0, 2)
+
+    def _month_hours(self) -> float:
+        """Sum heating hours for the current calendar month."""
+        from homeassistant.util import dt as dt_util
+
+        now = dt_util.now()
+        prefix = now.strftime("%Y-%m-")
+        total = self._today_seconds
+        for day, secs in self._daily_history.items():
+            if day.startswith(prefix) and day != self._last_date:
+                total += secs
+        return round(total / 3600.0, 2)
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return heating time details."""
+        """Return heating time details with weekly/monthly stats."""
         data = self.coordinator.data
         return {
             "heating_active": data.heating_active if data else False,
             "seconds_today": round(self._today_seconds),
+            "hours_today": self.native_value,
+            "hours_this_week": self._week_hours(),
+            "hours_this_month": self._month_hours(),
         }
+
+    def _persist(self) -> None:
+        """Save stats to coordinator storage (debounced)."""
+        self._save_counter += 1
+        # Save every 10 updates (~10 minutes at 60s interval)
+        if self._save_counter >= 10:
+            self._save_counter = 0
+            self.coordinator.heating_stats = {
+                "today_seconds": self._today_seconds,
+                "last_date": self._last_date,
+                "daily_history": self._daily_history,
+            }
+            self.coordinator.hass.async_create_task(
+                self.coordinator.async_save_heating_stats()
+            )
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -796,10 +847,20 @@ class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
         now = dt_util.now()
         today_str = now.strftime("%Y-%m-%d")
 
-        # Reset counter at midnight
+        # Day rollover: archive yesterday, reset counter
         if self._last_date is not None and self._last_date != today_str:
+            self._daily_history[self._last_date] = self._today_seconds
+            # Prune history older than 31 days
+            from datetime import timedelta as _td
+
+            cutoff = (now - _td(days=31)).strftime("%Y-%m-%d")
+            self._daily_history = {
+                d: s for d, s in self._daily_history.items() if d >= cutoff
+            }
             self._today_seconds = 0.0
             self._last_heating_check = None
+            # Force-save on day rollover
+            self._save_counter = 9
 
         self._last_date = today_str
 
@@ -816,4 +877,5 @@ class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
         else:
             self._last_heating_check = None
 
+        self._persist()
         self.async_write_ha_state()

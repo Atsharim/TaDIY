@@ -215,7 +215,7 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
 
                 # Update auto-calibration if applicable
                 if room_temp and trv_temp:
-                    self.coordinator.calibration_manager.update_auto_calibration(
+                    self.coordinator.calibration_manager.update_calibration(
                         trv_entity_id, trv_temp, room_temp
                     )
 

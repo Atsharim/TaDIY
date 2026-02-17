@@ -735,6 +735,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             f"tadiy_valve_protection_{entry_id}",
         )
 
+        # Heating statistics store (daily/weekly/monthly heating time)
+        self.heating_stats_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"tadiy_heating_stats_{entry_id}",
+        )
+        self.heating_stats: dict[str, Any] = {}
+
         self.sensor_manager = SensorManager(self)
         self.trv_manager = TrvManager(self)
         self.orchestrator = RoomOrchestrator(self)
@@ -1096,6 +1104,28 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error(
                 "Failed to save thermal mass for %s: %s", self.room_config.name, err
+            )
+
+    async def async_load_heating_stats(self) -> None:
+        """Load heating statistics from storage."""
+        data = await self.heating_stats_store.async_load()
+        if data:
+            self.heating_stats = data
+            _LOGGER.debug(
+                "Loaded heating stats for room %s", self.room_config.name
+            )
+        else:
+            self.heating_stats = {}
+
+    async def async_save_heating_stats(self) -> None:
+        """Save heating statistics to storage."""
+        try:
+            await self.heating_stats_store.async_save(self.heating_stats)
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to save heating stats for %s: %s",
+                self.room_config.name,
+                err,
             )
 
     async def async_load_feature_settings(self) -> None:
