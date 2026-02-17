@@ -1,4 +1,5 @@
 """Options flow for TaDIY."""
+
 from __future__ import annotations
 
 import logging
@@ -37,8 +38,6 @@ from .const import (
     DEFAULT_USE_EARLY_START,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
-    MAX_TARGET_TEMP,
-    MIN_TARGET_TEMP,
     TEMP_STEP_OPTIONS,
     TOLERANCE_OPTIONS,
 )
@@ -77,7 +76,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Manage the options - main menu."""
         room_count = len(self.config_entry.options.get(CONF_ROOMS, []))
-        
+
         return self.async_show_menu(
             step_id="init",
             menu_options=[
@@ -110,13 +109,15 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
+
             return self.async_create_entry(title="", data=self.config_entry.options)
 
         current_global = self.config_entry.data
-        
+
         window_open_val = current_global.get(
             CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
         )
+
         window_close_val = current_global.get(
             CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
         )
@@ -126,6 +127,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             if isinstance(window_open_val, int)
             else window_open_val
         )
+
         window_close_default = (
             convert_seconds_to_duration(window_close_val)
             if isinstance(window_close_val, int)
@@ -206,7 +208,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Select room to edit."""
         rooms = self.config_entry.options.get(CONF_ROOMS, [])
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
@@ -217,10 +219,11 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
                     self._current_room = room
                     self._room_index = idx
                     return await self.async_step_edit_room()
+
             return self.async_abort(reason="invalid_room")
 
         room_names = [r.get(CONF_ROOM_NAME, f"Room {i}") for i, r in enumerate(rooms)]
-        
+
         return self.async_show_form(
             step_id="edit_room_select",
             data_schema=vol.Schema({
@@ -258,7 +261,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
     ) -> FlowResult:
         """Select room to delete."""
         rooms = self.config_entry.options.get(CONF_ROOMS, [])
-        
+
         if not rooms:
             return self.async_abort(reason="no_rooms")
 
@@ -270,7 +273,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             )
 
         room_names = [r.get(CONF_ROOM_NAME, f"Room {i}") for i, r in enumerate(rooms)]
-        
+
         return self.async_show_form(
             step_id="delete_room_select",
             data_schema=vol.Schema({
@@ -305,15 +308,19 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
         global_window_open = self._get_global_default(
             CONF_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
         )
+
         global_window_close = self._get_global_default(
             CONF_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
         )
+
         global_dont_heat = self._get_global_default(
             CONF_DONT_HEAT_BELOW_OUTDOOR, DEFAULT_DONT_HEAT_BELOW
         )
+
         global_early_start = self._get_global_default(
             CONF_USE_EARLY_START, DEFAULT_USE_EARLY_START
         )
+
         global_learn = self._get_global_default(
             CONF_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
         )
@@ -323,6 +330,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             if room_data
             else global_window_open
         )
+
         window_close_val = (
             room_data.get(CONF_WINDOW_CLOSE_TIMEOUT, global_window_close)
             if room_data
@@ -334,6 +342,7 @@ class TaDIYOptionsFlowHandler(OptionsFlow):
             if isinstance(window_open_val, int)
             else window_open_val
         )
+
         window_close_default = (
             convert_seconds_to_duration(window_close_val)
             if isinstance(window_close_val, int)
