@@ -246,6 +246,7 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if show_panel:
         from .panel import async_register_panel
 
+        # Register the panel
         await async_register_panel(hass)
         _LOGGER.info("TaDIY panel registered")
     else:

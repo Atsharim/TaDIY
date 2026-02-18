@@ -691,6 +691,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self.current_room_data: RoomData | None = None
         self._heat_model = HeatUpModel(room_name=self.room_config.name)
         self._heat_model.set_debug_callback(self._debug_callback)
+        self.heat_model_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"tadiy_heat_model_{entry_id}",
+        )
+        # Load heat model from storage on startup
+        self.hass.async_create_task(self.async_load_heat_model())
 
         # Thermal Mass Model for cooling rate learning
         from .core.thermal_mass import ThermalMassModel
@@ -776,6 +783,15 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self.heating_stats: dict[str, Any] = {}
         # Load heating stats from storage on startup
         self.hass.async_create_task(self.async_load_heating_stats())
+
+        self.savings_stats_store = Store(
+            hass,
+            STORAGE_VERSION,
+            f"tadiy_savings_stats_{entry_id}",
+        )
+        self.savings_stats: dict[str, Any] = {}
+        # Load savings stats from storage on startup
+        self.hass.async_create_task(self.async_load_savings_stats())
 
         self.sensor_manager = SensorManager(self)
         self.trv_manager = TrvManager(self)
@@ -1141,6 +1157,42 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 "Failed to save thermal mass for %s: %s", self.room_config.name, err
             )
 
+    async def async_load_heat_model(self) -> None:
+        """Load heating rate model from storage."""
+        data = await self.heat_model_store.async_load()
+        if not data:
+            _LOGGER.info(
+                "No heat model data found for room: %s (using defaults)",
+                self.room_config.name,
+            )
+            return
+
+        try:
+            self._heat_model = HeatUpModel.from_dict(data)
+            self._heat_model.set_debug_callback(self._debug_callback)
+            _LOGGER.info(
+                "Loaded heat model for room %s: %.2f°C/h (samples=%d, confidence=%.0f%%)",
+                self.room_config.name,
+                self._heat_model.degrees_per_hour,
+                self._heat_model.sample_count,
+                self._heat_model.get_confidence() * 100,
+            )
+        except (ValueError, KeyError) as err:
+            _LOGGER.warning(
+                "Failed to load heat model for %s: %s", self.room_config.name, err
+            )
+
+    async def async_save_heat_model(self) -> None:
+        """Save heating rate model to storage."""
+        try:
+            data = self._heat_model.to_dict()
+            await self.heat_model_store.async_save(data)
+            _LOGGER.debug("Saved heat model for room: %s", self.room_config.name)
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to save heat model for %s: %s", self.room_config.name, err
+            )
+
     async def async_load_heating_stats(self) -> None:
         """Load heating statistics from storage."""
         data = await self.heating_stats_store.async_load()
@@ -1149,7 +1201,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Loaded heating stats for room %s", self.room_config.name)
         else:
             self.heating_stats = {}
-        self.async_update_listeners()
+        # Only update listeners if coordinator is fully initialized
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
 
     async def async_save_heating_stats(self) -> None:
         """Save heating statistics to storage."""
@@ -1158,6 +1212,29 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error(
                 "Failed to save heating stats for %s: %s",
+                self.room_config.name,
+                err,
+            )
+
+    async def async_load_savings_stats(self) -> None:
+        """Load savings statistics from storage."""
+        data = await self.savings_stats_store.async_load()
+        if data:
+            self.savings_stats = data
+            _LOGGER.debug("Loaded savings stats for room %s", self.room_config.name)
+        else:
+            self.savings_stats = {}
+        # Only update listeners if coordinator is fully initialized
+        if hasattr(self, "_listeners"):
+            self.async_update_listeners()
+
+    async def async_save_savings_stats(self) -> None:
+        """Save savings statistics to storage."""
+        try:
+            await self.savings_stats_store.async_save(self.savings_stats)
+        except Exception as err:
+            _LOGGER.error(
+                "Failed to save savings stats for %s: %s",
                 self.room_config.name,
                 err,
             )
@@ -1813,6 +1890,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                             try:
                                 self._heat_model.update_with_measurement(
                                     temp_increase, time_delta
+                                )
+                                # Save heat model after update
+                                self.hass.async_create_task(
+                                    self.async_save_heat_model()
                                 )
                             except ValueError:
                                 pass

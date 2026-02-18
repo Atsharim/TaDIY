@@ -103,7 +103,7 @@
       },
       "panel_settings": {
         "title": "Hub Configuration",
-        "description": "{info}",
+        "description": "Hub Configuration:\n\n• Panel: Show TaDIY Schedules in sidebar\n• Weather Entity: Weather entity for outdoor temperature and forecast\n• Person Entities: Person tracking for location-based heating\n• Location Mode: Automatic heating reduction when nobody is home\n• Override Timeout: How long manual TRV changes override schedules\n• Window Timeouts: How long to wait before/after window open/close\n• Early Start: Pre-heating settings\n• Heating Curve: Adjust target temperature based on outdoor temperature\n• Weather Prediction: Pre-heat before cold fronts, reduce before warm fronts",
         "data": {
           "show_panel": "Show Schedules Panel in Sidebar",
           "weather_entity": "Weather Entity",
@@ -142,7 +142,7 @@
       },
       "debug_settings": {
         "title": "Debug Settings",
-        "description": "{info}",
+        "description": "Debug Logging:\n\nEnable debug logging to see detailed information in Home Assistant logs.\n\n1. Enable the master toggle\n2. Select which categories to log\n\nNote: Logs appear as INFO level in Home Assistant Core logs.",
         "data": {
           "debug_enabled": "Enable Debug Logging",
           "debug_categories": "Debug Categories"
@@ -294,6 +294,9 @@
       "boost_room": {
         "name": "Room Boost"
       },
+      "clear_override": {
+        "name": "Clear Override"
+      },
       "force_refresh_all": {
         "name": "Force Refresh All"
       },
@@ -302,6 +305,9 @@
       },
       "boost_all_rooms": {
         "name": "Boost All Rooms"
+      },
+      "clear_all_overrides": {
+        "name": "Clear All Overrides"
       },
       "clear_schedule": {
         "name": "Clear Schedule"

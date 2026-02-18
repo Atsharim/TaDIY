@@ -205,19 +205,20 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         )
 
+        # Use TextSelector to allow clearing (EntitySelector doesn't allow deletion once set)
         schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = (
-            selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor",
-                    device_class="temperature",
+            selector.TextSelector(
+                selector.TextSelectorConfig(
+                    autocomplete="sensor.temperature",
                 )
             )
         )
 
+        # Use TextSelector to allow clearing (EntitySelector doesn't allow deletion once set)
         schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default="")] = (
-            selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="weather",
+            selector.TextSelector(
+                selector.TextSelectorConfig(
+                    autocomplete="weather",
                 )
             )
         )

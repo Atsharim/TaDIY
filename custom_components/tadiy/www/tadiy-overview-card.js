@@ -17,7 +17,9 @@ class TaDiyOverviewCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = config;
+    this._config = config || {};
+    // Default columns: auto-fill, or can be set to a specific number (e.g., 3)
+    this._columns = config.columns || 'auto-fill';
   }
 
   set hass(hass) {
@@ -186,7 +188,7 @@ class TaDiyOverviewCard extends HTMLElement {
         }
         .rooms-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          grid-template-columns: repeat(${typeof this._columns === 'number' ? this._columns : 'auto-fill'}, minmax(300px, 1fr));
           gap: 16px;
         }
         .room-card-wrapper {
@@ -371,16 +373,41 @@ class TaDiyOverviewCard extends HTMLElement {
   }
 
   openScheduleDialog(entityId) {
-    // Fire event to open more-info dialog with the climate entity
-    const event = new CustomEvent('hass-more-info', {
-      bubbles: true,
-      composed: true,
-      detail: { entityId: entityId }
-    });
-    this.dispatchEvent(event);
+    // Create a dialog with the schedule card
+    const dialog = document.createElement('ha-dialog');
+    dialog.heading = 'Edit Schedule';
 
-    // Note: Users can add tadiy-schedule-card to their dashboard separately
-    // for full schedule editing capabilities
+    // Create schedule card
+    const scheduleCard = document.createElement('tadiy-schedule-card');
+    scheduleCard.setConfig({ entity: entityId });
+    scheduleCard.hass = this._hass;
+
+    // Style the dialog content
+    const content = document.createElement('div');
+    content.style.padding = '0';
+    content.style.minWidth = '400px';
+    content.appendChild(scheduleCard);
+
+    // Set dialog content
+    dialog.appendChild(content);
+
+    // Add close button handler
+    dialog.addEventListener('closed', () => {
+      dialog.remove();
+    });
+
+    // Append to document and open
+    document.body.appendChild(dialog);
+
+    // Use setTimeout to ensure dialog is rendered before opening
+    setTimeout(() => {
+      if (dialog.open) {
+        dialog.open();
+      } else {
+        // Fallback: show the dialog
+        dialog.style.display = 'block';
+      }
+    }, 10);
   }
 }
 

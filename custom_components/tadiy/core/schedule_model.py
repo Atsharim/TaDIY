@@ -132,7 +132,7 @@ class DaySchedule:
             else:
                 break
 
-        _LOGGER.info(
+        _LOGGER.debug(
             "DaySchedule.get_temperature: time=%s, active_block=%s->%s, frost_prot=%.1f",
             current_time.strftime("%H:%M"),
             active_block.start_time.strftime("%H:%M"),
@@ -236,7 +236,7 @@ class RoomSchedule:
             # Weekday: Monday (0) to Friday (4)
             if dt.weekday() < 5:
                 result = self.normal_weekday
-                _LOGGER.info(
+                _LOGGER.debug(
                     "RoomSchedule %s: mode=normal, weekday=%d -> normal_weekday (has_blocks=%s)",
                     self.room_name,
                     dt.weekday(),
@@ -244,7 +244,7 @@ class RoomSchedule:
                 )
             else:
                 result = self.normal_weekend
-                _LOGGER.info(
+                _LOGGER.debug(
                     "RoomSchedule %s: mode=normal, weekday=%d -> normal_weekend (has_blocks=%s)",
                     self.room_name,
                     dt.weekday(),
@@ -252,7 +252,7 @@ class RoomSchedule:
                 )
         elif mode == "homeoffice":
             result = self.homeoffice_daily
-            _LOGGER.info(
+            _LOGGER.debug(
                 "RoomSchedule %s: mode=homeoffice -> homeoffice_daily (has_blocks=%s)",
                 self.room_name,
                 len(result.blocks) if result else 0,
@@ -260,7 +260,7 @@ class RoomSchedule:
         else:
             # Custom mode
             result = self.get_custom_schedule(mode)
-            _LOGGER.info(
+            _LOGGER.debug(
                 "RoomSchedule %s: mode=%s -> custom_schedule (has_blocks=%s)",
                 self.room_name,
                 mode,

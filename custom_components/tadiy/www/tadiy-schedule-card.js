@@ -1527,3 +1527,19 @@ class TaDiyScheduleCard extends HTMLElement {
 if (!customElements.get('tadiy-schedule-card')) {
   customElements.define('tadiy-schedule-card', TaDiyScheduleCard);
 }
+
+// Register the card with Home Assistant
+window.customCards = window.customCards || [];
+window.customCards.push({
+  type: 'tadiy-schedule-card',
+  name: 'TaDIY Schedule Editor',
+  description: 'Edit TaDIY heating schedules with visual timeline',
+  preview: false,
+  documentationURL: 'https://github.com/Atsharim/TaDIY'
+});
+
+console.info(
+  '%c TaDIY Schedule Card %c v0.3.0 ',
+  'background-color: #ef5350; color: #fff; font-weight: bold;',
+  'background-color: #424242; color: #fff; font-weight: bold;'
+);

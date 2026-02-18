@@ -13,59 +13,11 @@ class TaDiyPanel extends HTMLElement {
     this._hubModeOptions = [];
     this._hubModeEntityId = null;
     this._hasOpenDialog = false; // Track if schedule editor dialog is open
-    this._unsubscribe = null; // WebSocket subscription cleanup
-  }
-
-  connectedCallback() {
-    // Subscribe to state changes when panel is mounted
-    if (this._hass && this._hass.connection) {
-      this._subscribeUpdates();
-    }
-  }
-
-  disconnectedCallback() {
-    // Clean up subscription when panel is unmounted
-    if (this._unsubscribe) {
-      this._unsubscribe();
-      this._unsubscribe = null;
-    }
-  }
-
-  async _subscribeUpdates() {
-    // Prevent multiple subscriptions
-    if (this._unsubscribe) return;
-
-    try {
-      // Subscribe to state changes for all TaDIY entities
-      this._unsubscribe = await this._hass.connection.subscribeEvents(
-        (event) => {
-          const entityId = event.data.entity_id;
-          if (entityId && (entityId.includes('tadiy') || entityId.includes('hub_mode'))) {
-            // Update local state and re-render if not in dialog
-            if (!this._hasOpenDialog) {
-              this.loadRooms();
-              this.render();
-            }
-          }
-        },
-        'state_changed'
-      );
-      console.log('TaDIY Panel: Subscribed to state changes');
-    } catch (err) {
-      console.error('TaDIY Panel: Failed to subscribe to updates:', err);
-      // Retry after 5 seconds
-      setTimeout(() => this._subscribeUpdates(), 5000);
-    }
   }
 
   set hass(hass) {
     const oldHass = this._hass;
     this._hass = hass;
-
-    // Setup subscription on first hass assignment
-    if (!oldHass && hass && hass.connection && !this._unsubscribe) {
-      this._subscribeUpdates();
-    }
 
     // NEVER re-render while dialog is open to prevent dropdown/dialog closure
     if (this._hasOpenDialog) {
@@ -260,6 +212,57 @@ class TaDiyPanel extends HTMLElement {
         .room-climate-container > * {
           width: 100%;
         }
+        .room-info {
+          display: flex;
+          gap: 8px;
+          margin-top: 8px;
+        }
+        .comfort-indicator {
+          flex: 1;
+          padding: 8px 12px;
+          border-radius: 4px;
+          text-align: center;
+          color: white;
+          font-size: 12px;
+          font-weight: bold;
+        }
+        .comfort-label {
+          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+        .humidity-indicator {
+          padding: 8px 12px;
+          background: var(--primary-color);
+          border-radius: 4px;
+          color: white;
+          font-size: 12px;
+          font-weight: bold;
+          text-align: center;
+          min-width: 80px;
+        }
+        .reset-override-btn {
+          padding: 8px;
+          background: var(--secondary-background-color);
+          border: 1px solid var(--divider-color);
+          border-radius: 4px;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 40px;
+        }
+        .reset-override-btn:hover {
+          background: var(--primary-color);
+          border-color: var(--primary-color);
+        }
+        .reset-override-btn:hover ha-icon {
+          color: white;
+        }
+        .reset-override-btn ha-icon {
+          --mdc-icon-size: 20px;
+          color: var(--secondary-text-color);
+          transition: color 0.2s;
+        }
         .edit-schedule-btn {
           width: 100%;
           margin-top: 12px;
@@ -325,11 +328,39 @@ class TaDiyPanel extends HTMLElement {
   }
 
   renderRoomCard(room) {
+    // Extract room name from climate entity_id (e.g., "climate.living_room" -> "living_room")
+    const roomName = room.entity_id.replace('climate.', '').replace('tadiy_', '');
+
+    // Get comfort and humidity from sensors
+    // Note: Sensor names are "Room Comfort" and "Humidity" with has_entity_name=True
+    const comfortSensor = this._hass.states[`sensor.${roomName}_room_comfort`];
+    const humiditySensor = this._hass.states[`sensor.${roomName}_humidity`];
+
+    const comfortLevel = comfortSensor?.state || 'N/A';
+    const comfortColor = comfortSensor?.attributes?.comfort_color || '#888';
+    const humidity = humiditySensor?.state || 'N/A';
+
+    console.log('TaDIY Panel: Room', room.name, 'roomName:', roomName);
+    console.log('  Looking for:', `sensor.${roomName}_room_comfort`, `sensor.${roomName}_humidity`);
+    console.log('  Found:', !!comfortSensor, !!humiditySensor);
+    if (comfortSensor) console.log('  Comfort:', comfortLevel, comfortColor);
+
     // We'll embed the climate card dynamically after render
     return `
       <div class="room-card-wrapper" data-entity="${room.entity_id}">
         <div class="room-climate-container" data-climate="${room.entity_id}">
           <!-- Climate card will be inserted here -->
+        </div>
+        <div class="room-info">
+          <div class="comfort-indicator" style="background: ${comfortColor};">
+            <span class="comfort-label">Komfort: ${comfortLevel}</span>
+          </div>
+          <div class="humidity-indicator">
+            <span class="humidity-label">💧 ${humidity}%</span>
+          </div>
+          <button class="reset-override-btn" data-entity="button.${roomName}_clear_override" title="Clear Override">
+            <ha-icon icon="mdi:lock-reset"></ha-icon>
+          </button>
         </div>
         <button class="edit-schedule-btn" data-entity="${room.entity_id}">
           📅 Edit Schedule
@@ -429,9 +460,50 @@ class TaDiyPanel extends HTMLElement {
         this.showScheduleEditor(entityId);
       });
     });
+
+    // Reset override buttons
+    this.shadowRoot.querySelectorAll('.reset-override-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const buttonEntityId = btn.dataset.entity;
+
+        if (buttonEntityId && this._hass) {
+          try {
+            await this._hass.callService('button', 'press', {
+              entity_id: buttonEntityId
+            });
+            console.log('TaDIY Panel: Pressed button', buttonEntityId);
+          } catch (error) {
+            console.error('Failed to press reset override button:', error);
+            alert(`Failed to reset override: ${error.message}`);
+          }
+        }
+      });
+    });
   }
 
-  showScheduleEditor(entityId) {
+  async showScheduleEditor(entityId) {
+    console.log('TaDIY Panel: Opening schedule editor for', entityId);
+
+    // Ensure schedule card is loaded
+    if (!customElements.get('tadiy-schedule-card')) {
+      console.log('TaDIY Panel: Loading schedule card script...');
+      try {
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=' + (this._config?.domain || 'tadiy');
+        document.head.appendChild(script);
+
+        // Wait for card to be defined
+        await customElements.whenDefined('tadiy-schedule-card');
+        console.log('TaDIY Panel: Schedule card loaded successfully');
+      } catch (err) {
+        console.error('TaDIY Panel: Failed to load schedule card:', err);
+        alert('Failed to load schedule editor. Please add tadiy-schedule-card.js as a Lovelace resource.');
+        return;
+      }
+    }
+
     // Show a popup with the schedule card
     const dialog = document.createElement('div');
     dialog.className = 'schedule-editor-dialog';
@@ -459,8 +531,20 @@ class TaDiyPanel extends HTMLElement {
     const body = document.createElement('div');
     body.className = 'dialog-body';
 
+    // Add loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'schedule-loading';
+    loadingDiv.innerHTML = `
+      <div style="text-align: center; padding: 40px; color: var(--secondary-text-color);">
+        <div class="spinner"></div>
+        <p>Loading schedule editor...</p>
+      </div>
+    `;
+    body.appendChild(loadingDiv);
+
     // Create schedule card using createElement (not innerHTML!)
     const scheduleCard = document.createElement('tadiy-schedule-card');
+    console.log('TaDIY Panel: Created schedule card element:', scheduleCard);
 
     body.appendChild(scheduleCard);
     content.appendChild(header);
@@ -524,6 +608,19 @@ class TaDiyPanel extends HTMLElement {
       .dialog-body {
         padding: 16px 24px;
       }
+      .spinner {
+        border: 3px solid var(--divider-color);
+        border-top: 3px solid var(--primary-color);
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 16px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
     `;
 
     this.shadowRoot.appendChild(style);
@@ -543,6 +640,12 @@ class TaDiyPanel extends HTMLElement {
           initialScheduleType: initialScheduleType
         });
         scheduleCard.hass = this._hass;
+        // Hide loading indicator after a short delay
+        setTimeout(() => {
+          if (loadingDiv && loadingDiv.parentNode) {
+            loadingDiv.style.display = 'none';
+          }
+        }, 500);
       } else {
         // Fallback if not yet upgraded
         customElements.whenDefined('tadiy-schedule-card').then(() => {
@@ -552,6 +655,12 @@ class TaDiyPanel extends HTMLElement {
             initialScheduleType: initialScheduleType
           });
           scheduleCard.hass = this._hass;
+          // Hide loading indicator after a short delay
+          setTimeout(() => {
+            if (loadingDiv && loadingDiv.parentNode) {
+              loadingDiv.style.display = 'none';
+            }
+          }, 500);
         });
       }
     };

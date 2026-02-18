@@ -246,6 +246,9 @@ async def async_setup_entry(
         # Add heating time sensor
         entities.append(TaDIYHeatingTimeSensor(coordinator, entry))
 
+        # Add energy savings sensor
+        entities.append(TaDIYEnergySavingsSensor(coordinator, entry))
+
         _LOGGER.info("Added %d room sensor entities", len(entities))
 
     async_add_entities(entities)
@@ -288,6 +291,12 @@ class TaDIYRoomSensor(CoordinatorEntity, SensorEntity):
         if self.entity_description.attr_fn is not None:
             try:
                 attrs = self.entity_description.attr_fn(self.coordinator.data)
+                _LOGGER.debug(
+                    "Attributes for %s: %s (data: %s)",
+                    self.entity_description.key,
+                    attrs,
+                    "present" if self.coordinator.data else "None",
+                )
                 return attrs if attrs else {}
             except Exception as err:
                 _LOGGER.error(
@@ -351,10 +360,21 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
     def native_value(self) -> str:
         """Return the state of the sensor."""
         cal_mgr = self.coordinator.calibration_manager
-        active_calibrations = sum(
-            1 for cal in cal_mgr._calibrations.values() if cal.mode != "disabled"
-        )
-        return f"{active_calibrations}/{len(cal_mgr._calibrations)}"
+
+        # Count TRVs from room config (not from _calibrations which may be empty)
+        total_trvs = len(self.coordinator.room_config.trv_entity_ids)
+
+        # Count active calibrations (only if TRV exists in _calibrations)
+        active_calibrations = 0
+        for trv_id in self.coordinator.room_config.trv_entity_ids:
+            if trv_id in cal_mgr._calibrations:
+                if cal_mgr._calibrations[trv_id].mode != "disabled":
+                    active_calibrations += 1
+            else:
+                # If not in _calibrations yet, it's auto by default (active)
+                active_calibrations += 1
+
+        return f"{active_calibrations}/{total_trvs}"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -406,12 +426,15 @@ class TaDIYTRVCalibrationSensor(CoordinatorEntity, SensorEntity):
                 )
                 attributes[f"{trv_key}_last_calibrated"] = cal_info["last_calibrated"]
             else:
-                # No calibration data yet
+                # No calibration data yet - use defaults
                 attributes[f"{trv_key}_mode"] = "auto"
                 attributes[f"{trv_key}_offset"] = 0.0
                 attributes[f"{trv_key}_current_temp"] = (
                     round(trv_temp, 2) if trv_temp else None
                 )
+                attributes[f"{trv_key}_last_room_temp"] = None
+                attributes[f"{trv_key}_last_trv_temp"] = None
+                attributes[f"{trv_key}_last_calibrated"] = None
 
         return attributes
 
@@ -583,10 +606,18 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
         scheduled_target = self.coordinator.get_scheduled_target()
         override_count = len(self.coordinator.override_manager._overrides)
 
-        # Format: "mode: Xoverrides, target°C" or "mode: target°C"
-        target_str = f"{scheduled_target:.1f}°C" if scheduled_target else "None"
+        # If overrides exist, show override temperature(s)
         if override_count > 0:
-            return f"{hub_mode}: {override_count} override(s), {target_str}"
+            # Get first override (representative if multiple TRVs)
+            first_override = next(
+                iter(self.coordinator.override_manager._overrides.values())
+            )
+            override_temp = first_override.override_temp
+            scheduled_temp = first_override.scheduled_temp
+            return f"{hub_mode}: {override_count} override(s), {override_temp:.1f}°C (scheduled: {scheduled_temp:.1f}°C)"
+
+        # No overrides: show scheduled target
+        target_str = f"{scheduled_target:.1f}°C" if scheduled_target else "None"
         return f"{hub_mode}: {target_str}"
 
     @property
@@ -636,12 +667,25 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
 
 
 # --- Comfort zone definitions ---
+# Perfect comfort zone (100% score)
+COMFORT_TEMP_IDEAL = 21.0  # Ideal temperature
+COMFORT_HUMIDITY_IDEAL = 50.0  # Ideal humidity
+
+# Good comfort zone (85-99% score)
 COMFORT_TEMP_MIN = 20.0
 COMFORT_TEMP_MAX = 22.0
-COMFORT_TEMP_COLD = 18.0
-COMFORT_TEMP_WARM = 23.0
-COMFORT_HUMIDITY_MIN = 40.0
-COMFORT_HUMIDITY_MAX = 60.0
+COMFORT_HUMIDITY_MIN = 45.0
+COMFORT_HUMIDITY_MAX = 55.0
+
+# Acceptable comfort zone (60-84% score)
+COMFORT_TEMP_ACCEPTABLE_MIN = 19.0
+COMFORT_TEMP_ACCEPTABLE_MAX = 23.0
+COMFORT_HUMIDITY_ACCEPTABLE_MIN = 40.0
+COMFORT_HUMIDITY_ACCEPTABLE_MAX = 60.0
+
+# Poor comfort zone (below 60% score)
+COMFORT_TEMP_COLD = 17.0
+COMFORT_TEMP_WARM = 25.0
 COMFORT_HUMIDITY_DRY = 30.0
 COMFORT_HUMIDITY_WET = 70.0
 
@@ -649,7 +693,7 @@ COMFORT_HUMIDITY_WET = 70.0
 def _calculate_comfort(
     temperature: float | None, humidity: float | None
 ) -> dict[str, Any]:
-    """Calculate room comfort level, score, and color."""
+    """Calculate room comfort level, score, and color with refined scoring."""
     if temperature is None:
         return {
             "comfort_level": "unknown",
@@ -660,30 +704,58 @@ def _calculate_comfort(
             "comfort_position": {"x": 50, "y": 50},
         }
 
-    # Temperature score (0-100): optimal at 20-22, drops off outside
-    if COMFORT_TEMP_MIN <= temperature <= COMFORT_TEMP_MAX:
-        temp_score = 100.0
-    elif temperature < COMFORT_TEMP_COLD:
-        temp_score = max(0.0, 100.0 - (COMFORT_TEMP_COLD - temperature) * 20.0)
-    elif temperature < COMFORT_TEMP_MIN:
-        temp_score = 100.0 - (COMFORT_TEMP_MIN - temperature) * 25.0
-    elif temperature <= COMFORT_TEMP_WARM:
-        temp_score = 100.0 - (temperature - COMFORT_TEMP_MAX) * 25.0
-    else:
-        temp_score = max(0.0, 100.0 - (temperature - COMFORT_TEMP_WARM) * 20.0)
+    # Temperature score (0-100): Gaussian-like curve centered at ideal temp
+    temp_diff = abs(temperature - COMFORT_TEMP_IDEAL)
 
-    # Humidity score (0-100): optimal at 40-60%, drops off outside
-    if humidity is not None:
-        if COMFORT_HUMIDITY_MIN <= humidity <= COMFORT_HUMIDITY_MAX:
-            hum_score = 100.0
-        elif humidity < COMFORT_HUMIDITY_DRY:
-            hum_score = max(0.0, 100.0 - (COMFORT_HUMIDITY_DRY - humidity) * 5.0)
-        elif humidity < COMFORT_HUMIDITY_MIN:
-            hum_score = 100.0 - (COMFORT_HUMIDITY_MIN - humidity) * 5.0
-        elif humidity <= COMFORT_HUMIDITY_WET:
-            hum_score = 100.0 - (humidity - COMFORT_HUMIDITY_MAX) * 5.0
+    if temp_diff <= 0.5:  # Within ±0.5°C of ideal
+        temp_score = 100.0
+    elif COMFORT_TEMP_MIN <= temperature <= COMFORT_TEMP_MAX:
+        # Good zone: 85-99%
+        temp_score = 100.0 - (temp_diff * 15.0)  # Max 1.5°C diff = 22.5 penalty
+    elif COMFORT_TEMP_ACCEPTABLE_MIN <= temperature <= COMFORT_TEMP_ACCEPTABLE_MAX:
+        # Acceptable zone: 60-84%
+        if temperature < COMFORT_TEMP_MIN:
+            temp_score = 85.0 - (COMFORT_TEMP_MIN - temperature) * 25.0
         else:
-            hum_score = max(0.0, 100.0 - (humidity - COMFORT_HUMIDITY_WET) * 5.0)
+            temp_score = 85.0 - (temperature - COMFORT_TEMP_MAX) * 25.0
+    elif temperature < COMFORT_TEMP_COLD:
+        # Poor - too cold
+        temp_score = max(0.0, 60.0 - (COMFORT_TEMP_COLD - temperature) * 15.0)
+    elif temperature > COMFORT_TEMP_WARM:
+        # Poor - too warm
+        temp_score = max(0.0, 60.0 - (temperature - COMFORT_TEMP_WARM) * 15.0)
+    elif temperature < COMFORT_TEMP_ACCEPTABLE_MIN:
+        temp_score = 60.0 - (COMFORT_TEMP_ACCEPTABLE_MIN - temperature) * 20.0
+    else:  # temperature > COMFORT_TEMP_ACCEPTABLE_MAX
+        temp_score = 60.0 - (temperature - COMFORT_TEMP_ACCEPTABLE_MAX) * 20.0
+
+    # Humidity score (0-100): Similar refined approach
+    if humidity is not None:
+        hum_diff = abs(humidity - COMFORT_HUMIDITY_IDEAL)
+
+        if hum_diff <= 2.5:  # Within ±2.5% of ideal
+            hum_score = 100.0
+        elif COMFORT_HUMIDITY_MIN <= humidity <= COMFORT_HUMIDITY_MAX:
+            # Good zone: 85-99%
+            hum_score = 100.0 - (hum_diff * 3.0)
+        elif (
+            COMFORT_HUMIDITY_ACCEPTABLE_MIN
+            <= humidity
+            <= COMFORT_HUMIDITY_ACCEPTABLE_MAX
+        ):
+            # Acceptable zone: 60-84%
+            if humidity < COMFORT_HUMIDITY_MIN:
+                hum_score = 85.0 - (COMFORT_HUMIDITY_MIN - humidity) * 5.0
+            else:
+                hum_score = 85.0 - (humidity - COMFORT_HUMIDITY_MAX) * 5.0
+        elif humidity < COMFORT_HUMIDITY_DRY:
+            hum_score = max(0.0, 60.0 - (COMFORT_HUMIDITY_DRY - humidity) * 4.0)
+        elif humidity > COMFORT_HUMIDITY_WET:
+            hum_score = max(0.0, 60.0 - (humidity - COMFORT_HUMIDITY_WET) * 4.0)
+        elif humidity < COMFORT_HUMIDITY_ACCEPTABLE_MIN:
+            hum_score = 60.0 - (COMFORT_HUMIDITY_ACCEPTABLE_MIN - humidity) * 3.0
+        else:  # humidity > COMFORT_HUMIDITY_ACCEPTABLE_MAX
+            hum_score = 60.0 - (humidity - COMFORT_HUMIDITY_ACCEPTABLE_MAX) * 3.0
 
         # Combined score: 60% temperature, 40% humidity
         score = round(temp_score * 0.6 + hum_score * 0.4)
@@ -771,12 +843,20 @@ class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):
         """Return comfort details as attributes."""
         data = self.coordinator.data
         if data is None:
+            _LOGGER.debug("Room Comfort: No data available for attributes")
             return {}
         try:
-            return _calculate_comfort(
+            attrs = _calculate_comfort(
                 data.current_temperature,
                 data.humidity,
             )
+            _LOGGER.debug(
+                "Room Comfort attributes: %s (temp: %s, humidity: %s)",
+                attrs,
+                data.current_temperature,
+                data.humidity,
+            )
+            return attrs
         except Exception as err:
             _LOGGER.error(
                 "Error calculating comfort attributes: %s",
@@ -918,6 +998,289 @@ class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
             self._last_heating_check = now_ts
         else:
             self._last_heating_check = None
+
+        self._persist()
+        self.async_write_ha_state()
+
+
+class TaDIYEnergySavingsSensor(CoordinatorEntity, SensorEntity):
+    """Tracks energy savings from various smart heating decisions."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:leaf"
+    _attr_native_unit_of_measurement = "kWh"
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_energy_savings"
+        self._attr_name = "Energy Savings Today"
+        self._attr_device_info = get_device_info(entry, coordinator.hass)
+
+        # Tracking state
+        self._last_check: float | None = None
+        self._last_date: str | None = None
+        self._save_counter: int = 0
+
+        # Restore from persistent storage
+        stats = getattr(coordinator, "savings_stats", {}) or {}
+        self._window_seconds: float = stats.get("window_seconds", 0.0)
+        self._away_seconds: float = stats.get("away_seconds", 0.0)
+        self._weather_seconds: float = stats.get("weather_seconds", 0.0)
+        self._last_date = stats.get("last_date", None)
+        # Daily history
+        self._daily_history: dict[str, dict] = stats.get("daily_history", {})
+
+        # Default power consumption (can be configured via options)
+        # Average heating power in kW when heating is active
+        self._heating_power_kw: float = (
+            coordinator.room_config.heating_power_kw
+            if hasattr(coordinator.room_config, "heating_power_kw")
+            else 2.0
+        )
+        # Energy price in €/kWh
+        self._energy_price: float = (
+            coordinator.room_config.energy_price
+            if hasattr(coordinator.room_config, "energy_price")
+            else 0.30
+        )
+
+    @property
+    def native_value(self) -> float:
+        """Return total energy savings today in kWh."""
+        total_seconds = (
+            self._window_seconds + self._away_seconds + self._weather_seconds
+        )
+        total_hours = total_seconds / 3600.0
+        savings_kwh = total_hours * self._heating_power_kw
+        return round(savings_kwh, 2)
+
+    def _calculate_monetary_savings(self) -> float:
+        """Calculate monetary savings in €."""
+        kwh = self.native_value
+        return round(kwh * self._energy_price, 2)
+
+    def _week_savings(self) -> dict[str, float]:
+        """Sum savings for the current ISO week."""
+        from homeassistant.util import dt as dt_util
+        from datetime import timedelta
+
+        now = dt_util.now()
+        monday = now - timedelta(days=now.weekday())
+
+        total_window = self._window_seconds
+        total_away = self._away_seconds
+        total_weather = self._weather_seconds
+
+        for i in range(1, 7):
+            day = (monday + timedelta(days=i - 1)).strftime("%Y-%m-%d")
+            if day != self._last_date and day in self._daily_history:
+                hist = self._daily_history[day]
+                total_window += hist.get("window_seconds", 0.0)
+                total_away += hist.get("away_seconds", 0.0)
+                total_weather += hist.get("weather_seconds", 0.0)
+
+        total_hours = (total_window + total_away + total_weather) / 3600.0
+        kwh = total_hours * self._heating_power_kw
+        return {
+            "kwh": round(kwh, 2),
+            "euros": round(kwh * self._energy_price, 2),
+            "hours": round(total_hours, 1),
+        }
+
+    def _month_savings(self) -> dict[str, float]:
+        """Sum savings for the current calendar month."""
+        from homeassistant.util import dt as dt_util
+
+        now = dt_util.now()
+        prefix = now.strftime("%Y-%m-")
+
+        total_window = self._window_seconds
+        total_away = self._away_seconds
+        total_weather = self._weather_seconds
+
+        for day, hist in self._daily_history.items():
+            if day.startswith(prefix) and day != self._last_date:
+                total_window += hist.get("window_seconds", 0.0)
+                total_away += hist.get("away_seconds", 0.0)
+                total_weather += hist.get("weather_seconds", 0.0)
+
+        total_hours = (total_window + total_away + total_weather) / 3600.0
+        kwh = total_hours * self._heating_power_kw
+        return {
+            "kwh": round(kwh, 2),
+            "euros": round(kwh * self._energy_price, 2),
+            "hours": round(total_hours, 1),
+        }
+
+    def _last_30_days_savings(self) -> dict[str, float]:
+        """Sum savings for the last 30 days (rolling window)."""
+        from homeassistant.util import dt as dt_util
+        from datetime import timedelta
+
+        now = dt_util.now()
+        cutoff_date = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+
+        total_window = self._window_seconds
+        total_away = self._away_seconds
+        total_weather = self._weather_seconds
+
+        for day, hist in self._daily_history.items():
+            if day >= cutoff_date and day != self._last_date:
+                total_window += hist.get("window_seconds", 0.0)
+                total_away += hist.get("away_seconds", 0.0)
+                total_weather += hist.get("weather_seconds", 0.0)
+
+        total_hours = (total_window + total_away + total_weather) / 3600.0
+        kwh = total_hours * self._heating_power_kw
+        return {
+            "kwh": round(kwh, 2),
+            "euros": round(kwh * self._energy_price, 2),
+            "hours": round(total_hours, 1),
+        }
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return detailed savings breakdown."""
+        week = self._week_savings()
+        month = self._month_savings()
+        last_30 = self._last_30_days_savings()
+
+        # Calculate % savings (based on 24h potential heating time)
+        total_hours_today = (
+            self._window_seconds + self._away_seconds + self._weather_seconds
+        ) / 3600.0
+        savings_percent_today = (
+            (total_hours_today / 24.0) * 100 if total_hours_today > 0 else 0.0
+        )
+        savings_percent_week = (
+            (week["hours"] / (24.0 * 7)) * 100 if week["hours"] > 0 else 0.0
+        )
+        savings_percent_month = (
+            (month["hours"] / (24.0 * 30)) * 100 if month["hours"] > 0 else 0.0
+        )
+        savings_percent_last_30 = (
+            (last_30["hours"] / (24.0 * 30)) * 100 if last_30["hours"] > 0 else 0.0
+        )
+
+        return {
+            # Today's breakdown
+            "window_open_hours": round(self._window_seconds / 3600.0, 2),
+            "away_mode_hours": round(self._away_seconds / 3600.0, 2),
+            "weather_hours": round(self._weather_seconds / 3600.0, 2),
+            "total_hours_today": round(total_hours_today, 2),
+            "total_kwh_today": self.native_value,
+            "total_euros_today": self._calculate_monetary_savings(),
+            "savings_percent_today": round(savings_percent_today, 1),
+            # This week
+            "total_kwh_this_week": week["kwh"],
+            "total_euros_this_week": week["euros"],
+            "total_hours_this_week": week["hours"],
+            "savings_percent_week": round(savings_percent_week, 1),
+            # This month
+            "total_kwh_this_month": month["kwh"],
+            "total_euros_this_month": month["euros"],
+            "total_hours_this_month": month["hours"],
+            "savings_percent_month": round(savings_percent_month, 1),
+            # Last 30 days
+            "total_kwh_last_30_days": last_30["kwh"],
+            "total_euros_last_30_days": last_30["euros"],
+            "total_hours_last_30_days": last_30["hours"],
+            "savings_percent_last_30_days": round(savings_percent_last_30, 1),
+            # Configuration
+            "heating_power_kw": self._heating_power_kw,
+            "energy_price_eur_kwh": self._energy_price,
+        }
+
+    def _persist(self) -> None:
+        """Save stats to coordinator storage (debounced)."""
+        self._save_counter += 1
+        # Save every 10 updates (~10 minutes at 60s interval)
+        if self._save_counter >= 10:
+            self._save_counter = 0
+            self.coordinator.savings_stats = {
+                "window_seconds": self._window_seconds,
+                "away_seconds": self._away_seconds,
+                "weather_seconds": self._weather_seconds,
+                "last_date": self._last_date,
+                "daily_history": self._daily_history,
+            }
+            self.coordinator.hass.async_create_task(
+                self.coordinator.async_save_savings_stats()
+            )
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Track savings based on heating decisions."""
+        from homeassistant.util import dt as dt_util
+
+        # Initialize from persisted stats if this is first update
+        if self._last_date is None:
+            stats = self.coordinator.savings_stats
+            self._window_seconds = stats.get("window_seconds", 0.0)
+            self._away_seconds = stats.get("away_seconds", 0.0)
+            self._weather_seconds = stats.get("weather_seconds", 0.0)
+            self._last_date = stats.get("last_date", None)
+            self._daily_history = stats.get("daily_history", {})
+
+        now = dt_util.now()
+        today_str = now.strftime("%Y-%m-%d")
+
+        # Day rollover: archive yesterday, reset counters
+        if self._last_date is not None and self._last_date != today_str:
+            self._daily_history[self._last_date] = {
+                "window_seconds": self._window_seconds,
+                "away_seconds": self._away_seconds,
+                "weather_seconds": self._weather_seconds,
+            }
+            # Prune history older than 31 days
+            from datetime import timedelta as _td
+
+            cutoff = (now - _td(days=31)).strftime("%Y-%m-%d")
+            self._daily_history = {
+                d: s for d, s in self._daily_history.items() if d >= cutoff
+            }
+            self._window_seconds = 0.0
+            self._away_seconds = 0.0
+            self._weather_seconds = 0.0
+            self._last_check = None
+            # Force-save on day rollover
+            self._save_counter = 9
+
+        self._last_date = today_str
+
+        # Track savings
+        data = self.coordinator.data
+        if data is not None:
+            now_ts = now.timestamp()
+
+            if self._last_check is not None:
+                elapsed = now_ts - self._last_check
+                # Only accumulate reasonable intervals (max 5 minutes)
+                if 0 < elapsed <= 300:
+                    # Check what prevented heating
+                    # Window open
+                    if data.window_state.heating_should_stop:
+                        self._window_seconds += elapsed
+                    # Away mode (location-based reduction)
+                    elif (
+                        self.coordinator.hub_coordinator
+                        and self.coordinator.hub_coordinator.should_reduce_heating_for_away()
+                        and not data.heating_active
+                    ):
+                        self._away_seconds += elapsed
+                    # Weather-based (outdoor temp warm enough)
+                    elif (
+                        data.outdoor_temperature is not None
+                        and data.outdoor_temperature > 15.0  # Configurable threshold
+                        and not data.heating_active
+                        and data.target_temperature is not None
+                        and data.current_temperature < data.target_temperature
+                    ):
+                        self._weather_seconds += elapsed
+
+            self._last_check = now_ts
 
         self._persist()
         self.async_write_ha_state()

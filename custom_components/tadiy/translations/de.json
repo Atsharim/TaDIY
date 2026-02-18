@@ -52,7 +52,8 @@
           "humidity_sensor": "Luftfeuchtigkeitssensor",
           "window_sensors": "Fenstersensoren",
           "outdoor_sensor": "Außentemperatursensor",
-          "override_timeout": "Override Timeout",
+          "weather_entity": "Wetter-Entität",
+          "override_timeout": "Überschreibungs-Timeout",
           "hysteresis": "Temperatur Hysterese",
           "use_pid_control": "PID Regelung aktivieren",
           "pid_kp": "PID: Proportionalverstärkung (Kp)",
@@ -71,6 +72,7 @@
           "humidity_sensor": "Luftfeuchtigkeitssensor für diesen Raum (optional).",
           "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
           "outdoor_sensor": "Außentemperatursensor (optional).",
+          "weather_entity": "Wetter-Entität für diesen Raum (optional).",
           "override_timeout": "Wie lange manuelle TRV-Änderungen Zeitpläne überschreiben (leer = Hub-Einstellung verwenden).",
           "hysteresis": "Temperatur-Totzone zur Vermeidung schneller An/Aus-Zyklen.",
           "use_pid_control": "PID-Regler für sanftere Temperaturregelung aktivieren.",
@@ -113,7 +115,7 @@
           "weather_entity": "Wetter-Entität",
           "person_entities": "Personen-Entitäten",
           "location_mode_enabled": "Ortsbasierte Heizung aktivieren (Abwesenheitsmodus)",
-          "global_override_timeout": "Standard Override Timeout",
+          "global_override_timeout": "Standard-Überschreibungs-Timeout",
           "early_start_offset": "Early Start Offset (min)",
           "early_start_max": "Max Early Start Dauer (min)",
           "use_heating_curve": "Heizkurve aktivieren (Wetterausgleich)",
@@ -128,7 +130,9 @@
           "early_start_offset": "Zusätzliche Pufferminuten für früheren Heizstart.",
           "early_start_max": "Maximale Vorheiz-Dauer in Minuten.",
           "heating_curve_slope": "Höherer Wert = stärkere Zieltemperatur-Anpassung bei niedrigen Außentemperaturen.",
-          "use_weather_prediction": "Vorheizen vor Kaltfronten, Heizung reduzieren vor Warmfronten."
+          "use_weather_prediction": "Vorheizen vor Kaltfronten, Heizung reduzieren vor Warmfronten.",
+          "global_window_open_timeout": "Wartezeit bevor die Heizung bei geöffnetem Fenster stoppt.",
+          "global_window_close_timeout": "Abkühlzeit bevor die Heizung nach Fensterschließung wieder startet."
         }
       },
       "init_hub": {
@@ -296,6 +300,9 @@
       "boost_room": {
         "name": "Raum Boost"
       },
+      "clear_override": {
+        "name": "Override löschen"
+      },
       "force_refresh_all": {
         "name": "Alle aktualisieren"
       },
@@ -304,6 +311,9 @@
       },
       "boost_all_rooms": {
         "name": "Alle Räume boosten"
+      },
+      "clear_all_overrides": {
+        "name": "Alle Overrides löschen"
       },
       "clear_schedule": {
         "name": "Zeitplan löschen"

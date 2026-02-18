@@ -286,7 +286,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             new_data[CONF_SHOW_PANEL] = user_input.get(CONF_SHOW_PANEL, True)
 
             # Remove empty optional fields
-            for key in [CONF_WEATHER_ENTITY, CONF_PERSON_ENTITIES]:
+            for key in [CONF_WEATHER_ENTITY, CONF_OUTDOOR_SENSOR, CONF_PERSON_ENTITIES]:
                 value = user_input.get(key)
                 if value in ("", [], None):
                     new_data.pop(key, None)
@@ -347,6 +347,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         current_data = self.config_entry.data
         current_show_panel = current_data.get(CONF_SHOW_PANEL, True)
         current_weather = current_data.get(CONF_WEATHER_ENTITY, "")
+        current_outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR, "")
         current_persons = current_data.get(CONF_PERSON_ENTITIES, [])
         current_location_mode = current_data.get(CONF_LOCATION_MODE_ENABLED, False)
         current_override_timeout = current_data.get(
@@ -390,6 +391,18 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         schema_dict[
             vol.Optional(
+                CONF_OUTDOOR_SENSOR,
+                default=current_outdoor_sensor,
+            )
+        ] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
                 CONF_PERSON_ENTITIES,
                 default=current_persons,
             )
@@ -417,27 +430,27 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 options=[
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEVER,
-                        label="Never (manual changes stay forever)",
+                        label="Nie (manuelle Änderungen bleiben für immer)",
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_1H, label="1 hour"
+                        value=OVERRIDE_TIMEOUT_1H, label="1 Stunde"
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_2H, label="2 hours"
+                        value=OVERRIDE_TIMEOUT_2H, label="2 Stunden"
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_3H, label="3 hours"
+                        value=OVERRIDE_TIMEOUT_3H, label="3 Stunden"
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_4H, label="4 hours"
+                        value=OVERRIDE_TIMEOUT_4H, label="4 Stunden"
                     ),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEXT_BLOCK,
-                        label="Until next schedule block (Recommended)",
+                        label="Bis zum nächsten Zeitplan-Block (Empfohlen)",
                     ),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEXT_DAY,
-                        label="Until next day (midnight)",
+                        label="Bis zum nächsten Tag (Mitternacht)",
                     ),
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,
@@ -703,12 +716,40 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         if user_input is not None:
             new_data = dict(self.config_entry.data)
 
-            # Remove empty optional fields instead of storing "" or []
+            # List of optional entity fields that should be removable
+            optional_entity_fields = [
+                CONF_MAIN_TEMP_SENSOR,
+                CONF_HUMIDITY_SENSOR,
+                CONF_OUTDOOR_SENSOR,
+                CONF_WEATHER_ENTITY,
+            ]
+
+            # Debug logging
+            _LOGGER.debug(
+                "Room config update - user_input keys: %s", list(user_input.keys())
+            )
+            for field in optional_entity_fields:
+                if field in user_input:
+                    _LOGGER.debug(
+                        "Optional field %s in user_input: %s", field, user_input[field]
+                    )
+
+            # Process all user input
             for key, value in user_input.items():
                 if value in ("", [], None, "default"):
+                    # Remove empty values
                     new_data.pop(key, None)
+                    _LOGGER.debug("Removing empty field: %s", key)
                 else:
                     new_data[key] = value
+
+            # Final cleanup: Remove any optional entity fields that are still empty
+            for field in optional_entity_fields:
+                if field in new_data and new_data[field] in ("", [], None):
+                    new_data.pop(field, None)
+                    _LOGGER.debug("Final cleanup - removed field: %s", field)
+
+            _LOGGER.debug("Final new_data keys: %s", list(new_data.keys()))
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
@@ -834,34 +875,42 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        # Add optional fields with conditional defaults
+        # Add optional fields - only set default if there's a value
         main_temp = current_data.get(CONF_MAIN_TEMP_SENSOR)
-        schema_dict[
-            vol.Optional(
-                CONF_MAIN_TEMP_SENSOR,
-                description={"suggested_value": main_temp} if main_temp else None,
+        if main_temp:
+            schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR, default=main_temp)] = (
+                selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="sensor",
+                        device_class="temperature",
+                    )
+                )
             )
-        ] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
+        else:
+            schema_dict[vol.Optional(CONF_MAIN_TEMP_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
             )
-        )
 
         humidity_sensor = current_data.get(CONF_HUMIDITY_SENSOR)
-        schema_dict[
-            vol.Optional(
-                CONF_HUMIDITY_SENSOR,
-                description={"suggested_value": humidity_sensor}
-                if humidity_sensor
-                else None,
+        if humidity_sensor:
+            schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR, default=humidity_sensor)] = (
+                selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="sensor",
+                        device_class="humidity",
+                    )
+                )
             )
-        ] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="humidity",
+        else:
+            schema_dict[vol.Optional(CONF_HUMIDITY_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="humidity",
+                )
             )
-        )
 
         schema_dict[
             vol.Optional(
@@ -876,18 +925,25 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
+        # Outdoor sensor - use TextSelector to allow clearing (EntitySelector doesn't allow deletion)
         schema_dict[
             vol.Optional(
-                CONF_OUTDOOR_SENSOR,
-                description={"suggested_value": outdoor_sensor}
-                if outdoor_sensor
-                else None,
+                CONF_OUTDOOR_SENSOR, default=current_data.get(CONF_OUTDOOR_SENSOR, "")
             )
-        ] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
+        ] = selector.TextSelector(
+            selector.TextSelectorConfig(
+                autocomplete="sensor.temperature",
+            )
+        )
+
+        # Weather entity - use TextSelector to allow clearing (EntitySelector doesn't allow deletion)
+        schema_dict[
+            vol.Optional(
+                CONF_WEATHER_ENTITY, default=current_data.get(CONF_WEATHER_ENTITY, "")
+            )
+        ] = selector.TextSelector(
+            selector.TextSelectorConfig(
+                autocomplete="weather",
             )
         )
 
@@ -901,34 +957,36 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
                 options=[
-                    selector.SelectOptionDict(value="default", label="Use hub setting"),
+                    selector.SelectOptionDict(
+                        value="default", label="Hub-Einstellung verwenden"
+                    ),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEVER,
-                        label="Never (manual changes stay forever)",
+                        label="Nie (manuelle Änderungen bleiben für immer)",
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_1H, label="1 hour"
+                        value=OVERRIDE_TIMEOUT_1H, label="1 Stunde"
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_2H, label="2 hours"
+                        value=OVERRIDE_TIMEOUT_2H, label="2 Stunden"
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_3H, label="3 hours"
+                        value=OVERRIDE_TIMEOUT_3H, label="3 Stunden"
                     ),
                     selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_4H, label="4 hours"
+                        value=OVERRIDE_TIMEOUT_4H, label="4 Stunden"
                     ),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEXT_BLOCK,
-                        label="Until next schedule block",
+                        label="Bis zum nächsten Zeitplan-Block",
                     ),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_NEXT_DAY,
-                        label="Until next day (midnight)",
+                        label="Bis zum nächsten Tag (Mitternacht)",
                     ),
                     selector.SelectOptionDict(
                         value=OVERRIDE_TIMEOUT_ALWAYS,
-                        label="Always use schedule (no manual override)",
+                        label="Immer Zeitplan verwenden (keine manuelle Überschreibung)",
                     ),
                 ],
                 mode=selector.SelectSelectorMode.DROPDOWN,

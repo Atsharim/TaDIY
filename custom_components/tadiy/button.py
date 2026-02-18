@@ -21,6 +21,9 @@ ROOM_BUTTON_TYPES: tuple[ButtonEntityDescription, ...] = (
     ButtonEntityDescription(
         key="reset_learning", name="Reset Learning Data", icon="mdi:brain"
     ),
+    ButtonEntityDescription(
+        key="clear_override", name="Clear Override", icon="mdi:lock-open-variant"
+    ),
 )
 
 HUB_BUTTON_TYPES: tuple[ButtonEntityDescription, ...] = (
@@ -32,6 +35,9 @@ HUB_BUTTON_TYPES: tuple[ButtonEntityDescription, ...] = (
     ),
     ButtonEntityDescription(
         key="boost_all_rooms", name="Boost All Rooms", icon=ICON_BOOST
+    ),
+    ButtonEntityDescription(
+        key="clear_all_overrides", name="Clear All Overrides", icon="mdi:lock-reset"
     ),
 )
 
@@ -94,6 +100,10 @@ class TaDIYHubButton(CoordinatorEntity, ButtonEntity):
             await self.hass.services.async_call(
                 DOMAIN, "boost_all_rooms", {}, blocking=True
             )
+        elif self.entity_description.key == "clear_all_overrides":
+            # Clear all overrides in all rooms
+            self.coordinator._clear_all_room_overrides()
+            _LOGGER.info("Cleared all overrides from all rooms via button press")
 
 
 class TaDIYRoomButton(CoordinatorEntity, ButtonEntity):
@@ -128,3 +138,11 @@ class TaDIYRoomButton(CoordinatorEntity, ButtonEntity):
                         HeatUpModel(room_name=self._room_name)
                     )
                     await self.coordinator.hub_coordinator.async_save_learning_data()
+        elif self.entity_description.key == "clear_override":
+            # Clear all overrides for this room
+            cleared = self.coordinator.override_manager.clear_all_overrides()
+            if cleared > 0:
+                await self.coordinator.async_save_overrides()
+                _LOGGER.info(
+                    "Cleared %d override(s) for room %s", cleared, self._room_name
+                )
