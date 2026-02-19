@@ -743,11 +743,17 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 else:
                     new_data[key] = value
 
-            # Final cleanup: Remove any optional entity fields that are still empty
-            for field in optional_entity_fields:
-                if field in new_data and new_data[field] in ("", [], None):
-                    new_data.pop(field, None)
-                    _LOGGER.debug("Final cleanup - removed field: %s", field)
+            # Handle cleared optional entity fields: when an EntitySelector is
+            # cleared, HA omits the key from user_input entirely. If the key was
+            # in the old data but NOT in user_input, the user cleared it.
+            for field_key in optional_entity_fields:
+                if field_key not in user_input and field_key in new_data:
+                    _LOGGER.debug(
+                        "Removing cleared optional field: %s (was %s)",
+                        field_key,
+                        new_data[field_key],
+                    )
+                    new_data.pop(field_key, None)
 
             _LOGGER.debug("Final new_data keys: %s", list(new_data.keys()))
 
@@ -925,27 +931,41 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        # Outdoor sensor - use TextSelector to allow clearing (EntitySelector doesn't allow deletion)
-        schema_dict[
-            vol.Optional(
-                CONF_OUTDOOR_SENSOR, default=current_data.get(CONF_OUTDOOR_SENSOR, "")
+        # Outdoor sensor (optional - can be cleared by not selecting anything)
+        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
+        if outdoor_sensor:
+            schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default=outdoor_sensor)] = (
+                selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="sensor",
+                        device_class="temperature",
+                    )
+                )
             )
-        ] = selector.TextSelector(
-            selector.TextSelectorConfig(
-                autocomplete="sensor.temperature",
+        else:
+            schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor",
+                    device_class="temperature",
+                )
             )
-        )
 
-        # Weather entity - use TextSelector to allow clearing (EntitySelector doesn't allow deletion)
-        schema_dict[
-            vol.Optional(
-                CONF_WEATHER_ENTITY, default=current_data.get(CONF_WEATHER_ENTITY, "")
+        # Weather entity (optional - can be cleared by not selecting anything)
+        weather_entity = current_data.get(CONF_WEATHER_ENTITY)
+        if weather_entity:
+            schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default=weather_entity)] = (
+                selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="weather",
+                    )
+                )
             )
-        ] = selector.TextSelector(
-            selector.TextSelectorConfig(
-                autocomplete="weather",
+        else:
+            schema_dict[vol.Optional(CONF_WEATHER_ENTITY)] = selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="weather",
+                )
             )
-        )
 
         # Override Timeout (Room level, includes "always" option)
         current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "default")

@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 from .core.logger import TaDIYLogger
 from .const import MIN_TEMP, MAX_TEMP
 from .core.sensor_manager import SensorManager
-from .core.trv_manager import TrvManager
+from .core.trv_manager import MIN_COMMAND_INTERVAL_SECONDS, TrvManager
 from .core.orchestrator import RoomOrchestrator
 
 from .const import (
@@ -1252,9 +1252,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             # Hysteresis is already loaded from room_data in __init__
             return
 
-        # Load hysteresis from storage
+        # Load hysteresis from storage (with same guard as __init__)
         if "hysteresis" in data:
-            hysteresis = data["hysteresis"]
+            hysteresis = max(1.0, data["hysteresis"])
             self.heating_controller.set_hysteresis(hysteresis)
             _LOGGER.debug(
                 "Loaded hysteresis %.2f°C for room %s",
@@ -1616,6 +1616,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         last_commanded = self.trv_manager.get_last_commanded(entity_id)
         if last_commanded and last_commanded.get("temperature") is not None:
             last_sent_temp = last_commanded["temperature"]
+            last_cmd_time = last_commanded.get("timestamp")
+
             # If new temp matches last sent command, it's just the TRV obeying us
             if abs(new_temp - last_sent_temp) < 1.0:
                 _LOGGER.debug(
@@ -1626,6 +1628,40 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # Update known state to prevent future false positives
                 self._last_trv_targets[entity_id] = new_temp
                 return
+
+            # Post-command grace period: TRV firmware may revert our command
+            # within seconds. During this window, ignore changes that move AWAY
+            # from our commanded value - these are firmware reverts, not user input.
+            if last_cmd_time is not None:
+                seconds_since_cmd = (dt_util.utcnow() - last_cmd_time).total_seconds()
+                # Grace period: 2x the command interval (120s default)
+                # Within this window, only accept changes that are clearly
+                # user-initiated (close to a round number, not min_temp/frost)
+                if seconds_since_cmd < MIN_COMMAND_INTERVAL_SECONDS * 2:
+                    profile = self.trv_manager.get_trv_profile(entity_id)
+                    frost_temp = (
+                        self.hub_coordinator.get_frost_protection_temp()
+                        if self.hub_coordinator
+                        else 5.0
+                    )
+                    # TRV firmware reverts typically go to min_temp or frost temp
+                    is_likely_revert = (
+                        abs(new_temp - profile.min_temp) < 1.0
+                        or abs(new_temp - frost_temp) < 1.0
+                        or abs(new_temp - last_sent_temp) > 5.0
+                    )
+                    if is_likely_revert:
+                        _LOGGER.info(
+                            "TRV %s: Ignoring likely firmware revert (%.1f -> %.1f) "
+                            "within %ds of last command (sent %.1f)",
+                            entity_id,
+                            old_temp,
+                            new_temp,
+                            int(seconds_since_cmd),
+                            last_sent_temp,
+                        )
+                        self._last_trv_targets[entity_id] = new_temp
+                        return
 
         # Get hub mode to determine reference value and timeout
         hub_mode = self.get_hub_mode()
