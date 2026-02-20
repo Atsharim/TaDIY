@@ -27,6 +27,15 @@ _LOGGER = logging.getLogger(__package__)
 MIN_COMMAND_INTERVAL_SECONDS: int = 60
 
 
+def _round_to_step(value: float, step: float = 0.5) -> float:
+    """Round a temperature value to the nearest TRV step.
+
+    Prevents phantom commands from floating-point drift after calibration.
+    Inspired by better_thermostat round_by_step pattern.
+    """
+    return round(round(value / step) * step, 1)
+
+
 class TrvManager:
     """Handles communication with TRV devices for a room.
 
@@ -285,6 +294,14 @@ class TrvManager:
                         )
                     )
                     calibration_offset = calibrated - target
+
+                # Clamp calibrated target to TRV hardware limits
+                trv_min = self.coordinator.room_config.trv_min_temp
+                trv_max = self.coordinator.room_config.trv_max_temp
+                calibrated = max(trv_min, min(calibrated, trv_max))
+
+                # Round to TRV step to prevent phantom commands from float drift
+                calibrated = _round_to_step(calibrated)
 
                 # Apply HVAC mode if changed
                 hvac_changed = current_hvac != desired_hvac

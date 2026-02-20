@@ -15,7 +15,9 @@
           "humidity_sensor": "Luftfeuchtigkeitssensor",
           "window_sensors": "Fenstersensoren",
           "outdoor_sensor": "Außentemperatursensor",
-          "weather_entity": "Wetter-Entität"
+          "weather_entity": "Wetter-Entität",
+          "trv_min_temp": "TRV Mindesttemperatur",
+          "trv_max_temp": "TRV Höchsttemperatur"
         },
         "data_description": {
           "room_name": "Eindeutigen Namen für diesen Raum wählen.",
@@ -24,7 +26,9 @@
           "humidity_sensor": "Luftfeuchtigkeitssensor für diesen Raum (optional).",
           "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
           "outdoor_sensor": "Außentemperatursensor für wetterabhängige Steuerung (optional).",
-          "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersage (optional, wird auf Hub-Ebene als Fallback verwendet)."
+          "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersage (optional, wird auf Hub-Ebene als Fallback verwendet).",
+          "trv_min_temp": "Mindesttemperatur die Ihr TRV unterstützt (Standard: 5°C).",
+          "trv_max_temp": "Höchsttemperatur die Ihr TRV unterstützt (Standard: 35°C)."
         }
       }
     },
@@ -63,7 +67,9 @@
           "use_room_coupling": "Raum-Kopplung aktivieren",
           "adjacent_rooms": "Benachbarte Räume",
           "coupling_strength": "Kopplungsstärke",
-          "away_temperature": "Abwesenheitstemperatur"
+          "away_temperature": "Abwesenheitstemperatur",
+          "trv_min_temp": "TRV Mindesttemperatur",
+          "trv_max_temp": "TRV Höchsttemperatur"
         },
         "data_description": {
           "room_name": "Eindeutigen Namen für diesen Raum wählen.",
@@ -83,7 +89,9 @@
           "pid_kp": "Proportional: Reagiert auf aktuelle Abweichung. Höher = schneller aber kann überschwingen.",
           "pid_ki": "Integral: Beseitigt stationäre Abweichung. Höher = schneller aber kann oszillieren.",
           "pid_kd": "Differential: Dämpft Oszillationen. Höher = sanfter aber langsamer.",
-          "away_temperature": "Zieltemperatur wenn niemand zu Hause ist (pro Raum)."
+          "away_temperature": "Zieltemperatur wenn niemand zu Hause ist (pro Raum).",
+          "trv_min_temp": "Mindesttemperatur die Ihr TRV unterstützt (Standard: 5°C).",
+          "trv_max_temp": "Höchsttemperatur die Ihr TRV unterstützt (Standard: 35°C)."
         }
       },
       "add_mode": {

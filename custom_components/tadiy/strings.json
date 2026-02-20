@@ -15,7 +15,9 @@
           "humidity_sensor": "Humidity Sensor",
           "window_sensors": "Window Sensors",
           "outdoor_sensor": "Outdoor Sensor",
-          "weather_entity": "Weather Entity"
+          "weather_entity": "Weather Entity",
+          "trv_min_temp": "TRV Minimum Temperature",
+          "trv_max_temp": "TRV Maximum Temperature"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
@@ -24,7 +26,9 @@
           "humidity_sensor": "Select a humidity sensor for this room (optional).",
           "window_sensors": "Select binary sensors to detect open windows or doors (optional).",
           "outdoor_sensor": "Select an outdoor temperature sensor for weather-aware control (optional).",
-          "weather_entity": "Select a weather entity for outdoor temperature and forecast (optional, used as hub-level fallback)."
+          "weather_entity": "Select a weather entity for outdoor temperature and forecast (optional, used as hub-level fallback).",
+          "trv_min_temp": "Minimum temperature your TRV supports (default: 5°C).",
+          "trv_max_temp": "Maximum temperature your TRV supports (default: 35°C)."
         }
       }
     },
@@ -63,7 +67,9 @@
           "use_room_coupling": "Enable Room Coupling",
           "adjacent_rooms": "Adjacent Rooms",
           "coupling_strength": "Coupling Strength",
-          "away_temperature": "Away Temperature"
+          "away_temperature": "Away Temperature",
+          "trv_min_temp": "TRV Minimum Temperature",
+          "trv_max_temp": "TRV Maximum Temperature"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
@@ -83,7 +89,9 @@
           "pid_kp": "Proportional: Reacts to current error. Higher = faster but may overshoot.",
           "pid_ki": "Integral: Eliminates steady error. Higher = faster but may oscillate.",
           "pid_kd": "Derivative: Dampens oscillations. Higher = smoother but slower.",
-          "away_temperature": "Target temperature when nobody is home (per room)."
+          "away_temperature": "Target temperature when nobody is home (per room).",
+          "trv_min_temp": "Minimum temperature your TRV supports (default: 5°C).",
+          "trv_max_temp": "Maximum temperature your TRV supports (default: 35°C)."
         }
       },
       "add_mode": {

@@ -291,12 +291,6 @@ class TaDIYRoomSensor(CoordinatorEntity, SensorEntity):
         if self.entity_description.attr_fn is not None:
             try:
                 attrs = self.entity_description.attr_fn(self.coordinator.data)
-                _LOGGER.debug(
-                    "Attributes for %s: %s (data: %s)",
-                    self.entity_description.key,
-                    attrs,
-                    "present" if self.coordinator.data else "None",
-                )
                 return attrs if attrs else {}
             except Exception as err:
                 _LOGGER.error(
@@ -847,12 +841,6 @@ class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):
             return {}
         try:
             attrs = _calculate_comfort(
-                data.current_temperature,
-                data.humidity,
-            )
-            _LOGGER.debug(
-                "Room Comfort attributes: %s (temp: %s, humidity: %s)",
-                attrs,
                 data.current_temperature,
                 data.humidity,
             )

@@ -11,6 +11,8 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_HEATING_RATE,
+    DEFAULT_TRV_MAX_TEMP,
+    DEFAULT_TRV_MIN_TEMP,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     MAX_TARGET_TEMP,
@@ -65,6 +67,8 @@ class RoomConfig:
     adjacent_rooms: list[str] = field(default_factory=list)  # Names of adjacent rooms
     coupling_strength: float = 0.5  # Heat coupling factor (0.0-1.0)
     away_temperature: float = DEFAULT_AWAY_TEMPERATURE  # Per-room away mode temperature
+    trv_min_temp: float = DEFAULT_TRV_MIN_TEMP  # TRV hardware minimum temperature
+    trv_max_temp: float = DEFAULT_TRV_MAX_TEMP  # TRV hardware maximum temperature
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -115,6 +119,8 @@ class RoomConfig:
             "adjacent_rooms": self.adjacent_rooms,
             "coupling_strength": self.coupling_strength,
             "away_temperature": self.away_temperature,
+            "trv_min_temp": self.trv_min_temp,
+            "trv_max_temp": self.trv_max_temp,
         }
 
     @classmethod
@@ -155,6 +161,8 @@ class RoomConfig:
             adjacent_rooms=data.get("adjacent_rooms", []),
             coupling_strength=data.get("coupling_strength", 0.5),
             away_temperature=data.get("away_temperature", DEFAULT_AWAY_TEMPERATURE),
+            trv_min_temp=data.get("trv_min_temp", DEFAULT_TRV_MIN_TEMP),
+            trv_max_temp=data.get("trv_max_temp", DEFAULT_TRV_MAX_TEMP),
         )
 
 

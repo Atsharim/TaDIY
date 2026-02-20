@@ -35,8 +35,12 @@ from .const import (
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_LEARN_HEATING_RATE,
     DEFAULT_USE_EARLY_START,
+    DEFAULT_TRV_MAX_TEMP,
+    DEFAULT_TRV_MIN_TEMP,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
+    CONF_TRV_MAX_TEMP,
+    CONF_TRV_MIN_TEMP,
     DOMAIN,
 )
 from .options_flow import TaDIYOptionsFlowHandler
@@ -205,20 +209,42 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
             )
         )
 
-        # Use TextSelector to allow clearing (EntitySelector doesn't allow deletion once set)
-        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default="")] = (
-            selector.TextSelector(
-                selector.TextSelectorConfig(
-                    autocomplete="sensor.temperature",
+        # Outdoor sensor (optional - falls nicht gesetzt, wird Hub-Fallback genutzt)
+        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
+            )
+        )
+
+        # Weather entity (optional - falls nicht gesetzt, wird Hub-Fallback genutzt)
+        schema_dict[vol.Optional(CONF_WEATHER_ENTITY)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="weather",
+            )
+        )
+
+        # TRV Min/Max Temperature (per-room hardware limits)
+        schema_dict[vol.Optional(CONF_TRV_MIN_TEMP, default=DEFAULT_TRV_MIN_TEMP)] = (
+            selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1.0,
+                    max=15.0,
+                    step=0.5,
+                    unit_of_measurement="°C",
+                    mode=selector.NumberSelectorMode.BOX,
                 )
             )
         )
 
-        # Use TextSelector to allow clearing (EntitySelector doesn't allow deletion once set)
-        schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default="")] = (
-            selector.TextSelector(
-                selector.TextSelectorConfig(
-                    autocomplete="weather",
+        schema_dict[vol.Optional(CONF_TRV_MAX_TEMP, default=DEFAULT_TRV_MAX_TEMP)] = (
+            selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=20.0,
+                    max=40.0,
+                    step=0.5,
+                    unit_of_measurement="°C",
+                    mode=selector.NumberSelectorMode.BOX,
                 )
             )
         )

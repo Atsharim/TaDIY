@@ -1564,6 +1564,18 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             remove_listener()
         self._state_listeners.clear()
 
+        # Initialize _last_trv_targets from current TRV state to prevent
+        # false-positive overrides on startup (empty dict -> last_known=None)
+        for trv_id in self.room_config.trv_entity_ids:
+            state = self.hass.states.get(trv_id)
+            if state:
+                temp = state.attributes.get("temperature")
+                if temp is not None:
+                    try:
+                        self._last_trv_targets[trv_id] = float(temp)
+                    except (ValueError, TypeError):
+                        pass
+
         # Set up listener for each TRV
         for trv_id in self.room_config.trv_entity_ids:
             remove_listener = async_track_state_change_event(
@@ -1619,7 +1631,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             last_cmd_time = last_commanded.get("timestamp")
 
             # If new temp matches last sent command, it's just the TRV obeying us
-            if abs(new_temp - last_sent_temp) < 1.0:
+            if abs(new_temp - last_sent_temp) < 2.0:
                 _LOGGER.debug(
                     "TRV %s: State matches last commanded value (%.1f), ignoring as echo",
                     entity_id,
@@ -1666,16 +1678,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # Get hub mode to determine reference value and timeout
         hub_mode = self.get_hub_mode()
 
-        # Determine reference value based on mode
+        # Off mode: no overrides allowed - hub off means off
         if hub_mode == "off":
-            # Off mode: reference is frost protection
-            reference_target = (
-                self.hub_coordinator.get_frost_protection_temp()
-                if self.hub_coordinator
-                else 5.0
-            )
-            override_timeout = "2h"  # 2 hour temporary override in off mode
-        elif hub_mode == "manual":
+            _LOGGER.debug("TRV %s: Hub mode OFF, ignoring manual change", entity_id)
+            self._last_trv_targets[entity_id] = new_temp
+            return
+
+        # Determine reference value based on mode
+        if hub_mode == "manual":
             # Manual mode: reference is last commanded target
             reference_target = self._commanded_target
             override_timeout = OVERRIDE_TIMEOUT_NEVER  # Never expires in manual mode

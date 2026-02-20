@@ -347,6 +347,12 @@ DEFAULT_MAX_TEMP: Final = 30.0
 MIN_TARGET_TEMP: Final = 5.0  # Verwendet in models
 MAX_TARGET_TEMP: Final = 30.0  # Verwendet in models
 
+# TRV temperature limits (user-configurable per room)
+CONF_TRV_MIN_TEMP: Final = "trv_min_temp"
+CONF_TRV_MAX_TEMP: Final = "trv_max_temp"
+DEFAULT_TRV_MIN_TEMP: Final = 5.0
+DEFAULT_TRV_MAX_TEMP: Final = 35.0
+
 # HVAC modes
 HVAC_MODE_OFF: Final = "off"
 HVAC_MODE_HEAT: Final = "heat"

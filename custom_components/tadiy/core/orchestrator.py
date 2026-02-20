@@ -73,6 +73,15 @@ class RoomOrchestrator:
             )
             return frost_protection, True
 
+        # 1b. Hub Mode "Off" - absolute priority (only window is higher)
+        if hub_mode == "off":
+            self.coordinator.debug(
+                "rooms",
+                "Target: Hub mode OFF - enforcing frost protection %.1f°C",
+                frost_protection,
+            )
+            return frost_protection, True
+
         # 2. Away Mode (Hub level away) - gradual temperature reduction
         if (
             self.coordinator.hub_coordinator

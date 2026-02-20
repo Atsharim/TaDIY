@@ -26,6 +26,18 @@ from .const import (
     ATTR_ROOM,
     ATTR_SCHEDULE_TYPE,
     ATTR_TEMPERATURE,
+    CONF_DEBUG_CALIBRATION,
+    CONF_DEBUG_CARDS,
+    CONF_DEBUG_EARLY_START,
+    CONF_DEBUG_HEATING,
+    CONF_DEBUG_HUB,
+    CONF_DEBUG_PANEL,
+    CONF_DEBUG_ROOMS,
+    CONF_DEBUG_SCHEDULE,
+    CONF_DEBUG_SENSORS,
+    CONF_DEBUG_TRV,
+    CONF_DEBUG_UI,
+    CONF_DEBUG_VERBOSE,
     CONF_HUB,
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
@@ -71,6 +83,36 @@ PLATFORMS: list[Platform] = [
 ]
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+_DEBUG_KEYS = [
+    CONF_DEBUG_ROOMS,
+    CONF_DEBUG_HUB,
+    CONF_DEBUG_PANEL,
+    CONF_DEBUG_UI,
+    CONF_DEBUG_CARDS,
+    CONF_DEBUG_TRV,
+    CONF_DEBUG_SENSORS,
+    CONF_DEBUG_SCHEDULE,
+    CONF_DEBUG_VERBOSE,
+    CONF_DEBUG_HEATING,
+    CONF_DEBUG_CALIBRATION,
+    CONF_DEBUG_EARLY_START,
+]
+
+
+def _apply_debug_settings(config_data: dict) -> None:
+    """Apply debug settings from hub config to Python logger level.
+
+    When any hub debug flag is enabled, set the TaDIY logger to DEBUG.
+    When all flags are disabled, set it to WARNING to suppress debug spam.
+    """
+    tadiy_logger = logging.getLogger("custom_components.tadiy")
+    any_debug = any(config_data.get(key, False) for key in _DEBUG_KEYS)
+    if any_debug:
+        tadiy_logger.setLevel(logging.DEBUG)
+    else:
+        tadiy_logger.setLevel(logging.WARNING)
+
 
 SERVICE_RESET_LEARNING_SCHEMA = vol.Schema({vol.Optional(ATTR_ROOM): cv.string})
 SERVICE_BOOST_ALL_SCHEMA = vol.Schema(
@@ -232,6 +274,9 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "type": "hub",
         "entry": entry,
     }
+
+    # Apply debug settings from hub config
+    _apply_debug_settings(entry.data)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))

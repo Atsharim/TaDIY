@@ -53,6 +53,8 @@ from .const import (
     CONF_OUTDOOR_SENSOR,
     CONF_OVERRIDE_TIMEOUT,
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+    CONF_TRV_MAX_TEMP,
+    CONF_TRV_MIN_TEMP,
     CONF_USE_ROOM_COUPLING,
     DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_COUPLING_STRENGTH,
@@ -68,6 +70,8 @@ from .const import (
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
     DEFAULT_USE_HEATING_CURVE,
+    DEFAULT_TRV_MAX_TEMP,
+    DEFAULT_TRV_MIN_TEMP,
     DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
     DEFAULT_USE_ROOM_COUPLING,
@@ -1158,6 +1162,39 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             selector.NumberSelectorConfig(
                 min=10.0,
                 max=25.0,
+                step=0.5,
+                unit_of_measurement="°C",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        # TRV Min/Max Temperature (per-room hardware limits)
+        current_trv_min = current_data.get(CONF_TRV_MIN_TEMP, DEFAULT_TRV_MIN_TEMP)
+        schema_dict[
+            vol.Optional(
+                CONF_TRV_MIN_TEMP,
+                default=current_trv_min,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=1.0,
+                max=15.0,
+                step=0.5,
+                unit_of_measurement="°C",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        current_trv_max = current_data.get(CONF_TRV_MAX_TEMP, DEFAULT_TRV_MAX_TEMP)
+        schema_dict[
+            vol.Optional(
+                CONF_TRV_MAX_TEMP,
+                default=current_trv_max,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=20.0,
+                max=40.0,
                 step=0.5,
                 unit_of_measurement="°C",
                 mode=selector.NumberSelectorMode.BOX,
