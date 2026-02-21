@@ -62,7 +62,9 @@ class OvershootModel:
     _peak_temp_after_target: float | None = None
 
     def start_heating_cycle(self, current_temp: float, target_temp: float) -> None:
-        """Mark start of a heating cycle."""
+        """Mark start of a heating cycle (idempotent — only logs on first call)."""
+        if self._heating_cycle_active:
+            return
         self._heating_cycle_active = True
         self._cycle_start_temp = current_temp
         self._cycle_target = target_temp

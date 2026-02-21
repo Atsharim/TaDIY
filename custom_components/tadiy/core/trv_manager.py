@@ -233,13 +233,41 @@ class TrvManager:
                     # Always stay in "heat" mode, control via temperature only
                     desired_hvac = "heat"
                     if should_heat is False:
-                        # Not heating → set to minimum temp to close valve
-                        target = profile.min_temp
-                        self._debug(
-                            "%s: use_hvac_off disabled, using min_temp %.1f instead of HVAC off",
-                            trv_id,
-                            profile.min_temp,
+                        # Check if calibration is available — if so, keep the
+                        # real target and let the calibration offset naturally
+                        # modulate the valve (room at/above target → offset
+                        # shrinks → TRV closes).  Only fall back to min_temp
+                        # when there's no external sensor to calibrate with.
+                        room_temp_check = self.coordinator.get_current_temperature()
+                        trv_temp_check = None
+                        trv_state = self.hass.states.get(trv_id)
+                        if trv_state:
+                            ct = trv_state.attributes.get("current_temperature")
+                            if ct is not None:
+                                try:
+                                    trv_temp_check = float(ct)
+                                except (ValueError, TypeError):
+                                    pass
+                        has_calibration = (
+                            room_temp_check is not None
+                            and trv_temp_check is not None
+                            and hasattr(self.coordinator, "calibration_manager")
                         )
+                        if has_calibration:
+                            self._debug(
+                                "%s: should_heat=False but calibration active, "
+                                "keeping target %.1f (calibration will modulate valve)",
+                                trv_id,
+                                target,
+                            )
+                        else:
+                            target = profile.min_temp
+                            self._debug(
+                                "%s: use_hvac_off disabled, no calibration, "
+                                "using min_temp %.1f",
+                                trv_id,
+                                profile.min_temp,
+                            )
 
                 # Fallback: if TRV doesn't support the desired HVAC mode,
                 # use temperature-based control instead
