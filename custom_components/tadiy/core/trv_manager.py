@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger(__package__)
 
 # Minimum interval between command batches to the same TRV.
 # Prevents flooding when nothing has actually changed.
-MIN_COMMAND_INTERVAL_SECONDS: int = 60
+MIN_COMMAND_INTERVAL_SECONDS: int = 180
 
 
 def _round_to_step(value: float, step: float = 0.5) -> float:
@@ -276,6 +276,9 @@ class TrvManager:
                 calibrated = target
                 calibration_offset = 0.0
 
+                # Get configured step size
+                temp_step = config.target_temp_step
+
                 # Apply calibration if we have both sensors and calibration_manager
                 if (
                     room_temp
@@ -291,6 +294,7 @@ class TrvManager:
                             max_temp=config.max_temp
                             if hasattr(config, "max_temp")
                             else 30.0,
+                            min_step=temp_step,
                         )
                     )
                     calibration_offset = calibrated - target
@@ -301,7 +305,7 @@ class TrvManager:
                 calibrated = max(trv_min, min(calibrated, trv_max))
 
                 # Round to TRV step to prevent phantom commands from float drift
-                calibrated = _round_to_step(calibrated)
+                calibrated = _round_to_step(calibrated, step=temp_step)
 
                 # Apply HVAC mode if changed
                 hvac_changed = current_hvac != desired_hvac
@@ -320,9 +324,10 @@ class TrvManager:
                         context=self._last_command_context,
                     )
 
-                # Apply temperature if changed
+                # Apply temperature if changed (use configured step as threshold)
                 temp_changed = (
-                    current_temp is None or abs(float(current_temp) - calibrated) > 0.1
+                    current_temp is None
+                    or abs(float(current_temp) - calibrated) >= temp_step
                 )
 
                 if temp_changed:

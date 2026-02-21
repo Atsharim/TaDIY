@@ -24,6 +24,7 @@ from .const import (
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
+    CONF_TARGET_TEMP_STEP,
     CONF_DEBUG_ROOMS,
     CONF_DEBUG_HUB,
     CONF_DEBUG_PANEL,
@@ -66,6 +67,7 @@ from .const import (
     DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
+    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_PID_KD,
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
@@ -80,8 +82,10 @@ from .const import (
     MAX_CUSTOM_MODES,
     MAX_HEATING_CURVE_SLOPE,
     MAX_HYSTERESIS,
+    MAX_TARGET_TEMP_STEP,
     MIN_HEATING_CURVE_SLOPE,
     MIN_HYSTERESIS,
+    MIN_TARGET_TEMP_STEP,
     OVERRIDE_TIMEOUT_1H,
     OVERRIDE_TIMEOUT_2H,
     OVERRIDE_TIMEOUT_3H,
@@ -1028,6 +1032,25 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             selector.NumberSelectorConfig(
                 min=MIN_HYSTERESIS,
                 max=MAX_HYSTERESIS,
+                step=0.1,
+                unit_of_measurement="°C",
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        # Target Temperature Step
+        current_target_temp_step = current_data.get(
+            CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
+        )
+        schema_dict[
+            vol.Optional(
+                CONF_TARGET_TEMP_STEP,
+                default=current_target_temp_step,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_TARGET_TEMP_STEP,
+                max=MAX_TARGET_TEMP_STEP,
                 step=0.1,
                 unit_of_measurement="°C",
                 mode=selector.NumberSelectorMode.BOX,

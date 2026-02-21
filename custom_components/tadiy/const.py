@@ -143,6 +143,10 @@ DEFAULT_HYSTERESIS: Final = 0.5  # °C deadband to prevent rapid cycling
 MIN_HYSTERESIS: Final = 0.1
 MAX_HYSTERESIS: Final = 2.0
 
+# Target temperature step (minimum change before sending TRV command)
+MIN_TARGET_TEMP_STEP: Final = 0.1
+MAX_TARGET_TEMP_STEP: Final = 1.0
+
 # TRV Calibration (automatic by default as per user preference)
 CONF_TRV_CALIBRATION_MODE: Final = "trv_calibration_mode"
 DEFAULT_TRV_CALIBRATION_MODE: Final = "auto"  # auto | manual | disabled

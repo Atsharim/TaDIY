@@ -32,6 +32,7 @@ from .const import (
     CONF_HEATING_CURVE_SLOPE,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
+    CONF_TARGET_TEMP_STEP,
     CONF_LOCATION_MODE_ENABLED,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
@@ -60,6 +61,7 @@ from .const import (
     DEFAULT_HUB_MODE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
+    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_LEARN_HEATING_RATE,
     DEFAULT_PID_KD,
     DEFAULT_PID_KI,
@@ -917,6 +919,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "early_start_max": room_data.get("early_start_max"),  # None = use hub
             "override_timeout": room_data.get("override_timeout"),  # None = use hub
             "hysteresis": room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS),
+            "target_temp_step": room_data.get(
+                CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
+            ),
             "use_pid_control": room_data.get(
                 CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL
             ),

@@ -21,7 +21,7 @@ MIN_TRV_OFFSET = -10.0
 MAX_TRV_OFFSET = 10.0
 
 # Auto-calibration smoothing
-DAMPENING = 0.2  # 20% weight to new measurement (exponential moving average)
+DAMPENING = 0.1  # 10% weight to new measurement (exponential moving average)
 
 
 @dataclass
@@ -35,6 +35,7 @@ class TRVCalibration:
     last_calibrated: datetime | None = None
     last_room_temp: float | None = None  # For auto-calibration tracking
     last_trv_temp: float | None = None
+    last_calibrated_target: float | None = None  # Last returned calibrated target
 
     def apply_calibration(
         self,
@@ -96,6 +97,7 @@ class TRVCalibration:
             ),
             "last_room_temp": self.last_room_temp,
             "last_trv_temp": self.last_trv_temp,
+            "last_calibrated_target": self.last_calibrated_target,
         }
 
     @classmethod
@@ -113,6 +115,7 @@ class TRVCalibration:
             ),
             last_room_temp=data.get("last_room_temp"),
             last_trv_temp=data.get("last_trv_temp"),
+            last_calibrated_target=data.get("last_calibrated_target"),
         )
 
 
@@ -199,15 +202,18 @@ class CalibrationManager:
         room_temp: float | None = None,
         trv_temp: float | None = None,
         max_temp: float = 30.0,
+        min_step: float = 0.5,
     ) -> float:
-        """Get calibrated target for a TRV using offset-based compensation.
+        """Get calibrated target for a TRV using EMA-smoothed offset.
 
         The TRV sensor is typically warmer than the room sensor (closer to
-        radiator).  We compensate with: calibrated = target + (trv - room).
+        radiator).  We compensate with: calibrated = target + smoothed_offset.
 
-        When the room is far below target a gentle proportional boost is
-        added so the TRV opens wider, but the boost is deliberately
-        conservative to avoid overshoot and oscillation.
+        The offset is EMA-smoothed via update_calibration() to prevent
+        oscillation from independent sensor fluctuations.
+
+        A minimum change threshold (min_step) suppresses commands when the
+        calibrated target has not changed significantly.
 
         Args:
             entity_id: TRV entity ID
@@ -215,38 +221,48 @@ class CalibrationManager:
             room_temp: Current room temperature from external sensor
             trv_temp: Current TRV's internal sensor reading
             max_temp: Maximum allowed temperature (clamp limit)
+            min_step: Minimum change to return a new value (from target_temp_step)
 
         Returns:
             Calibrated target temperature for the TRV
         """
         if room_temp is not None and trv_temp is not None:
-            # 1. Base offset compensation (TRV vs. Room sensor difference)
-            base_offset = trv_temp - room_temp
+            # 1. Update EMA-smoothed offset
+            self.update_calibration(entity_id, trv_temp, room_temp)
 
-            # 2. Gentle proportional boost when heating up
-            temp_diff = target_temp - room_temp
-            boost = 0.0
+            cal = self._calibrations[entity_id]
 
-            if temp_diff > 0.5:
-                # Proportional boost capped at +2°C to prevent overshoot.
-                # Factor 0.5: 1°C gap → +0.5°C, 2°C gap → +1°C, ≥4°C → +2°C cap.
-                boost = min(temp_diff * 0.5, 2.0)
-
-            # 3. Calculate and clamp
-            calibrated = min(target_temp + base_offset + boost, max_temp)
+            # 2. Calculate calibrated target using smoothed offset
+            calibrated = min(target_temp + cal.offset, max_temp)
+            calibrated = round(calibrated, 1)
 
             self._debug(
                 "TRV %s: target=%.1f room=%.1f trv=%.1f "
-                "offset=%+.1f boost=+%.1f -> calibrated=%.1f",
+                "smoothed_offset=%+.1f -> calibrated=%.1f",
                 entity_id,
                 target_temp,
                 room_temp,
                 trv_temp,
-                base_offset,
-                boost,
+                cal.offset,
                 calibrated,
             )
-            return round(calibrated, 1)
+
+            # 3. Suppress if change is below minimum step
+            if (
+                cal.last_calibrated_target is not None
+                and abs(calibrated - cal.last_calibrated_target) < min_step
+            ):
+                self._debug(
+                    "TRV %s: Suppressed (delta=%.2f < step=%.1f), keeping %.1f",
+                    entity_id,
+                    abs(calibrated - cal.last_calibrated_target),
+                    min_step,
+                    cal.last_calibrated_target,
+                )
+                return cal.last_calibrated_target
+
+            cal.last_calibrated_target = calibrated
+            return calibrated
 
         return round(target_temp, 1)
 

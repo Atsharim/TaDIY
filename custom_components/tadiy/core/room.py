@@ -49,6 +49,7 @@ class RoomConfig:
         None  # Room override timeout mode, None = use hub setting
     )
     hysteresis: float = 0.3  # Temperature deadband in °C
+    target_temp_step: float = 0.5  # Minimum temp change before TRV command
     use_pid_control: bool = False  # PID controller disabled by default
     pid_kp: float = 0.5  # Proportional gain
     pid_ki: float = 0.01  # Integral gain
@@ -105,6 +106,7 @@ class RoomConfig:
             "early_start_max": self.early_start_max,
             "override_timeout": self.override_timeout,
             "hysteresis": self.hysteresis,
+            "target_temp_step": self.target_temp_step,
             "use_pid_control": self.use_pid_control,
             "pid_kp": self.pid_kp,
             "pid_ki": self.pid_ki,
@@ -147,6 +149,7 @@ class RoomConfig:
             early_start_max=data.get("early_start_max"),
             override_timeout=data.get("override_timeout"),
             hysteresis=data.get("hysteresis", 0.3),
+            target_temp_step=data.get("target_temp_step", 0.5),
             use_pid_control=data.get("use_pid_control", False),
             pid_kp=data.get("pid_kp", 0.5),
             pid_ki=data.get("pid_ki", 0.01),

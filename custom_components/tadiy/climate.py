@@ -122,6 +122,8 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     @property
     def target_temperature_step(self) -> float:
         """Return the supported step of target temperature."""
+        if self.coordinator and hasattr(self.coordinator, "room_config"):
+            return self.coordinator.room_config.target_temp_step
         return 0.5
 
     @property
