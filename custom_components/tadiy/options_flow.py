@@ -389,7 +389,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         schema_dict[
             vol.Optional(
                 CONF_WEATHER_ENTITY,
-                default=current_weather,
+                description={"suggested_value": current_weather},
             )
         ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -400,7 +400,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         schema_dict[
             vol.Optional(
                 CONF_OUTDOOR_SENSOR,
-                default=current_outdoor_sensor,
+                description={"suggested_value": current_outdoor_sensor},
             )
         ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -941,39 +941,30 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Outdoor sensor (optional - can be cleared by not selecting anything)
         outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
-        if outdoor_sensor:
-            schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR, default=outdoor_sensor)] = (
-                selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="sensor",
-                        device_class="temperature",
-                    )
-                )
+        schema_dict[
+            vol.Optional(
+                CONF_OUTDOOR_SENSOR,
+                description={"suggested_value": outdoor_sensor},
             )
-        else:
-            schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR)] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor",
-                    device_class="temperature",
-                )
+        ] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
             )
+        )
 
         # Weather entity (optional - can be cleared by not selecting anything)
         weather_entity = current_data.get(CONF_WEATHER_ENTITY)
-        if weather_entity:
-            schema_dict[vol.Optional(CONF_WEATHER_ENTITY, default=weather_entity)] = (
-                selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="weather",
-                    )
-                )
+        schema_dict[
+            vol.Optional(
+                CONF_WEATHER_ENTITY,
+                description={"suggested_value": weather_entity},
             )
-        else:
-            schema_dict[vol.Optional(CONF_WEATHER_ENTITY)] = selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="weather",
-                )
+        ] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="weather",
             )
+        )
 
         # Override Timeout (Room level, includes "always" option)
         current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "default")

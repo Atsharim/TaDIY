@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, time
 from typing import Any
@@ -17,6 +18,8 @@ from ..const import (
     SCHEDULE_TYPE_WEEKDAY,
     SCHEDULE_TYPE_WEEKEND,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -111,10 +114,6 @@ class DaySchedule:
         self, current_time: time, frost_protection_temp: float
     ) -> float:
         """Get temperature for given time."""
-        import logging
-
-        _LOGGER = logging.getLogger(__name__)
-
         if not self.blocks:
             # No blocks defined - this is a configuration issue
             _LOGGER.warning(
@@ -131,14 +130,6 @@ class DaySchedule:
                 active_block = block
             else:
                 break
-
-        _LOGGER.debug(
-            "DaySchedule.get_temperature: time=%s, active_block=%s->%s, frost_prot=%.1f",
-            current_time.strftime("%H:%M"),
-            active_block.start_time.strftime("%H:%M"),
-            active_block.temperature,
-            frost_protection_temp,
-        )
 
         # Resolve special temperatures
         if isinstance(active_block.temperature, str):
@@ -220,10 +211,6 @@ class RoomSchedule:
         self, mode: str, dt: datetime | None = None
     ) -> DaySchedule | None:
         """Get appropriate schedule for given mode and datetime."""
-        import logging
-
-        _LOGGER = logging.getLogger(__name__)
-
         if dt is None:
             dt = dt_util.now()
 
@@ -236,36 +223,13 @@ class RoomSchedule:
             # Weekday: Monday (0) to Friday (4)
             if dt.weekday() < 5:
                 result = self.normal_weekday
-                _LOGGER.debug(
-                    "RoomSchedule %s: mode=normal, weekday=%d -> normal_weekday (has_blocks=%s)",
-                    self.room_name,
-                    dt.weekday(),
-                    len(result.blocks) if result else 0,
-                )
             else:
                 result = self.normal_weekend
-                _LOGGER.debug(
-                    "RoomSchedule %s: mode=normal, weekday=%d -> normal_weekend (has_blocks=%s)",
-                    self.room_name,
-                    dt.weekday(),
-                    len(result.blocks) if result else 0,
-                )
         elif mode == "homeoffice":
             result = self.homeoffice_daily
-            _LOGGER.debug(
-                "RoomSchedule %s: mode=homeoffice -> homeoffice_daily (has_blocks=%s)",
-                self.room_name,
-                len(result.blocks) if result else 0,
-            )
         else:
             # Custom mode
             result = self.get_custom_schedule(mode)
-            _LOGGER.debug(
-                "RoomSchedule %s: mode=%s -> custom_schedule (has_blocks=%s)",
-                self.room_name,
-                mode,
-                len(result.blocks) if result else 0,
-            )
 
         return result
 

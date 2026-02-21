@@ -1669,8 +1669,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     )
                     if is_likely_revert:
                         _LOGGER.info(
-                            "TRV %s: Ignoring likely firmware revert (%.1f -> %.1f) "
-                            "within %ds of last command (sent %.1f)",
+                            "TRV %s: Firmware revert detected (%.1f -> %.1f) "
+                            "within %ds of last command (sent %.1f), "
+                            "will re-send on next cycle",
                             entity_id,
                             old_temp,
                             new_temp,
@@ -1678,6 +1679,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                             last_sent_temp,
                         )
                         self._last_trv_targets[entity_id] = new_temp
+                        # Force re-send on next update cycle by resetting
+                        # the trv_manager's last applied state
+                        self.trv_manager._last_applied_target = None
                         return
 
         # Get hub mode to determine reference value and timeout
