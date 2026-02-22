@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -98,6 +98,10 @@ from .core.room_coupling import RoomCouplingManager
 from .core.window import WindowState
 
 _LOGGER = logging.getLogger(__name__)
+
+# Firmware revert protection: stop fighting TRVs with their own schedules
+MAX_FIRMWARE_REVERTS: int = 3
+FIRMWARE_REVERT_LOCKOUT_SECONDS: int = 900  # 15 minutes
 
 
 class TaDIYHubCoordinator(DataUpdateCoordinator):
@@ -801,6 +805,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # self._logger is already initialized at the start of __init__
         self._state_listeners = []
         self._last_trv_targets: dict[str, float] = {}
+
+        # Firmware revert tracking per TRV
+        self._firmware_revert_counts: dict[str, int] = {}
+        self._firmware_revert_lockout_until: dict[str, datetime] = {}
+        self._last_hub_mode: str | None = None
 
         # Command and Remember: Store the last target TaDIY commanded
         self._commanded_target: float | None = None
@@ -1644,6 +1653,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 )
                 # Update known state to prevent future false positives
                 self._last_trv_targets[entity_id] = new_temp
+                # TRV accepted our command — reset firmware revert counter
+                if self._firmware_revert_counts.get(entity_id, 0) > 0:
+                    _LOGGER.info(
+                        "TRV %s: Command accepted, resetting revert counter",
+                        entity_id,
+                    )
+                    self._firmware_revert_counts[entity_id] = 0
+                    if self.trv_manager.is_locked_out(entity_id):
+                        self.trv_manager.clear_lockout(entity_id)
+                        self._firmware_revert_lockout_until.pop(entity_id, None)
+                        _LOGGER.info(
+                            "TRV %s: Firmware revert lockout cleared (accepted command)",
+                            entity_id,
+                        )
                 return
 
             # Post-command grace period: TRV firmware may revert our command
@@ -1668,11 +1691,40 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                         or abs(new_temp - last_sent_temp) > 5.0
                     )
                     if is_likely_revert:
+                        revert_count = (
+                            self._firmware_revert_counts.get(entity_id, 0) + 1
+                        )
+                        self._firmware_revert_counts[entity_id] = revert_count
+
+                        if revert_count >= MAX_FIRMWARE_REVERTS:
+                            _LOGGER.warning(
+                                "TRV %s: Firmware revert loop detected "
+                                "(%d consecutive reverts, %.1f -> %.1f). "
+                                "The TRV likely has its own internal schedule "
+                                "overriding TaDIY. Entering lockout for %d min "
+                                "to prevent battery drain. Please disable the "
+                                "TRV's internal schedule.",
+                                entity_id,
+                                revert_count,
+                                old_temp,
+                                new_temp,
+                                FIRMWARE_REVERT_LOCKOUT_SECONDS // 60,
+                            )
+                            self.trv_manager.set_lockout(entity_id, last_sent_temp)
+                            self._firmware_revert_lockout_until[entity_id] = (
+                                dt_util.utcnow()
+                                + timedelta(seconds=FIRMWARE_REVERT_LOCKOUT_SECONDS)
+                            )
+                            self._last_trv_targets[entity_id] = new_temp
+                            # Do NOT reset _last_applied_target — stop the loop
+                            return
+
                         _LOGGER.info(
-                            "TRV %s: Firmware revert detected (%.1f -> %.1f) "
+                            "TRV %s: Firmware revert #%d detected (%.1f -> %.1f) "
                             "within %ds of last command (sent %.1f), "
                             "will re-send on next cycle",
                             entity_id,
+                            revert_count,
                             old_temp,
                             new_temp,
                             int(seconds_since_cmd),
@@ -1771,9 +1823,33 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             return True
         return False
 
+    def _check_firmware_lockout_expiry(self) -> None:
+        """Check and clear expired firmware revert lockouts."""
+        if not self._firmware_revert_lockout_until:
+            return
+
+        now = dt_util.utcnow()
+        expired = [
+            trv_id
+            for trv_id, lockout_until in self._firmware_revert_lockout_until.items()
+            if now >= lockout_until
+        ]
+        for trv_id in expired:
+            del self._firmware_revert_lockout_until[trv_id]
+            self._firmware_revert_counts[trv_id] = 0
+            self.trv_manager.clear_lockout(trv_id)
+            self.trv_manager._last_applied_target = None  # Allow retry
+            _LOGGER.info(
+                "TRV %s: Firmware revert lockout expired, will retry control",
+                trv_id,
+            )
+
     async def _async_update_data(self) -> RoomData:
         """Fetch and process room data using modular managers."""
         self.debug("rooms", "Starting room update cycle")
+
+        # Check firmware revert lockout expiry
+        self._check_firmware_lockout_expiry()
 
         # 1. Gather Sensor Data
         fused_temp = self.sensor_manager.get_fused_temperature()
@@ -1788,6 +1864,19 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # 2. Get Hub and TRV states
         hub_mode = self.get_hub_mode()
         trv_state = self.trv_manager.get_current_trv_state()
+
+        # Clear firmware lockouts on hub mode change
+        if self._last_hub_mode is not None and hub_mode != self._last_hub_mode:
+            if self._firmware_revert_lockout_until:
+                _LOGGER.info(
+                    "Hub mode changed %s -> %s, clearing firmware revert lockouts",
+                    self._last_hub_mode,
+                    hub_mode,
+                )
+                self._firmware_revert_counts.clear()
+                self._firmware_revert_lockout_until.clear()
+                self.trv_manager.clear_all_lockouts()
+        self._last_hub_mode = hub_mode
 
         # 3. Handle Window Logic
         window_state = self._calculate_window_state(window_open)

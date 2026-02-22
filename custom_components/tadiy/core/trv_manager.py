@@ -68,6 +68,10 @@ class TrvManager:
         # Cached TRV profiles (detected once, reused)
         self._trv_profiles: dict[str, TRVProfile] = {}
 
+        # Firmware revert lockout: maps TRV entity_id -> target that caused the loop.
+        # Only that target is suppressed; new targets (schedule/window) go through.
+        self._locked_out_trvs: dict[str, float] = {}
+
     def _debug(self, message: str, *args: Any) -> None:
         """Log TRV debug message using coordinator's logger."""
         if hasattr(self.coordinator, "debug"):
@@ -78,6 +82,36 @@ class TrvManager:
         if context is None or self._last_command_context is None:
             return False
         return context.id == self._last_command_context.id
+
+    def set_lockout(self, trv_id: str, target: float) -> None:
+        """Lock out a TRV from re-sending the same target (firmware revert protection).
+
+        Only the conflicting target is suppressed. If TaDIY calculates a
+        different target (schedule change, window open, mode change), the
+        command goes through despite the lockout.
+        """
+        self._locked_out_trvs[trv_id] = target
+        self._debug(
+            "%s: Firmware revert lockout ACTIVATED for target %.1f", trv_id, target
+        )
+
+    def clear_lockout(self, trv_id: str) -> None:
+        """Clear lockout for a TRV."""
+        self._locked_out_trvs.pop(trv_id, None)
+        self._debug("%s: Firmware revert lockout CLEARED", trv_id)
+
+    def clear_all_lockouts(self) -> None:
+        """Clear all TRV lockouts (e.g., on mode change)."""
+        if self._locked_out_trvs:
+            self._debug(
+                "Clearing all firmware revert lockouts: %s",
+                list(self._locked_out_trvs.keys()),
+            )
+            self._locked_out_trvs.clear()
+
+    def is_locked_out(self, trv_id: str) -> bool:
+        """Check if a TRV is locked out from receiving commands."""
+        return trv_id in self._locked_out_trvs
 
     def get_trv_profile(self, trv_id: str) -> TRVProfile:
         """Get (or auto-detect) the TRV profile for an entity."""
@@ -188,6 +222,27 @@ class TrvManager:
 
         for trv_id in config.trv_entity_ids:
             try:
+                # Firmware revert lockout: only suppress the SAME target
+                # that caused the loop. New targets (window/schedule) go through.
+                if trv_id in self._locked_out_trvs:
+                    lockout_target = self._locked_out_trvs[trv_id]
+                    if abs(target - lockout_target) < 1.0:
+                        self._debug(
+                            "%s: SKIPPED - firmware revert lockout "
+                            "(target %.1f unchanged from lockout %.1f)",
+                            trv_id,
+                            target,
+                            lockout_target,
+                        )
+                        continue
+                    self._debug(
+                        "%s: Lockout active but target changed "
+                        "(%.1f -> %.1f), allowing command",
+                        trv_id,
+                        lockout_target,
+                        target,
+                    )
+
                 state = self.hass.states.get(trv_id)
                 if not state:
                     _LOGGER.warning("TRV %s: State unavailable, skipping", trv_id)
