@@ -53,6 +53,7 @@ class OvershootModel:
     compensation: float = 0.0  # How much to reduce target
     sample_count: int = 0
     last_updated: datetime | None = None
+    _debug_fn: Any = field(default=None, repr=False)
 
     # State tracking for current heating cycle
     _heating_cycle_active: bool = False
@@ -60,6 +61,13 @@ class OvershootModel:
     _cycle_target: float | None = None
     _target_reached_time: datetime | None = None
     _peak_temp_after_target: float | None = None
+
+    def _debug(self, message: str, *args: Any) -> None:
+        """Log via TaDIY debug system if available, else fallback to _LOGGER."""
+        if self._debug_fn:
+            self._debug_fn("heating", message, args)
+        else:
+            _LOGGER.debug(message, *args)
 
     def start_heating_cycle(self, current_temp: float, target_temp: float) -> None:
         """Mark start of a heating cycle (idempotent — only logs on first call)."""
@@ -70,7 +78,7 @@ class OvershootModel:
         self._cycle_target = target_temp
         self._target_reached_time = None
         self._peak_temp_after_target = None
-        _LOGGER.debug(
+        self._debug(
             "Room %s: Overshoot tracking started - target=%.1f, current=%.1f",
             self.room_name,
             target_temp,
@@ -91,7 +99,7 @@ class OvershootModel:
             if self._target_reached_time is None:
                 self._target_reached_time = now
                 self._peak_temp_after_target = current_temp
-                _LOGGER.debug(
+                self._debug(
                     "Room %s: Target reached at %.1f°C", self.room_name, current_temp
                 )
             else:
@@ -118,7 +126,7 @@ class OvershootModel:
                     outdoor_temp=outdoor_temp,
                 )
                 self._add_sample(sample)
-                _LOGGER.info(
+                self._debug(
                     "Room %s: Overshoot recorded - target=%.1f, peak=%.1f, overshoot=%.1f°C",
                     self.room_name,
                     self._cycle_target,
@@ -160,7 +168,7 @@ class OvershootModel:
         if self.sample_count >= MIN_SAMPLES_FOR_COMPENSATION:
             # Compensation is 80% of average overshoot, capped at MAX_COMPENSATION
             self.compensation = min(self.average_overshoot * 0.8, MAX_COMPENSATION)
-            _LOGGER.info(
+            self._debug(
                 "Room %s: Overshoot compensation updated to %.2f°C (avg overshoot: %.2f°C, samples: %d)",
                 self.room_name,
                 self.compensation,
@@ -174,7 +182,7 @@ class OvershootModel:
             return target_temp  # Not enough data yet
 
         compensated = target_temp - self.compensation
-        _LOGGER.debug(
+        self._debug(
             "Room %s: Overshoot compensation - target=%.1f, compensated=%.1f (comp=%.2f)",
             self.room_name,
             target_temp,
@@ -236,14 +244,20 @@ class OvershootModel:
 class OvershootManager:
     """Manages overshoot learning for multiple rooms."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        debug_fn: Any = None,
+    ) -> None:
         """Initialize the manager."""
         self._models: dict[str, OvershootModel] = {}
+        self._debug_fn = debug_fn
 
     def get_or_create_model(self, room_name: str) -> OvershootModel:
         """Get or create an overshoot model for a room."""
         if room_name not in self._models:
-            self._models[room_name] = OvershootModel(room_name=room_name)
+            self._models[room_name] = OvershootModel(
+                room_name=room_name, _debug_fn=self._debug_fn
+            )
         return self._models[room_name]
 
     def get_compensated_target(self, room_name: str, target_temp: float) -> float:
@@ -296,6 +310,9 @@ class OvershootManager:
         """Load models from dictionary."""
         for room_name, model_data in data.items():
             self._models[room_name] = OvershootModel.from_dict(model_data)
+        # Propagate debug callback to loaded models
+        for model in self._models.values():
+            model._debug_fn = self._debug_fn
         _LOGGER.info("Loaded overshoot data for %d rooms", len(self._models))
 
     def reset_room(self, room_name: str) -> None:

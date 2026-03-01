@@ -55,13 +55,22 @@ class RoomOrchestrator:
         Returns:
             (target_temperature, enforce_target)
         """
-        from ..const import DEFAULT_FROST_PROTECTION_TEMP
+        from ..const import DEFAULT_FROST_PROTECTION_TEMP, DEFAULT_OFF_TEMPERATURE
 
         # Get frost protection temp from hub
         frost_protection = DEFAULT_FROST_PROTECTION_TEMP
         if self.coordinator.hub_coordinator:
             frost_protection = (
                 self.coordinator.hub_coordinator.get_frost_protection_temp()
+            )
+
+        # Get off mode temperature from hub config
+        off_temperature = DEFAULT_OFF_TEMPERATURE
+        if self.coordinator.hub_coordinator:
+            off_temperature = getattr(
+                self.coordinator.hub_coordinator,
+                "off_temperature",
+                DEFAULT_OFF_TEMPERATURE,
             )
 
         # 1. Window Open (Highest Priority)
@@ -73,14 +82,14 @@ class RoomOrchestrator:
             )
             return frost_protection, True
 
-        # 1b. Hub Mode "Off" - absolute priority (only window is higher)
+        # 1b. Hub Mode "Off" - TRVs show off_temperature but never heat
         if hub_mode == "off":
             self.coordinator.debug(
                 "rooms",
-                "Target: Hub mode OFF - enforcing frost protection %.1f°C",
-                frost_protection,
+                "Target: Hub mode OFF - enforcing off temperature %.1f°C (no heating)",
+                off_temperature,
             )
-            return frost_protection, True
+            return off_temperature, True
 
         # 2. Away Mode (Hub level away) - gradual temperature reduction
         if (

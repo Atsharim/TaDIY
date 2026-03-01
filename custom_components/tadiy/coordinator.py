@@ -128,6 +128,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         # Hub state
         self.hub_mode = DEFAULT_HUB_MODE
         self.frost_protection_temp = DEFAULT_FROST_PROTECTION_TEMP
+        self.off_temperature = config_data.get("off_temperature", 17.0)
+        self._hub_mode_set_at: datetime | None = None  # Race condition guard
 
         # Custom modes: Start with defaults, load additional from config
         self.custom_modes = list(DEFAULT_HUB_MODES)
@@ -306,21 +308,69 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             }
         )
 
+    def _find_hub_mode_entity_id(self) -> str | None:
+        """Find the hub mode select entity ID dynamically.
+
+        The entity_id depends on the device name (entry.title), so we cannot
+        hardcode it.  We try common patterns first, then fall back to a state
+        machine scan.
+        """
+        if hasattr(self, "_cached_hub_mode_entity_id"):
+            return self._cached_hub_mode_entity_id
+
+        # Try common patterns (device name "TaDIY Hub" + entity name "Mode")
+        candidates = [
+            f"select.{DOMAIN}_hub_mode",
+            f"select.{DOMAIN}_hub_hub_mode",  # Legacy fallback
+        ]
+        for entity_id in candidates:
+            state = self.hass.states.get(entity_id)
+            if state is not None:
+                self._cached_hub_mode_entity_id = entity_id
+                return entity_id
+
+        # Fallback: scan state machine for any select entity containing hub_mode
+        for state in self.hass.states.async_all("select"):
+            if "hub_mode" in state.entity_id and DOMAIN in state.entity_id:
+                self._cached_hub_mode_entity_id = state.entity_id
+                return state.entity_id
+
+        return None
+
     def _update_hub_mode(self) -> None:
-        """Update hub mode from select entity if available."""
-        select_entity_id = "select.{}_hub_mode".format(DOMAIN)
+        """Update hub mode from select entity if available.
+
+        Skips the entity read for 10 seconds after set_hub_mode() to prevent
+        a race condition where the stale entity state overwrites the new mode.
+        """
+        if self._hub_mode_set_at is not None:
+            elapsed = (dt_util.utcnow() - self._hub_mode_set_at).total_seconds()
+            if elapsed < 10:
+                return
+
+        select_entity_id = self._find_hub_mode_entity_id()
+        if not select_entity_id:
+            return
+
         select_state = self.hass.states.get(select_entity_id)
 
         if select_state and select_state.state not in ("unknown", "unavailable"):
             # Accept any mode that's in the custom_modes list (includes manual, off)
             if select_state.state in self.custom_modes:
                 self.hub_mode = select_state.state
-                _LOGGER.debug("Hub mode updated to: %s", self.hub_mode)
 
     def _update_frost_protection_temp(self) -> None:
         """Update frost protection temperature from number entity if available."""
-        number_entity_id = "number.{}_frost_protection".format(DOMAIN)
-        number_state = self.hass.states.get(number_entity_id)
+        # Try common entity_id patterns (device name varies)
+        number_state = None
+        for entity_id in [
+            f"number.{DOMAIN}_hub_frost_protection_temperature",
+            f"number.{DOMAIN}_hub_frost_protection",
+            f"number.{DOMAIN}_frost_protection",
+        ]:
+            number_state = self.hass.states.get(entity_id)
+            if number_state is not None:
+                break
 
         if number_state and number_state.state not in ("unknown", "unavailable"):
             try:
@@ -452,6 +502,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         if mode in self.custom_modes:
             old_mode = self.hub_mode
             self.hub_mode = mode
+            self._hub_mode_set_at = dt_util.utcnow()
             _LOGGER.debug("Hub mode set to: %s", mode)
 
             # Clear all room overrides on mode change
@@ -463,10 +514,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             )
 
     def _clear_all_room_overrides(self) -> None:
-        """Clear overrides in all room coordinators on mode change."""
+        """Clear overrides in all room coordinators on mode change and refresh immediately."""
         from . import DOMAIN
 
         count = 0
+        room_count = 0
         for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
             if isinstance(entry_data, dict) and entry_data.get("type") == "room":
                 coordinator = entry_data.get("coordinator")
@@ -474,11 +526,20 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     cleared = coordinator.override_manager.clear_all_overrides()
                     count += cleared
                     if cleared > 0:
-                        # Persist the cleared state
                         self.hass.async_create_task(coordinator.async_save_overrides())
+                    # Clear TRV firmware lockouts so new mode target goes through
+                    if hasattr(coordinator, "trv_manager"):
+                        coordinator.trv_manager.clear_all_lockouts()
+                        coordinator.trv_manager._last_applied_target = None
+                    # Immediately refresh so TRVs get the new mode target
+                    self.hass.async_create_task(coordinator.async_request_refresh())
+                    room_count += 1
 
-        if count > 0:
-            _LOGGER.info("Mode change: Cleared %d override(s) across all rooms", count)
+        _LOGGER.info(
+            "Mode change: Cleared %d override(s), refreshed %d room(s)",
+            count,
+            room_count,
+        )
 
     def get_custom_modes(self) -> list[str]:
         """Get list of available custom modes."""
@@ -744,7 +805,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # Overshoot Learning Manager
         from .core.overshoot import OvershootManager
 
-        self.overshoot_manager = OvershootManager()
+        self.overshoot_manager = OvershootManager(debug_fn=self._debug_callback)
         self.overshoot_store = Store(
             hass,
             STORAGE_VERSION,
@@ -822,8 +883,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # Cached outdoor temperature for heating curve
         self._cached_outdoor_temp: float | None = None
 
+        # Schedule block change tracking for bounce prevention
+        self._last_scheduled_target: float | None = None
+        self._schedule_change_at: datetime | None = None
+
         # Heating Controller with Hysteresis and optional PID
-        hysteresis = max(1.0, room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS))
+        hysteresis = max(0.3, room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS))
         use_pid = room_data.get(CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL)
 
         if use_pid:
@@ -1268,7 +1333,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
         # Load hysteresis from storage (with same guard as __init__)
         if "hysteresis" in data:
-            hysteresis = max(1.0, data["hysteresis"])
+            hysteresis = max(0.3, data["hysteresis"])
             self.heating_controller.set_hysteresis(hysteresis)
             _LOGGER.debug(
                 "Loaded hysteresis %.2f°C for room %s",
@@ -1484,6 +1549,18 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "rooms", "get_scheduled_target - mode=%s, target=%s", mode, base_target
         )
 
+        # Detect schedule block change for bounce prevention
+        if base_target is not None and base_target != self._last_scheduled_target:
+            if self._last_scheduled_target is not None:
+                self._schedule_change_at = dt_util.utcnow()
+                self.debug(
+                    "rooms",
+                    "Schedule block changed: %.1f -> %.1f",
+                    self._last_scheduled_target,
+                    base_target,
+                )
+            self._last_scheduled_target = base_target
+
         # Apply heating curve if enabled and outdoor temp available
         if (
             base_target is not None
@@ -1493,9 +1570,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             adjusted_target = self.heating_curve.calculate_target(
                 self._cached_outdoor_temp, base_target
             )
-            _LOGGER.debug(
-                "Room %s: Heating curve applied: base=%.1f°C, outdoor=%.1f°C, adjusted=%.1f°C",
-                self.room_config.name,
+            self.debug(
+                "heating",
+                "Heating curve applied: base=%.1f°C, outdoor=%.1f°C, adjusted=%.1f°C",
                 base_target,
                 self._cached_outdoor_temp,
                 adjusted_target,
@@ -1514,9 +1591,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             )
             if abs(weather_adjustment) > 0.1:  # Only apply meaningful adjustments
                 adjusted = base_target + weather_adjustment
-                _LOGGER.debug(
-                    "Room %s: Weather prediction applied: base=%.1f°C, adj=%.1f°C, result=%.1f°C",
-                    self.room_config.name,
+                self.debug(
+                    "heating",
+                    "Weather prediction applied: base=%.1f°C, adj=%.1f°C, result=%.1f°C",
                     base_target,
                     weather_adjustment,
                     adjusted,
@@ -1537,9 +1614,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             )
             if abs(coupling_adjustment) > 0.05:  # Only apply meaningful adjustments
                 adjusted = base_target + coupling_adjustment
-                _LOGGER.debug(
-                    "Room %s: Room coupling applied: base=%.1f°C, adj=%.1f°C, result=%.1f°C",
-                    self.room_config.name,
+                self.debug(
+                    "heating",
+                    "Room coupling applied: base=%.1f°C, adj=%.1f°C, result=%.1f°C",
                     base_target,
                     coupling_adjustment,
                     adjusted,
@@ -1547,27 +1624,47 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 base_target = adjusted
 
         # Apply overshoot compensation if learned (helps On/Off TRVs and old radiators)
+        # Suppress for 5 minutes after a schedule block change to prevent bounce
+        schedule_change_lockout = False
+        if self._schedule_change_at is not None:
+            elapsed = (dt_util.utcnow() - self._schedule_change_at).total_seconds()
+            if elapsed < 300:
+                schedule_change_lockout = True
+
         if base_target is not None and hasattr(self, "overshoot_manager"):
             current_temp = self.get_current_temperature()
             outdoor_temp = self._cached_outdoor_temp
 
             # Update overshoot tracking with current temperature
-            self.overshoot_manager.update_temperature(
-                self.room_config.name, current_temp, outdoor_temp
-            )
-
-            # Get compensated target
-            compensated = self.overshoot_manager.get_compensated_target(
-                self.room_config.name, base_target
-            )
-            if abs(compensated - base_target) > 0.05:
-                _LOGGER.debug(
-                    "Room %s: Overshoot compensation applied: base=%.1f°C, compensated=%.1f°C",
-                    self.room_config.name,
-                    base_target,
-                    compensated,
+            if current_temp is not None:
+                self.overshoot_manager.update_temperature(
+                    self.room_config.name, current_temp, outdoor_temp
                 )
-                base_target = compensated
+
+            # Get compensated target (skip during schedule change lockout)
+            if not schedule_change_lockout:
+                compensated = self.overshoot_manager.get_compensated_target(
+                    self.room_config.name, base_target
+                )
+                if abs(compensated - base_target) > 0.05:
+                    self.debug(
+                        "heating",
+                        "Overshoot compensation applied: base=%.1f°C, compensated=%.1f°C",
+                        base_target,
+                        compensated,
+                    )
+                    base_target = compensated
+            else:
+                self.debug(
+                    "heating",
+                    "Overshoot compensation suppressed (schedule block changed %.0fs ago)",
+                    elapsed,
+                )
+
+        # Round final target to configured step size to prevent fractional values
+        if base_target is not None:
+            step = self.room_config.target_temp_step
+            base_target = round(round(base_target / step) * step, 1)
 
         return base_target
 
@@ -1978,6 +2075,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 target_temp=final_target,
                 hvac_mode="heat",
             )
+
+            # Hub mode "off": never heat, TRV shows off_temperature but HVAC is off
+            if hub_mode == "off":
+                should_heat = False
 
             # Safety overrides
             if overheat:

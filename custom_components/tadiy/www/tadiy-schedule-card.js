@@ -82,7 +82,7 @@ class TaDiyScheduleCard extends HTMLElement {
 
     // Get hub entity to find custom modes - check all select entities
     const hubEntity = Object.values(this._hass.states).find(
-      entity => entity.entity_id === 'select.tadiy_hub_hub_mode' ||
+      entity => entity.entity_id === 'select.tadiy_hub_mode' ||
         (entity.entity_id.startsWith('select.') && entity.entity_id.includes('hub_mode'))
     );
 
@@ -1480,6 +1480,9 @@ class TaDiyScheduleCard extends HTMLElement {
       return;
     }
 
+    // Remember which block was selected before save
+    const savedBlockIndex = this._selectedBlockIndex;
+
     try {
       await this._hass.callService(
         'tadiy',
@@ -1493,8 +1496,22 @@ class TaDiyScheduleCard extends HTMLElement {
       );
 
       this.showError('✓ Schedule saved successfully');
-      this._isEditing = false;
+      // Stay in editing mode so user can continue editing other blocks
+      // Restore the selected block index after re-render
+      this._selectedBlockIndex = savedBlockIndex;
       this.render();
+
+      // Restore scroll position to the saved block
+      if (savedBlockIndex !== null) {
+        requestAnimationFrame(() => {
+          const blockEl = this.shadowRoot.querySelector(
+            `.block-editor[data-index="${savedBlockIndex}"]`
+          );
+          if (blockEl) {
+            blockEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        });
+      }
     } catch (error) {
       console.error('Failed to save schedule:', error);
       this.showError('Failed to save schedule: ' + (error.message || error));

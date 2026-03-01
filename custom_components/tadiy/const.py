@@ -129,6 +129,10 @@ DEFAULT_MAX_HEATING_RATE: Final = 3.0  # °C/h - für Options Flow
 DEFAULT_HEATING_RATE: Final = 1.0
 DEFAULT_FROST_PROTECTION_TEMP: Final = 12.0
 DEFAULT_AWAY_TEMPERATURE: Final = 17.0  # Per-room away mode temperature
+DEFAULT_OFF_TEMPERATURE: Final = (
+    17.0  # Temperature when hub mode is "off" (frost safe, no heating)
+)
+CONF_OFF_TEMPERATURE: Final = "off_temperature"  # Configurable off mode temperature
 
 # Away temperature configuration (Room-level)
 CONF_AWAY_TEMPERATURE: Final = "away_temperature"

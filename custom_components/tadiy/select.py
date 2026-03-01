@@ -20,7 +20,7 @@ _LOGGER = logging.getLogger(__name__)
 HUB_SELECT_TYPES: tuple[SelectEntityDescription, ...] = (
     SelectEntityDescription(
         key="hub_mode",
-        name="Hub Mode",
+        name="Mode",
         icon=ICON_MODE,
     ),
 )
@@ -72,7 +72,7 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
         """Initialize the select."""
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{DOMAIN}_hub_{description.key}"
+        self._attr_unique_id = f"{DOMAIN}_{description.key}"
         self._attr_name = description.name
 
         # Device info
