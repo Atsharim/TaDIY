@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, OptionsFlow
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
@@ -15,69 +14,78 @@ from .const import (
     CONF_ADJACENT_ROOMS,
     CONF_AWAY_TEMPERATURE,
     CONF_COUPLING_STRENGTH,
+    CONF_DEBUG_CALIBRATION,
+    CONF_DEBUG_CARDS,
+    CONF_DEBUG_EARLY_START,
+    CONF_DEBUG_HEATING,
+    CONF_DEBUG_HUB,
+    CONF_DEBUG_PANEL,
+    CONF_DEBUG_ROOMS,
+    CONF_DEBUG_SCHEDULE,
+    CONF_DEBUG_SENSORS,
+    CONF_DEBUG_TRV,
+    CONF_DEBUG_UI,
+    CONF_DEBUG_VERBOSE,
+    CONF_DISABLE_VALVE_PROTECTION,
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
+    CONF_FRIDAY_WEEKEND_START_HOUR,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
-    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
+    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HEATING_CURVE_SLOPE,
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
-    CONF_TARGET_TEMP_STEP,
-    CONF_DEBUG_ROOMS,
-    CONF_DEBUG_HUB,
-    CONF_DEBUG_PANEL,
-    CONF_DEBUG_UI,
-    CONF_DEBUG_CARDS,
-    CONF_DEBUG_TRV,
-    CONF_DEBUG_SENSORS,
-    CONF_DEBUG_SCHEDULE,
-    CONF_DEBUG_HEATING,
-    CONF_DEBUG_CALIBRATION,
-    CONF_DEBUG_EARLY_START,
-    CONF_DEBUG_VERBOSE,
-    CONF_WEATHER_ENTITY,
-    CONF_WINDOW_SENSORS,
-    CONF_SHOW_PANEL,
-    CONF_PERSON_ENTITIES,
     CONF_LOCATION_MODE_ENABLED,
-    CONF_USE_HEATING_CURVE,
-    CONF_USE_WEATHER_PREDICTION,
-    CONF_USE_PID_CONTROL,
-    CONF_PID_KP,
-    CONF_PID_KI,
-    CONF_PID_KD,
-    CONF_ROOM_NAME,
-    CONF_TRV_ENTITIES,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
     CONF_OVERRIDE_TIMEOUT,
-    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+    CONF_PERSON_ENTITIES,
+    CONF_PID_KD,
+    CONF_PID_KI,
+    CONF_PID_KP,
+    CONF_ROOM_NAME,
+    CONF_SHOW_PANEL,
+    CONF_TARGET_TEMP_STEP,
+    CONF_TRV_ENTITIES,
     CONF_TRV_MAX_TEMP,
     CONF_TRV_MIN_TEMP,
+    CONF_USE_HEATING_CURVE,
+    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+    CONF_USE_PID_CONTROL,
     CONF_USE_ROOM_COUPLING,
+    CONF_USE_WEATHER_PREDICTION,
+    CONF_VALVE_PROTECTION_DAY,
+    CONF_VALVE_PROTECTION_HOUR,
+    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+    CONF_WEATHER_ENTITY,
+    CONF_WINDOW_SENSORS,
     DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_COUPLING_STRENGTH,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
+    DEFAULT_FRIDAY_WEEKEND_START_HOUR,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
-    DEFAULT_WINDOW_OPEN_TIMEOUT,
-    DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
-    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_PID_KD,
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
-    DEFAULT_USE_HEATING_CURVE,
+    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_TRV_MAX_TEMP,
     DEFAULT_TRV_MIN_TEMP,
+    DEFAULT_USE_HEATING_CURVE,
     DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
     DEFAULT_USE_ROOM_COUPLING,
     DEFAULT_USE_WEATHER_PREDICTION,
+    DEFAULT_VALVE_PROTECTION_DAY,
+    DEFAULT_VALVE_PROTECTION_HOUR,
+    DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
+    DEFAULT_WINDOW_CLOSE_TIMEOUT,
+    DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     MAX_CUSTOM_MODES,
     MAX_HEATING_CURVE_SLOPE,
@@ -329,6 +337,24 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             if window_close_timeout is not None:
                 new_data[CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT] = int(window_close_timeout)
 
+            # Friday Weekend Start Hour setting (Hub-level)
+            friday_weekend_start_hour = user_input.get(CONF_FRIDAY_WEEKEND_START_HOUR)
+            if friday_weekend_start_hour is not None:
+                new_data[CONF_FRIDAY_WEEKEND_START_HOUR] = int(
+                    friday_weekend_start_hour
+                )
+
+            # Valve Protection schedule settings (Hub-level)
+            vp_day = user_input.get(CONF_VALVE_PROTECTION_DAY)
+            if vp_day is not None:
+                new_data[CONF_VALVE_PROTECTION_DAY] = int(vp_day)
+            vp_hour = user_input.get(CONF_VALVE_PROTECTION_HOUR)
+            if vp_hour is not None:
+                new_data[CONF_VALVE_PROTECTION_HOUR] = int(vp_hour)
+            vp_interval = user_input.get(CONF_VALVE_PROTECTION_INTERVAL_WEEKS)
+            if vp_interval is not None:
+                new_data[CONF_VALVE_PROTECTION_INTERVAL_WEEKS] = int(vp_interval)
+
             # Weather Compensation / Heating Curve settings (Hub-level)
             new_data[CONF_USE_HEATING_CURVE] = user_input.get(
                 CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
@@ -379,6 +405,20 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         current_window_open_timeout = current_data.get(
             CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
         )
+        current_friday_weekend_start_hour = current_data.get(
+            CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+        )
+        current_vp_day = current_data.get(
+            CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
+        )
+        current_vp_hour = current_data.get(
+            CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
+        )
+        current_vp_interval = current_data.get(
+            CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+            DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
+        )
+
         current_window_close_timeout = current_data.get(
             CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
         )
@@ -522,6 +562,65 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 step=30,
                 unit_of_measurement="s",
                 mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_FRIDAY_WEEKEND_START_HOUR,
+                default=current_friday_weekend_start_hour,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=24,
+                step=1,
+                unit_of_measurement="h",
+                mode=selector.NumberSelectorMode.SLIDER,
+            )
+        )
+
+        # Valve Protection (Anti-Calcification) scheduling
+        schema_dict[
+            vol.Optional(
+                CONF_VALVE_PROTECTION_DAY,
+                default=str(current_vp_day) if current_vp_day is not None else "0",
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=["0", "1", "2", "3", "4", "5", "6"],
+                translation_key="valve_protection_day",
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_VALVE_PROTECTION_HOUR,
+                default=current_vp_hour,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=23,
+                step=1,
+                unit_of_measurement="h",
+                mode=selector.NumberSelectorMode.SLIDER,
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+                default=str(current_vp_interval)
+                if current_vp_interval is not None
+                else "2",
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=["1", "2", "3", "4"],
+                translation_key="valve_protection_interval_weeks",
+                mode=selector.SelectSelectorMode.DROPDOWN,
             )
         )
 
@@ -791,9 +890,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     # Update PID settings if changed
                     if CONF_USE_PID_CONTROL in user_input:
                         from .core.control import (
+                            HeatingController,
                             PIDConfig,
                             PIDHeatingController,
-                            HeatingController,
                         )
 
                         use_pid = user_input[CONF_USE_PID_CONTROL]
@@ -1214,6 +1313,15 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 mode=selector.NumberSelectorMode.BOX,
             )
         )
+
+        # Disable Valve Protection (Room level override)
+        current_disable_vp = current_data.get(CONF_DISABLE_VALVE_PROTECTION, False)
+        schema_dict[
+            vol.Optional(
+                CONF_DISABLE_VALVE_PROTECTION,
+                default=current_disable_vp,
+            )
+        ] = selector.BooleanSelector()
 
         return self.async_show_form(
             step_id="room_config",

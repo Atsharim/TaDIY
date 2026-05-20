@@ -1,6 +1,7 @@
 """Number platform for TaDIY integration."""
 
 from __future__ import annotations
+
 import logging
 
 from homeassistant.components.number import (
@@ -16,14 +17,14 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     DOMAIN,
-    MIN_FROST_PROTECTION,
-    MAX_FROST_PROTECTION,
-    MIN_BOOST_TEMP,
-    MAX_BOOST_TEMP,
-    MIN_BOOST_DURATION,
-    MAX_BOOST_DURATION,
-    ICON_FROST,
     ICON_BOOST,
+    ICON_FROST,
+    MAX_BOOST_DURATION,
+    MAX_BOOST_TEMP,
+    MAX_FROST_PROTECTION,
+    MIN_BOOST_DURATION,
+    MIN_BOOST_TEMP,
+    MIN_FROST_PROTECTION,
 )
 from .core.device_helpers import get_device_info
 

@@ -142,9 +142,15 @@ class RoomOrchestrator:
                     active_override_target,
                 )
                 return active_override_target, True
-            # Otherwise, don't enforce - let TRV keep its current setting
-            self.coordinator.debug("rooms", "Target: Manual mode - no enforcement")
-            return None, False
+            # Otherwise, hold last commanded temperature as baseline so TRVs don't drift
+            # Fall back to scheduled target if no prior command, then 20°C
+            baseline = self.coordinator._commanded_target or scheduled_target or 20.0
+            self.coordinator.debug(
+                "rooms",
+                "Target: Manual mode - holding baseline %.1f°C (no active override)",
+                baseline,
+            )
+            return baseline, True
 
         # 5. Active Override (user set a different temperature than schedule)
         if active_override_target is not None:

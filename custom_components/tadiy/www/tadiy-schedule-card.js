@@ -18,6 +18,7 @@ class TaDiyScheduleCard extends HTMLElement {
     this._renderDebounce = null; // Debounce timer for rendering
     this._modeExpanded = false; // Track if mode is expanded to show timeline
     this._hasOpenDropdown = false; // Track if any dropdown is open
+    this._isDraggingOrResizing = false; // Track if user is actively dragging or resizing
   }
 
   setConfig(config) {
@@ -55,7 +56,7 @@ class TaDiyScheduleCard extends HTMLElement {
     }
 
     // Don't re-render while user is editing temperature (prevents spinner reset)
-    if (this._isEditingTemperature || this._hasOpenDropdown) {
+    if (this._isEditingTemperature || this._hasOpenDropdown || this._isDraggingOrResizing) {
       return;
     }
 
@@ -1150,10 +1151,12 @@ class TaDiyScheduleCard extends HTMLElement {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('blockIndex', index);
         block.classList.add('dragging');
+        this._isDraggingOrResizing = true;
       });
 
       block.addEventListener('dragend', () => {
         block.classList.remove('dragging');
+        this._isDraggingOrResizing = false;
       });
 
       block.addEventListener('dragover', (e) => {
@@ -1181,6 +1184,7 @@ class TaDiyScheduleCard extends HTMLElement {
         handle.addEventListener('mousedown', (e) => {
           e.preventDefault();
           e.stopPropagation();
+          this._isDraggingOrResizing = true;
 
           const index = parseInt(block.dataset.blockIndex);
           const handleType = handle.dataset.handle; // 'left' or 'right'
@@ -1278,6 +1282,7 @@ class TaDiyScheduleCard extends HTMLElement {
           const onMouseUp = () => {
             document.removeEventListener('mousemove', onMouseMove);
             document.removeEventListener('mouseup', onMouseUp);
+            this._isDraggingOrResizing = false;
             // Full render after resize is complete to update everything
             this.render();
           };

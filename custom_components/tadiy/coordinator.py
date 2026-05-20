@@ -7,20 +7,18 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback, Event
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .core.logger import TaDIYLogger
-from .const import MIN_TEMP, MAX_TEMP
-from .core.sensor_manager import SensorManager
-from .core.trv_manager import MIN_COMMAND_INTERVAL_SECONDS, TrvManager
-from .core.orchestrator import RoomOrchestrator
-
 from .const import (
+    CONF_ADJACENT_ROOMS,
+    CONF_COUPLING_STRENGTH,
     CONF_CUSTOM_MODES,
+    CONF_DISABLE_VALVE_PROTECTION,
+    CONF_FRIDAY_WEEKEND_START_HOUR,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_EARLY_START_MAX,
     CONF_GLOBAL_EARLY_START_OFFSET,
@@ -32,7 +30,6 @@ from .const import (
     CONF_HEATING_CURVE_SLOPE,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
-    CONF_TARGET_TEMP_STEP,
     CONF_LOCATION_MODE_ENABLED,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
@@ -41,43 +38,51 @@ from .const import (
     CONF_PID_KI,
     CONF_PID_KP,
     CONF_ROOM_NAME,
+    CONF_TARGET_TEMP_STEP,
     CONF_TRV_ENTITIES,
+    CONF_TRV_HVAC_MODES,
     CONF_USE_HEATING_CURVE,
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
-    CONF_TRV_HVAC_MODES,
     CONF_USE_PID_CONTROL,
-    CONF_USE_WEATHER_PREDICTION,
-    CONF_ADJACENT_ROOMS,
     CONF_USE_ROOM_COUPLING,
-    CONF_COUPLING_STRENGTH,
+    CONF_USE_WEATHER_PREDICTION,
+    CONF_VALVE_PROTECTION_DAY,
+    CONF_VALVE_PROTECTION_HOUR,
+    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
+    DEFAULT_COUPLING_STRENGTH,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
+    DEFAULT_FRIDAY_WEEKEND_START_HOUR,
     DEFAULT_FROST_PROTECTION_TEMP,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HUB_MODE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
-    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_LEARN_HEATING_RATE,
     DEFAULT_PID_KD,
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
+    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_USE_EARLY_START,
     DEFAULT_USE_HEATING_CURVE,
     DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
-    DEFAULT_USE_WEATHER_PREDICTION,
     DEFAULT_USE_ROOM_COUPLING,
-    DEFAULT_COUPLING_STRENGTH,
+    DEFAULT_USE_WEATHER_PREDICTION,
+    DEFAULT_VALVE_PROTECTION_DAY,
+    DEFAULT_VALVE_PROTECTION_HOUR,
+    DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     HUB_UPDATE_INTERVAL,
     MAX_CUSTOM_MODES,
+    MAX_TEMP,
+    MIN_TEMP,
     OVERRIDE_TIMEOUT_ALWAYS,
     OVERRIDE_TIMEOUT_NEVER,
     ROOM_UPDATE_INTERVAL,
@@ -90,12 +95,16 @@ from .core.control import HeatingController, PIDConfig, PIDHeatingController
 from .core.early_start import HeatUpModel
 from .core.heating_curve import HeatingCurve, HeatingCurveConfig
 from .core.location import LocationManager
+from .core.logger import TaDIYLogger
+from .core.orchestrator import RoomOrchestrator
 from .core.override import OverrideManager
 from .core.room import RoomConfig, RoomData
-from .core.schedule import ScheduleEngine
-from .core.weather_predictor import WeatherPredictor
 from .core.room_coupling import RoomCouplingManager
-from .core.window import WindowState
+from .core.schedule import ScheduleEngine
+from .core.sensor_manager import SensorManager
+from .core.trv_manager import MIN_COMMAND_INTERVAL_SECONDS, TrvManager
+from .core.weather_predictor import WeatherPredictor
+from .core.window import WindowDetector, WindowState
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -163,6 +172,19 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             ),
             CONF_GLOBAL_OVERRIDE_TIMEOUT: config_data.get(
                 CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
+            ),
+            CONF_FRIDAY_WEEKEND_START_HOUR: config_data.get(
+                CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+            ),
+            CONF_VALVE_PROTECTION_DAY: config_data.get(
+                CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
+            ),
+            CONF_VALVE_PROTECTION_HOUR: config_data.get(
+                CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
+            ),
+            CONF_VALVE_PROTECTION_INTERVAL_WEEKS: config_data.get(
+                CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+                DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
             ),
         }
 
@@ -304,6 +326,19 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 ),
                 CONF_GLOBAL_OVERRIDE_TIMEOUT: self.config_data.get(
                     CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
+                ),
+                CONF_FRIDAY_WEEKEND_START_HOUR: self.config_data.get(
+                    CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+                ),
+                CONF_VALVE_PROTECTION_DAY: self.config_data.get(
+                    CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
+                ),
+                CONF_VALVE_PROTECTION_HOUR: self.config_data.get(
+                    CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
+                ),
+                CONF_VALVE_PROTECTION_INTERVAL_WEEKS: self.config_data.get(
+                    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+                    DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
                 ),
             }
         )
@@ -746,14 +781,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         """Initialize Room Coordinator."""
         self.entry_id = entry_id
         self.hass = hass
-        self.hub_coordinator = hub_coordinator
-
-        # Initialize Logger (pass self so it can dynamically access hub config)
-        self._logger = TaDIYLogger(self)
+        self._hub_coordinator = hub_coordinator
 
         # Transform config flow data to RoomConfig format
         room_config_data = self._transform_config_data(room_data)
         self.room_config = RoomConfig.from_dict(room_config_data)
+
+        # Window detector for timeout calculations
+        self.window_detector = WindowDetector(
+            open_timeout_seconds=self.room_config.window_open_timeout,
+            close_timeout_seconds=self.room_config.window_close_timeout,
+        )
+
+        # Initialize Logger (pass self so it can dynamically access hub config)
+        self._logger = TaDIYLogger(self)
 
         self.current_room_data: RoomData | None = None
         self._heat_model = HeatUpModel(room_name=self.room_config.name)
@@ -962,6 +1003,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 coupling_strength=self.room_config.coupling_strength,
             )
 
+    @property
+    def hub_coordinator(self) -> TaDIYHubCoordinator | None:
+        """Get the active hub coordinator dynamically from hass data."""
+        if hasattr(self, "hass") and DOMAIN in self.hass.data:
+            return self.hass.data[DOMAIN].get("hub_coordinator")
+        return getattr(self, "_hub_coordinator", None)
+
     def debug(self, category: str, message: str, *args: Any) -> None:
         """Log debug message if category enabled."""
         self._logger.debug(category, message, *args)
@@ -1025,6 +1073,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "coupling_strength": room_data.get(
                 CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH
             ),
+            "disable_valve_protection": room_data.get(
+                CONF_DISABLE_VALVE_PROTECTION, False
+            ),
         }
 
     async def async_load_schedules(self) -> None:
@@ -1057,13 +1108,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     async def _create_default_schedule(self) -> None:
         """Create and save a default schedule for the room."""
-        from .core.schedule_model import DaySchedule, RoomSchedule, ScheduleBlock
+        from datetime import time
+
         from .const import (
+            SCHEDULE_TYPE_DAILY,
             SCHEDULE_TYPE_WEEKDAY,
             SCHEDULE_TYPE_WEEKEND,
-            SCHEDULE_TYPE_DAILY,
         )
-        from datetime import time
+        from .core.schedule_model import DaySchedule, RoomSchedule, ScheduleBlock
 
         # Default weekday schedule: 00:00-06:00 at 18°C, 06:00-22:00 at 21°C, 22:00-24:00 at 18°C
         weekday_blocks = [
@@ -1291,6 +1343,48 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         except Exception as err:
             _LOGGER.error(
                 "Failed to save heating stats for %s: %s",
+                self.room_config.name,
+                err,
+            )
+
+    async def async_load_valve_protection(self) -> None:
+        """Load valve protection state from storage."""
+        from .core.valve_protection import ValveProtectionState
+
+        data = await self.valve_protection_store.async_load()
+        if not data:
+            _LOGGER.info(
+                "No valve protection data found for room: %s (using defaults)",
+                self.room_config.name,
+            )
+            return
+
+        try:
+            self.valve_protection.state = ValveProtectionState.from_dict(data)
+            self.valve_protection._compute_next_cycle()
+            _LOGGER.info(
+                "Loaded valve protection state for room %s: last_cycle=%s, cycling_active=%s, cycle_phase=%s",
+                self.room_config.name,
+                self.valve_protection.state.last_cycle,
+                self.valve_protection.state.cycling_active,
+                self.valve_protection.state.cycle_phase,
+            )
+        except (ValueError, KeyError) as err:
+            _LOGGER.warning(
+                "Failed to load valve protection state for %s: %s",
+                self.room_config.name,
+                err,
+            )
+
+    async def async_save_valve_protection(self) -> None:
+        """Save valve protection state to storage."""
+        try:
+            data = self.valve_protection.to_dict()
+            await self.valve_protection_store.async_save(data)
+            _LOGGER.debug("Saved valve protection state for %s", self.room_config.name)
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to save valve protection state for %s: %s",
                 self.room_config.name,
                 err,
             )
@@ -1541,8 +1635,17 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
         mode = self.get_hub_mode()
 
+        # Read friday_weekend_start_hour from hub global settings (default: 24 = disabled)
+        friday_weekend_start_hour = DEFAULT_FRIDAY_WEEKEND_START_HOUR
+        if self.hub_coordinator:
+            friday_weekend_start_hour = self.hub_coordinator.global_settings.get(
+                CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+            )
+
         base_target = self.schedule_engine.get_target_temperature(
-            self.room_config.name, mode
+            self.room_config.name,
+            mode,
+            friday_weekend_start_hour=friday_weekend_start_hour,
         )
 
         self.debug(
@@ -1883,12 +1986,22 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 # Get next schedule block time for timeout calculation (only relevant for schedule mode)
                 next_block_time = None
                 if hub_mode not in ("manual", "off"):
+                    friday_weekend_start_hour = DEFAULT_FRIDAY_WEEKEND_START_HOUR
+                    if self.hub_coordinator:
+                        friday_weekend_start_hour = (
+                            self.hub_coordinator.global_settings.get(
+                                CONF_FRIDAY_WEEKEND_START_HOUR,
+                                DEFAULT_FRIDAY_WEEKEND_START_HOUR,
+                            )
+                        )
                     next_change = self.schedule_engine.get_next_schedule_change(
-                        self.room_config.name, hub_mode
+                        self.room_config.name,
+                        hub_mode,
+                        friday_weekend_start_hour=friday_weekend_start_hour,
                     )
                     next_block_time = next_change[0] if next_change else None
 
-                # Create override record
+                # Create override record for the triggering TRV
                 _LOGGER.info(
                     "TRV %s: Creating override in %s mode (reference=%.1f, override=%.1f, timeout=%s)",
                     entity_id,
@@ -1904,6 +2017,26 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     timeout_mode=override_timeout,
                     next_block_time=next_block_time,
                 )
+
+                # Sync override to all other TRVs in the same room
+                # so they all hold the same temperature setpoint
+                other_trvs = [
+                    tid for tid in self.room_config.trv_entity_ids if tid != entity_id
+                ]
+                for other_trv in other_trvs:
+                    self.override_manager.create_override(
+                        entity_id=other_trv,
+                        scheduled_temp=reference_target,
+                        override_temp=new_temp,
+                        timeout_mode=override_timeout,
+                        next_block_time=next_block_time,
+                    )
+                    _LOGGER.debug(
+                        "TRV %s: Syncing override %.1f°C from %s",
+                        other_trv,
+                        new_temp,
+                        entity_id,
+                    )
 
                 # Save overrides to storage
                 self.hass.async_create_task(self.async_save_overrides())
@@ -2041,20 +2174,62 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             enforce_target = True
             final_target = max(final_target or 10.0, 10.0)
 
-        # 5c. Valve protection cycling (runs once a week)
-        if self.valve_protection.should_cycle_now():
+        # 5c. Valve protection cycling (configurable day/time/interval, per-room disable)
+        valve_cycling_active = False
+        prev_cycling_active = self.valve_protection.state.cycling_active
+        prev_phase = self.valve_protection.state.cycle_phase
+
+        # Sync schedule from hub global settings so config changes take effect live
+        if self.hub_coordinator:
+            from datetime import time as dt_time
+
+            vp_day = self.hub_coordinator.global_settings.get(
+                CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
+            )
+            vp_hour = self.hub_coordinator.global_settings.get(
+                CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
+            )
+            vp_interval = self.hub_coordinator.global_settings.get(
+                CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+                DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
+            )
+            self.valve_protection.update_schedule(
+                cycle_day=vp_day,
+                cycle_time=dt_time(vp_hour, 0),
+                cycle_interval_weeks=vp_interval,
+            )
+
+        # Per-room opt-out (e.g. bedroom should not cycle at night)
+        room_valve_protection_disabled = self.room_config.disable_valve_protection
+
+        if (
+            not room_valve_protection_disabled
+            and self.valve_protection.should_cycle_now()
+        ):
             self.valve_protection.start_cycle()
-        if self.valve_protection.state.cycling_active:
+
+        if (
+            not room_valve_protection_disabled
+            and self.valve_protection.state.cycling_active
+        ):
             phase, cycle_temp = self.valve_protection.update_cycle()
             if cycle_temp is not None:
-                # Override target during valve exercise
+                final_target = cycle_temp
+                enforce_target = True
+                valve_cycling_active = True
                 self.debug(
                     "rooms",
-                    "Valve protection: phase=%s, temp=%.0f",
+                    "Valve protection active: phase=%s, temp=%.1f",
                     phase,
                     cycle_temp,
                 )
-                await self.trv_manager.apply_target(cycle_temp, should_heat=True)
+
+        # Save state if valve protection state changed
+        if (
+            self.valve_protection.state.cycling_active != prev_cycling_active
+            or self.valve_protection.state.cycle_phase != prev_phase
+        ):
+            await self.async_save_valve_protection()
 
         # 6. Apply Target if needed and store commanded target
         if enforce_target and final_target is not None:
@@ -2099,12 +2274,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             self.safety_manager.on_trv_command_sent(fused_temp)
 
             # Overshoot learning
-            if should_heat and fused_temp is not None:
-                self.overshoot_manager.start_heating_cycle(
-                    self.room_config.name, fused_temp, final_target
-                )
-            elif not should_heat:
-                self.overshoot_manager.end_heating_cycle(self.room_config.name)
+            if not valve_cycling_active:
+                if should_heat and fused_temp is not None:
+                    self.overshoot_manager.start_heating_cycle(
+                        self.room_config.name, fused_temp, final_target
+                    )
+                elif not should_heat:
+                    self.overshoot_manager.end_heating_cycle(self.room_config.name)
 
             self._commanded_target = final_target
             self._commanded_hvac_mode = "heat" if should_heat else "off"
@@ -2196,20 +2372,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     def _calculate_window_state(self, window_open: bool) -> WindowState:
         """Calculate current window state."""
-        if not window_open:
-            return WindowState(
-                is_open=False,
-                heating_should_stop=False,
-                reason="window_closed",
-            )
-
-        return WindowState(
-            is_open=True,
-            heating_should_stop=True,
-            reason="window_open_heating_disabled",
-            timeout_active=True,
+        raw_state = WindowState(
+            is_open=window_open,
+            reason="window_open_heating_disabled" if window_open else "window_closed",
             last_change=dt_util.utcnow(),
         )
+        return self.window_detector.update(raw_state)
 
     async def async_shutdown(self) -> None:
         """Shutdown the coordinator and cleanup."""

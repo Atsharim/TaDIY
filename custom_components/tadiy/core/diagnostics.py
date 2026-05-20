@@ -7,9 +7,9 @@ Phase 4: Detects hardware failures and anomalous behavior.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
 from typing import Any
 
 from homeassistant.util import dt as dt_util

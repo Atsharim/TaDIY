@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import logging
 from typing import Any
 
 from homeassistant.util import dt as dt_util
@@ -12,8 +12,8 @@ from homeassistant.util import dt as dt_util
 from ..const import (
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
-    MIN_WINDOW_TIMEOUT,
     MAX_WINDOW_TIMEOUT,
+    MIN_WINDOW_TIMEOUT,
 )
 
 _LOGGER = logging.getLogger(__name__)

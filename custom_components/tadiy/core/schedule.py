@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import logging
-from typing import Callable, Any
+from datetime import datetime
+from typing import Any, Callable
 
 from homeassistant.util import dt as dt_util
 
-from ..const import (
-    DEFAULT_FROST_PROTECTION_TEMP,
-    MODE_MANUAL,
-    MODE_OFF,
-)
+from ..const import DEFAULT_FROST_PROTECTION_TEMP, MODE_MANUAL, MODE_OFF
 from .schedule_model import RoomSchedule
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,6 +61,7 @@ class ScheduleEngine:
         room_name: str,
         mode: str,
         dt: datetime | None = None,
+        friday_weekend_start_hour: int = 24,
     ) -> float | None:
         """
         Get target temperature for room based on current mode and time.
@@ -73,6 +70,7 @@ class ScheduleEngine:
             room_name: Name of the room
             mode: Current hub mode (normal|homeoffice|manual|off)
             dt: Datetime to check (defaults to now)
+            friday_weekend_start_hour: Hour on Friday to switch to weekend schedule
 
         Returns:
             Target temperature in C, or None if manual mode or no schedule
@@ -99,15 +97,21 @@ class ScheduleEngine:
             self._debug("No schedule found for room")
             return None
 
-        is_weekday = dt.weekday() < 5
+        # Calculate weekday/weekend dynamically considering early Friday transition
+        is_friday_weekend = dt.weekday() == 4 and dt.hour >= friday_weekend_start_hour
+        is_weekday = dt.weekday() < 5 and not is_friday_weekend
         current_time = dt.time()
 
-        day_schedule = room_schedule.get_schedule_for_mode(mode, dt)
+        day_schedule = room_schedule.get_schedule_for_mode(
+            mode, dt, friday_weekend_start_hour
+        )
         schedule_source = mode
 
         if not day_schedule:
             # Custom mode without own schedule: Fall back to normal schedule
-            day_schedule = room_schedule.get_schedule_for_mode("normal", dt)
+            day_schedule = room_schedule.get_schedule_for_mode(
+                "normal", dt, friday_weekend_start_hour
+            )
             schedule_source = "normal (fallback)"
             if not day_schedule:
                 self._debug("No schedule for mode %s or normal fallback", mode)
@@ -154,6 +158,7 @@ class ScheduleEngine:
         room_name: str,
         mode: str,
         dt: datetime | None = None,
+        friday_weekend_start_hour: int = 24,
     ) -> tuple[datetime, float] | None:
         """
         Get next scheduled temperature change.
@@ -162,6 +167,7 @@ class ScheduleEngine:
             room_name: Name of the room
             mode: Current hub mode
             dt: Datetime to check from (defaults to now)
+            friday_weekend_start_hour: Hour on Friday to switch to weekend schedule
 
         Returns:
             Tuple of (next_change_datetime, target_temperature) or None
@@ -176,7 +182,9 @@ class ScheduleEngine:
         if not room_schedule:
             return None
 
-        day_schedule = room_schedule.get_schedule_for_mode(mode, dt)
+        day_schedule = room_schedule.get_schedule_for_mode(
+            mode, dt, friday_weekend_start_hour
+        )
         if not day_schedule:
             return None
 

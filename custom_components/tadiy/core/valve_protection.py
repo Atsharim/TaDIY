@@ -1,25 +1,24 @@
 """Valve protection for TRV anti-calcification cycling.
 
 Periodically exercises TRV valves to prevent them from seizing due
-to calcium build-up or prolonged inactivity.  By default runs once
-per week (Sunday 03:00) — opens and closes each valve for a short
-cycle.
+to calcium build-up or prolonged inactivity.  Runs on a configurable
+day/time at a configurable interval (default: Monday 10:00, every 2 weeks).
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Any
 
 from homeassistant.util import dt as dt_util
 
 _LOGGER = logging.getLogger(__name__)
 
-# Default schedule: Sunday 03:00
-DEFAULT_CYCLE_DAY: int = 6  # 0=Monday, 6=Sunday
-DEFAULT_CYCLE_TIME: time = time(3, 0)
+# Legacy defaults kept for backward-compat with any hardcoded callers
+DEFAULT_CYCLE_DAY: int = 0  # Monday (was Sunday=6, changed to Monday=0)
+DEFAULT_CYCLE_TIME: time = time(10, 0)  # 10:00 (was 03:00)
 
 # Cycling parameters
 CYCLE_OPEN_TEMP: float = 30.0  # Open valve wide
@@ -58,22 +57,58 @@ class ValveProtectionState:
 
 
 class ValveProtectionManager:
-    """Manages weekly valve cycling to prevent calcification."""
+    """Manages valve cycling to prevent calcification.
+
+    Supports configurable day-of-week, hour, and interval in weeks so
+    users can avoid noisy night cycles (e.g. old default Sunday 03:00).
+    Default: Monday 10:00, every 2 weeks (battery-friendly).
+    """
 
     def __init__(
         self,
         room_name: str,
         cycle_day: int = DEFAULT_CYCLE_DAY,
         cycle_time: time = DEFAULT_CYCLE_TIME,
+        cycle_interval_weeks: int = 2,
         debug_callback=None,
     ) -> None:
         """Initialize."""
         self.room_name = room_name
         self.cycle_day = cycle_day
         self.cycle_time = cycle_time
+        self.cycle_interval_weeks = max(1, cycle_interval_weeks)
         self._debug_fn = debug_callback
         self.state = ValveProtectionState()
         self._compute_next_cycle()
+
+    def update_schedule(
+        self,
+        cycle_day: int,
+        cycle_time: time,
+        cycle_interval_weeks: int,
+    ) -> None:
+        """Update schedule parameters (e.g. after hub config change).
+
+        Only recomputes next_cycle if the schedule changed AND cycling
+        is not currently active, so an in-progress cycle is never interrupted.
+        """
+        changed = (
+            self.cycle_day != cycle_day
+            or self.cycle_time != cycle_time
+            or self.cycle_interval_weeks != cycle_interval_weeks
+        )
+        self.cycle_day = cycle_day
+        self.cycle_time = cycle_time
+        self.cycle_interval_weeks = max(1, cycle_interval_weeks)
+        if changed and not self.state.cycling_active:
+            self._compute_next_cycle()
+            self._debug(
+                "Valve protection: Schedule updated for %s → day=%d, time=%s, interval=%dw",
+                self.room_name,
+                cycle_day,
+                cycle_time,
+                cycle_interval_weeks,
+            )
 
     def _debug(self, message: str, *args) -> None:
         """Log debug message."""
@@ -83,18 +118,40 @@ class ValveProtectionManager:
             _LOGGER.debug(message, *args)
 
     def _compute_next_cycle(self) -> None:
-        """Compute the next scheduled cycle time."""
+        """Compute the next scheduled cycle time.
+
+        If we have a last_cycle timestamp, the next cycle is exactly
+        cycle_interval_weeks * 7 days after the last one (at cycle_time).
+        Otherwise find the next upcoming weekday at cycle_time.
+        """
         now = dt_util.now()
-        # Find next occurrence of cycle_day at cycle_time
-        days_ahead = self.cycle_day - now.weekday()
-        if days_ahead < 0 or (days_ahead == 0 and now.time() >= self.cycle_time):
-            days_ahead += 7
 
-        from datetime import timedelta
+        if self.state.last_cycle is not None:
+            # Advance by the configured number of weeks from the last cycle date
+            last_local = dt_util.as_local(self.state.last_cycle)
+            base = last_local.replace(
+                hour=self.cycle_time.hour,
+                minute=self.cycle_time.minute,
+                second=0,
+                microsecond=0,
+            )
+            next_dt = base + timedelta(weeks=self.cycle_interval_weeks)
+            # Safety: if still in the past (e.g. interval changed), advance further
+            while next_dt <= now:
+                next_dt += timedelta(weeks=self.cycle_interval_weeks)
+        else:
+            # No last cycle: find next occurrence of configured weekday at cycle_time
+            days_ahead = self.cycle_day - now.weekday()
+            if days_ahead < 0 or (days_ahead == 0 and now.time() >= self.cycle_time):
+                days_ahead += 7
+            next_date = now.date() + timedelta(days=days_ahead)
+            next_dt = datetime.combine(next_date, self.cycle_time, tzinfo=now.tzinfo)
 
-        next_date = now.date() + timedelta(days=days_ahead)
-        self.state.next_cycle = dt_util.as_utc(
-            datetime.combine(next_date, self.cycle_time, tzinfo=now.tzinfo)
+        self.state.next_cycle = dt_util.as_utc(next_dt)
+        self._debug(
+            "Valve protection: Next cycle for %s at %s",
+            self.room_name,
+            self.state.next_cycle,
         )
 
     def should_cycle_now(self) -> bool:
@@ -124,8 +181,8 @@ class ValveProtectionManager:
         """Update the current cycle phase.
 
         Returns:
-            (phase, target_temp): Current phase and temperature to set
-            (None means cycle is done, restore normal target).
+            (phase, target_temp): Current phase and temperature to set.
+            target_temp is None when the cycle is done (restore normal target).
         """
         if not self.state.cycling_active or self.state.cycle_started is None:
             return "idle", None

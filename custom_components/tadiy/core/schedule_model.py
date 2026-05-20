@@ -208,7 +208,7 @@ class RoomSchedule:
         return mode in self.use_normal_for_modes
 
     def get_schedule_for_mode(
-        self, mode: str, dt: datetime | None = None
+        self, mode: str, dt: datetime | None = None, friday_weekend_start_hour: int = 24
     ) -> DaySchedule | None:
         """Get appropriate schedule for given mode and datetime."""
         if dt is None:
@@ -221,7 +221,11 @@ class RoomSchedule:
         result = None
         if mode == "normal":
             # Weekday: Monday (0) to Friday (4)
-            if dt.weekday() < 5:
+            # If it's Friday and current hour is >= friday_weekend_start_hour, treat it as weekend schedule
+            is_friday_weekend = (
+                dt.weekday() == 4 and dt.hour >= friday_weekend_start_hour
+            )
+            if dt.weekday() < 5 and not is_friday_weekend:
                 result = self.normal_weekday
             else:
                 result = self.normal_weekend

@@ -63,6 +63,8 @@ CONF_GLOBAL_USE_EARLY_START: Final = "global_use_early_start"
 CONF_GLOBAL_LEARN_HEATING_RATE: Final = "global_learn_heating_rate"
 CONF_GLOBAL_EARLY_START_OFFSET: Final = "global_early_start_offset"
 CONF_GLOBAL_EARLY_START_MAX: Final = "global_early_start_max"
+CONF_FRIDAY_WEEKEND_START_HOUR: Final = "friday_weekend_start_hour"
+
 
 # Room-specific overrides
 CONF_WINDOW_OPEN_TIMEOUT: Final = "window_open_timeout"
@@ -133,6 +135,20 @@ DEFAULT_OFF_TEMPERATURE: Final = (
     17.0  # Temperature when hub mode is "off" (frost safe, no heating)
 )
 CONF_OFF_TEMPERATURE: Final = "off_temperature"  # Configurable off mode temperature
+DEFAULT_FRIDAY_WEEKEND_START_HOUR: Final = 24  # 24 = disabled / midnight
+
+# Valve Protection (Anti-Calcification Cycling) - Hub-level settings
+CONF_VALVE_PROTECTION_DAY: Final = "valve_protection_day"  # 0=Mon .. 6=Sun
+CONF_VALVE_PROTECTION_HOUR: Final = "valve_protection_hour"  # 0-23
+CONF_VALVE_PROTECTION_INTERVAL_WEEKS: Final = "valve_protection_interval_weeks"
+
+DEFAULT_VALVE_PROTECTION_DAY: Final = 0  # Monday
+DEFAULT_VALVE_PROTECTION_HOUR: Final = 10  # 10:00
+DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS: Final = 2  # every 2 weeks (battery-friendly)
+
+# Room-level valve protection override
+CONF_DISABLE_VALVE_PROTECTION: Final = "disable_valve_protection"
+
 
 # Away temperature configuration (Room-level)
 CONF_AWAY_TEMPERATURE: Final = "away_temperature"

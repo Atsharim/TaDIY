@@ -7,10 +7,10 @@ TRV switching caused by sensor noise.
 
 from __future__ import annotations
 
+import logging
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-import logging
 from typing import Any, Callable
 
 from homeassistant.util import dt as dt_util

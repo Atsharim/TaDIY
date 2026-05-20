@@ -1,6 +1,7 @@
 """Select platform for TaDIY integration."""
 
 from __future__ import annotations
+
 import logging
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
@@ -9,10 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    DOMAIN,
-    ICON_MODE,
-)
+from .const import DOMAIN, ICON_MODE
 
 _LOGGER = logging.getLogger(__name__)
 

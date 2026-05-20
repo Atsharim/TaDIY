@@ -1,9 +1,10 @@
 """Sensor platform for TaDIY integration."""
 
 from __future__ import annotations
+
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-import logging
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -12,14 +13,14 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ICON_TEMPERATURE, ICON_LEARNING, ICON_COMFORT, ICON_ENERGY
+from .const import DOMAIN, ICON_COMFORT, ICON_ENERGY, ICON_LEARNING, ICON_TEMPERATURE
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -891,8 +892,9 @@ class TaDIYHeatingTimeSensor(CoordinatorEntity, SensorEntity):
 
     def _week_hours(self) -> float:
         """Sum heating hours for the current ISO week."""
-        from homeassistant.util import dt as dt_util
         from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
 
         now = dt_util.now()
         monday = now - timedelta(days=now.weekday())
@@ -1051,8 +1053,9 @@ class TaDIYEnergySavingsSensor(CoordinatorEntity, SensorEntity):
 
     def _week_savings(self) -> dict[str, float]:
         """Sum savings for the current ISO week."""
-        from homeassistant.util import dt as dt_util
         from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
 
         now = dt_util.now()
         monday = now - timedelta(days=now.weekday())
@@ -1104,8 +1107,9 @@ class TaDIYEnergySavingsSensor(CoordinatorEntity, SensorEntity):
 
     def _last_30_days_savings(self) -> dict[str, float]:
         """Sum savings for the last 30 days (rolling window)."""
-        from homeassistant.util import dt as dt_util
         from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
 
         now = dt_util.now()
         cutoff_date = (now - timedelta(days=30)).strftime("%Y-%m-%d")

@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-import logging
 from typing import Any
 
 from homeassistant.util import dt as dt_util
 
-from ..const import (
-    DEFAULT_HEATING_RATE,
-    MAX_HEATING_RATE,
-    MIN_HEATING_RATE,
-)
+from ..const import DEFAULT_HEATING_RATE, MAX_HEATING_RATE, MIN_HEATING_RATE
 
 _LOGGER = logging.getLogger(__name__)
 

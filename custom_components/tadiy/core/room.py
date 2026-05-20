@@ -70,6 +70,9 @@ class RoomConfig:
     away_temperature: float = DEFAULT_AWAY_TEMPERATURE  # Per-room away mode temperature
     trv_min_temp: float = DEFAULT_TRV_MIN_TEMP  # TRV hardware minimum temperature
     trv_max_temp: float = DEFAULT_TRV_MAX_TEMP  # TRV hardware maximum temperature
+    disable_valve_protection: bool = (
+        False  # True = skip anti-calcification cycling for this room
+    )
 
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
@@ -123,6 +126,7 @@ class RoomConfig:
             "away_temperature": self.away_temperature,
             "trv_min_temp": self.trv_min_temp,
             "trv_max_temp": self.trv_max_temp,
+            "disable_valve_protection": self.disable_valve_protection,
         }
 
     @classmethod
@@ -166,6 +170,7 @@ class RoomConfig:
             away_temperature=data.get("away_temperature", DEFAULT_AWAY_TEMPERATURE),
             trv_min_temp=data.get("trv_min_temp", DEFAULT_TRV_MIN_TEMP),
             trv_max_temp=data.get("trv_max_temp", DEFAULT_TRV_MAX_TEMP),
+            disable_valve_protection=data.get("disable_valve_protection", False),
         )
 
 

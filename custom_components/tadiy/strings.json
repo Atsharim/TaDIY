@@ -70,7 +70,8 @@
           "coupling_strength": "Coupling Strength",
           "away_temperature": "Away Temperature",
           "trv_min_temp": "TRV Minimum Temperature",
-          "trv_max_temp": "TRV Maximum Temperature"
+          "trv_max_temp": "TRV Maximum Temperature",
+          "disable_valve_protection": "Disable Valve Protection"
         },
         "data_description": {
           "room_name": "Choose a unique name for this room.",
@@ -93,7 +94,8 @@
           "pid_kd": "Derivative: Dampens oscillations. Higher = smoother but slower.",
           "away_temperature": "Target temperature when nobody is home (per room).",
           "trv_min_temp": "Minimum temperature your TRV supports (default: 5°C).",
-          "trv_max_temp": "Maximum temperature your TRV supports (default: 35°C)."
+          "trv_max_temp": "Maximum temperature your TRV supports (default: 35°C).",
+          "disable_valve_protection": "Check this to skip the weekly/bi-weekly anti-calcification valve cycling for this specific room (e.g. bedroom)."
         }
       },
       "add_mode": {
@@ -133,7 +135,11 @@
           "heating_curve_slope": "Heating Curve Slope",
           "use_weather_prediction": "Enable Weather Prediction",
           "global_window_open_timeout": "Window Open Timeout (seconds)",
-          "global_window_close_timeout": "Window Close Timeout (seconds)"
+          "global_window_close_timeout": "Window Close Timeout (seconds)",
+          "friday_weekend_start_hour": "Friday Weekend Start Hour",
+          "valve_protection_day": "Valve Protection Day",
+          "valve_protection_hour": "Valve Protection Hour",
+          "valve_protection_interval_weeks": "Valve Protection Interval (Weeks)"
         },
         "data_description": {
           "weather_entity": "Weather entity for outdoor temperature and forecast data.",
@@ -144,7 +150,11 @@
           "heating_curve_slope": "Higher value = stronger target adjustment at low outdoor temps.",
           "use_weather_prediction": "Pre-heat before cold fronts, reduce heating before warm fronts.",
           "global_window_open_timeout": "Grace period before stopping heating when window opens.",
-          "global_window_close_timeout": "Cooldown before resuming heating after window closes."
+          "global_window_close_timeout": "Cooldown before resuming heating after window closes.",
+          "friday_weekend_start_hour": "Hour on Friday to switch from weekday to weekend schedule (24 = midnight/disabled).",
+          "valve_protection_day": "Day of the week to run valve protection cycling.",
+          "valve_protection_hour": "Hour of the day to run valve protection cycling (0-23).",
+          "valve_protection_interval_weeks": "How often to cycle the valves (e.g. every 2 weeks to save battery and reduce noise)."
         }
       },
       "init_hub": {
@@ -408,6 +418,27 @@
           "name": "Heating Rate",
           "description": "Heating rate in degrees Celsius per hour."
         }
+      }
+    }
+  },
+  "selector": {
+    "valve_protection_day": {
+      "options": {
+        "0": "Monday",
+        "1": "Tuesday",
+        "2": "Wednesday",
+        "3": "Thursday",
+        "4": "Friday",
+        "5": "Saturday",
+        "6": "Sunday"
+      }
+    },
+    "valve_protection_interval_weeks": {
+      "options": {
+        "1": "Every week",
+        "2": "Every 2 weeks",
+        "3": "Every 3 weeks",
+        "4": "Every 4 weeks"
       }
     }
   }

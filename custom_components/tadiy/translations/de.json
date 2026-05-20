@@ -70,7 +70,8 @@
           "coupling_strength": "Kopplungsstärke",
           "away_temperature": "Abwesenheitstemperatur",
           "trv_min_temp": "TRV Mindesttemperatur",
-          "trv_max_temp": "TRV Höchsttemperatur"
+          "trv_max_temp": "TRV Höchsttemperatur",
+          "disable_valve_protection": "Ventilschutz deaktivieren"
         },
         "data_description": {
           "room_name": "Eindeutigen Namen für diesen Raum wählen.",
@@ -93,7 +94,8 @@
           "pid_kd": "Differential: Dämpft Oszillationen. Höher = sanfter aber langsamer.",
           "away_temperature": "Zieltemperatur wenn niemand zu Hause ist (pro Raum).",
           "trv_min_temp": "Mindesttemperatur die Ihr TRV unterstützt (Standard: 5°C).",
-          "trv_max_temp": "Höchsttemperatur die Ihr TRV unterstützt (Standard: 35°C)."
+          "trv_max_temp": "Höchsttemperatur die Ihr TRV unterstützt (Standard: 35°C).",
+          "disable_valve_protection": "Ventilschutz für diesen Raum deaktivieren (z. B. Schlafzimmer), um nächtliche Störgeräusche zu vermeiden."
         }
       },
       "add_mode": {
@@ -123,6 +125,7 @@
         "data": {
           "show_panel": "Zeitplan-Panel in Seitenleiste anzeigen",
           "weather_entity": "Wetter-Entität",
+          "outdoor_sensor": "Außentemperatursensor",
           "person_entities": "Personen-Entitäten",
           "location_mode_enabled": "Ortsbasierte Heizung aktivieren (Abwesenheitsmodus)",
           "global_override_timeout": "Standard-Überschreibungs-Timeout",
@@ -132,17 +135,26 @@
           "heating_curve_slope": "Heizkurven-Steigung",
           "use_weather_prediction": "Wettervorhersage aktivieren",
           "global_window_open_timeout": "Fenster-Offen-Timeout (Sekunden)",
-          "global_window_close_timeout": "Fenster-Schließ-Timeout (Sekunden)"
+          "global_window_close_timeout": "Fenster-Schließ-Timeout (Sekunden)",
+          "friday_weekend_start_hour": "Freitag-Wochenende-Startstunde",
+          "valve_protection_day": "Ventilschutz-Wochentag",
+          "valve_protection_hour": "Ventilschutz-Uhrzeit",
+          "valve_protection_interval_weeks": "Ventilschutz-Intervall (Wochen)"
         },
         "data_description": {
           "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersagedaten.",
+          "outdoor_sensor": "Globaler Außentemperatursensor, der als Fallback verwendet wird, wenn Räume keinen eigenen Außensensor haben.",
           "person_entities": "Personen-Entitäten für Anwesenheitserkennung und Abwesenheitsmodus.",
           "early_start_offset": "Zusätzliche Pufferminuten für früheren Heizstart.",
           "early_start_max": "Maximale Vorheiz-Dauer in Minuten.",
           "heating_curve_slope": "Höherer Wert = stärkere Zieltemperatur-Anpassung bei niedrigen Außentemperaturen.",
           "use_weather_prediction": "Vorheizen vor Kaltfronten, Heizung reduzieren vor Warmfronten.",
           "global_window_open_timeout": "Wartezeit bevor die Heizung bei geöffnetem Fenster stoppt.",
-          "global_window_close_timeout": "Abkühlzeit bevor die Heizung nach Fensterschließung wieder startet."
+          "global_window_close_timeout": "Abkühlzeit bevor die Heizung nach Fensterschließung wieder startet.",
+          "friday_weekend_start_hour": "Uhrzeit am Freitag, ab der vom Wochentags- auf den Wochenend-Zeitplan gewechselt wird (24 = Mitternacht/deaktiviert).",
+          "valve_protection_day": "Wochentag, an dem die Entkalkungsfahrt (Ventilschutz) durchgeführt wird.",
+          "valve_protection_hour": "Uhrzeit (Stunde 0-23), zu der die Entkalkungsfahrt durchgeführt wird.",
+          "valve_protection_interval_weeks": "Intervall in Wochen für den Ventilschutz (z. B. alle 2 Wochen, um Batterien zu schonen)."
         }
       },
       "init_hub": {
@@ -406,6 +418,27 @@
           "name": "Heizrate",
           "description": "Heizrate in Grad Celsius pro Stunde."
         }
+      }
+    }
+  },
+  "selector": {
+    "valve_protection_day": {
+      "options": {
+        "0": "Montag",
+        "1": "Dienstag",
+        "2": "Mittwoch",
+        "3": "Donnerstag",
+        "4": "Freitag",
+        "5": "Samstag",
+        "6": "Sonntag"
+      }
+    },
+    "valve_protection_interval_weeks": {
+      "options": {
+        "1": "Jede Woche",
+        "2": "Alle 2 Wochen",
+        "3": "Alle 3 Wochen",
+        "4": "Alle 4 Wochen"
       }
     }
   }

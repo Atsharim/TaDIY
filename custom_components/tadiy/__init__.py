@@ -6,14 +6,14 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
-from homeassistant.exceptions import ConfigEntryNotReady
-import voluptuous as vol
 
 from .const import (
     ATTR_BLOCKS,
@@ -52,6 +52,7 @@ from .const import (
     MIN_BOOST_TEMP,
     MIN_HEATING_RATE,
     MIN_TRV_OFFSET,
+    SERVICE_APPLY_PID_AUTOTUNE,
     SERVICE_BOOST_ALL_ROOMS,
     SERVICE_CLEAR_OVERRIDE,
     SERVICE_FORCE_REFRESH,
@@ -65,7 +66,6 @@ from .const import (
     SERVICE_SET_TRV_CALIBRATION,
     SERVICE_START_PID_AUTOTUNE,
     SERVICE_STOP_PID_AUTOTUNE,
-    SERVICE_APPLY_PID_AUTOTUNE,
 )
 from .coordinator import TaDIYHubCoordinator, TaDIYRoomCoordinator
 
@@ -334,6 +334,7 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await room_coordinator.async_load_thermal_mass()
     await room_coordinator.async_load_overshoot()
     await room_coordinator.async_load_heating_stats()
+    await room_coordinator.async_load_valve_protection()
     await room_coordinator.async_config_entry_first_refresh()
 
     # Set up state listeners for override detection
@@ -430,12 +431,12 @@ async def async_register_services(
 
     async def handle_get_schedule(call: ServiceCall) -> dict:
         """Get schedule for a room."""
-        from .schedule_storage import ScheduleStorageManager
         from .const import (
             SCHEDULE_TYPE_DAILY,
             SCHEDULE_TYPE_WEEKDAY,
             SCHEDULE_TYPE_WEEKEND,
         )
+        from .schedule_storage import ScheduleStorageManager
 
         entity_id = call.data.get(ATTR_ENTITY_ID)
         mode = call.data.get(ATTR_MODE)
@@ -492,9 +493,9 @@ async def async_register_services(
 
     async def handle_set_schedule(call: ServiceCall) -> None:
         """Set schedule for a room."""
-        from .schedule_storage import ScheduleStorageManager, ScheduleUIBlock
-        from .core.schedule_model import DaySchedule
         from .const import SCHEDULE_TYPE_WEEKDAY, SCHEDULE_TYPE_WEEKEND
+        from .core.schedule_model import DaySchedule
+        from .schedule_storage import ScheduleStorageManager, ScheduleUIBlock
 
         entity_id = call.data.get(ATTR_ENTITY_ID)
         mode = call.data.get(ATTR_MODE)
