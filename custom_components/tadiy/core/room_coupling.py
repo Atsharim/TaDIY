@@ -108,9 +108,9 @@ class RoomCouplingManager:
             current_temp: Current temperature (optional, for delta calculation)
             target_temp: Target temperature (optional, for delta calculation)
         """
-        # Check if this room is "actively heating" (significant temp delta)
+        # A room can only heat its neighbors if heating is actually active
         actively_heating = is_heating
-        if current_temp is not None and target_temp is not None:
+        if actively_heating and current_temp is not None and target_temp is not None:
             delta = target_temp - current_temp
             actively_heating = delta > NEIGHBOR_HEATING_THRESHOLD
 

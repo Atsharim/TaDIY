@@ -90,13 +90,9 @@ class TaDIYHubButton(CoordinatorEntity, ButtonEntity):
                 if data.get("type") == "room":
                     await data["coordinator"].async_request_refresh()
         elif self.entity_description.key == "reset_all_learning":
-            from .core.early_start import HeatUpModel
-
-            for room_name in list(self.coordinator.heat_models.keys()):
-                self.coordinator.heat_models[room_name] = HeatUpModel(
-                    room_name=room_name
-                )
-            await self.coordinator.async_save_learning_data()
+            await self.hass.services.async_call(
+                DOMAIN, "reset_learning", {}, blocking=True
+            )
         elif self.entity_description.key == "boost_all_rooms":
             await self.hass.services.async_call(
                 DOMAIN, "boost_all_rooms", {}, blocking=True
@@ -131,14 +127,12 @@ class TaDIYRoomButton(CoordinatorEntity, ButtonEntity):
         if self.entity_description.key == "force_refresh":
             await self.coordinator.async_request_refresh()
         elif self.entity_description.key == "reset_learning":
-            if self.coordinator.hub_coordinator:
-                from .core.early_start import HeatUpModel
-
-                if self._room_name in self.coordinator.hub_coordinator.heat_models:
-                    self.coordinator.hub_coordinator.heat_models[self._room_name] = (
-                        HeatUpModel(room_name=self._room_name)
-                    )
-                    await self.coordinator.hub_coordinator.async_save_learning_data()
+            await self.hass.services.async_call(
+                DOMAIN,
+                "reset_learning",
+                {"room": self._room_name},
+                blocking=True,
+            )
         elif self.entity_description.key == "clear_override":
             # Clear all overrides for this room
             cleared = self.coordinator.override_manager.clear_all_overrides()

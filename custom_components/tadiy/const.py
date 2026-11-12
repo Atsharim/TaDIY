@@ -32,6 +32,10 @@ CONF_WINDOW_SENSORS: Final = "window_sensors"
 CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
 CONF_HUMIDITY_SENSOR: Final = "humidity_sensor"  # Optional humidity sensor for room
 CONF_WEATHER_ENTITY: Final = "weather_entity"  # Optional weather entity for hub (fallback outdoor temp + forecast)
+CONF_BOILER_TEMP_SENSOR: Final = "boiler_temp_sensor"  # Optional hot water / boiler supply flow temperature probe
+CONF_DHW_TEMP_SENSOR: Final = "dhw_temp_sensor"  # Optional domestic hot water / circulation temperature probe
+CONF_BOILER_MIN_RUN_TIME: Final = "boiler_min_run_time"  # Minimum boiler run time in seconds
+CONF_CYCLE_LOCK_ON_SETPOINT_DROP: Final = "cycle_lock_on_setpoint_drop"  # Cycle lock release on setpoint drop
 CONF_PERSON_ENTITIES: Final = (
     "person_entities"  # Optional person entities for location-based control
 )
@@ -64,12 +68,17 @@ CONF_GLOBAL_LEARN_HEATING_RATE: Final = "global_learn_heating_rate"
 CONF_GLOBAL_EARLY_START_OFFSET: Final = "global_early_start_offset"
 CONF_GLOBAL_EARLY_START_MAX: Final = "global_early_start_max"
 CONF_FRIDAY_WEEKEND_START_HOUR: Final = "friday_weekend_start_hour"
+CONF_HOMEOFFICE_END_HOUR: Final = "homeoffice_end_hour"
+CONF_HOMEOFFICE_SINGLE_DAY: Final = "homeoffice_single_day"
 
 
 # Room-specific overrides
 CONF_WINDOW_OPEN_TIMEOUT: Final = "window_open_timeout"
 CONF_WINDOW_CLOSE_TIMEOUT: Final = "window_close_timeout"
 CONF_DONT_HEAT_BELOW: Final = "dont_heat_below_outdoor"
+CONF_DONT_HEAT_BELOW_OUTDOOR: Final = "dont_heat_below_outdoor"
+CONF_BOOST_TEMPERATURE: Final = "boost_temperature"
+CONF_BOOST_DURATION: Final = "boost_duration"
 CONF_USE_EARLY_START: Final = "use_early_start"
 CONF_LEARN_HEATING_RATE: Final = "learn_heating_rate"
 CONF_TARGET_TEMP_STEP: Final = "target_temp_step"
@@ -136,6 +145,8 @@ DEFAULT_OFF_TEMPERATURE: Final = (
 )
 CONF_OFF_TEMPERATURE: Final = "off_temperature"  # Configurable off mode temperature
 DEFAULT_FRIDAY_WEEKEND_START_HOUR: Final = 24  # 24 = disabled / midnight
+DEFAULT_HOMEOFFICE_END_HOUR: Final = 17  # 17:00 Feierabend, 24 = disabled
+DEFAULT_HOMEOFFICE_SINGLE_DAY: Final = True  # Auto-revert to normal mode at midnight
 
 # Valve Protection (Anti-Calcification Cycling) - Hub-level settings
 CONF_VALVE_PROTECTION_DAY: Final = "valve_protection_day"  # 0=Mon .. 6=Sun
@@ -263,6 +274,8 @@ SERVICE_START_PID_AUTOTUNE: Final = "start_pid_autotune"
 SERVICE_STOP_PID_AUTOTUNE: Final = "stop_pid_autotune"
 SERVICE_APPLY_PID_AUTOTUNE: Final = "apply_pid_autotune"
 SERVICE_REFRESH_WEATHER_FORECAST: Final = "refresh_weather_forecast"
+SERVICE_SET_HUB_CONFIG: Final = "set_hub_config"
+SERVICE_SET_ROOM_CONFIG: Final = "set_room_config"
 
 # Service attributes
 ATTR_ROOM: Final = "room"

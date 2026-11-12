@@ -149,6 +149,8 @@ class CalibrationManager:
             self._calibrations[entity_id] = TRVCalibration(entity_id=entity_id)
 
         self._calibrations[entity_id].mode = mode
+        if mode == "disabled":
+            self._calibrations[entity_id].last_calibrated_target = None
         self._calibrations[entity_id].last_calibrated = dt_util.utcnow()
         self._debug("TRV %s: Set calibration mode to %s", entity_id, mode)
 
@@ -226,24 +228,34 @@ class CalibrationManager:
         Returns:
             Calibrated target temperature for the TRV
         """
+        cal = self._calibrations.get(entity_id)
+
+        # If calibration disabled, pass target straight through without offset
+        if cal is not None and cal.mode == "disabled":
+            return round(target_temp, 1)
+
+        # In auto mode, update EMA-smoothed offset if readings are present
         if room_temp is not None and trv_temp is not None:
-            # 1. Update EMA-smoothed offset
             self.update_calibration(entity_id, trv_temp, room_temp)
+            cal = self._calibrations.get(entity_id)
 
-            cal = self._calibrations[entity_id]
+        if cal is None:
+            return round(target_temp, 1)
 
-            # 2. Calculate calibrated target using smoothed offset
+        # In manual mode or calibrated auto mode, apply offset
+        if cal.mode == "manual" or (cal.mode == "auto" and cal.offset != 0.0):
             calibrated = min(target_temp + cal.offset, max_temp)
             calibrated = round(calibrated, 1)
 
             self._debug(
-                "TRV %s: target=%.1f room=%.1f trv=%.1f "
-                "smoothed_offset=%+.1f -> calibrated=%.1f",
+                "TRV %s: target=%.1f room=%s trv=%s "
+                "offset=%+.1f (%s) -> calibrated=%.1f",
                 entity_id,
                 target_temp,
-                room_temp,
-                trv_temp,
+                f"{room_temp:.1f}" if room_temp is not None else "N/A",
+                f"{trv_temp:.1f}" if trv_temp is not None else "N/A",
                 cal.offset,
+                cal.mode,
                 calibrated,
             )
 

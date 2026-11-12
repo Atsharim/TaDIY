@@ -86,3 +86,78 @@ set_heating_curve:
           step: 0.1
           unit_of_measurement: "°C/h"
           mode: slider
+
+set_hub_config:
+  name: Set Hub Configuration
+  description: Updates global hub settings like frost protection, boost parameters, and window timeouts.
+  fields:
+    frost_protection_temp:
+      name: Frost Protection Temperature
+      description: Target temperature to prevent freezing
+      required: false
+      selector:
+        number:
+          min: 3.0
+          max: 15.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    boost_temperature:
+      name: Boost Temperature
+      description: Target temperature during boost mode
+      required: false
+      selector:
+        number:
+          min: 18.0
+          max: 30.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    boost_duration:
+      name: Boost Duration
+      description: Duration of boost mode in minutes
+      required: false
+      selector:
+        number:
+          min: 10
+          max: 360
+          step: 5
+          unit_of_measurement: "min"
+    window_open_timeout:
+      name: Window Open Timeout
+      description: Seconds after opening a window before heating pauses
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 600
+          step: 5
+          unit_of_measurement: "s"
+    window_close_timeout:
+      name: Window Close Cooldown
+      description: Seconds after closing a window before heating resumes
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 600
+          step: 5
+          unit_of_measurement: "s"
+    global_override_timeout:
+      name: Global Override Timeout
+      description: Default duration in minutes for manual overrides
+      required: false
+      selector:
+        number:
+          min: 15
+          max: 1440
+          step: 15
+          unit_of_measurement: "min"
+    dont_heat_below_outdoor:
+      name: Summer Switch-off Outdoor Temperature
+      description: Do not heat when outdoor temperature is above this value
+      required: false
+      selector:
+        number:
+          min: 10.0
+          max: 25.0
+          step: 0.5
+          unit_of_measurement: "°C"

@@ -26,6 +26,11 @@ from .const import (
     ATTR_ROOM,
     ATTR_SCHEDULE_TYPE,
     ATTR_TEMPERATURE,
+    CONF_AWAY_TEMPERATURE,
+    CONF_BOILER_MIN_RUN_TIME,
+    CONF_BOILER_TEMP_SENSOR,
+    CONF_BOOST_DURATION,
+    CONF_BOOST_TEMPERATURE,
     CONF_DEBUG_CALIBRATION,
     CONF_DEBUG_CARDS,
     CONF_DEBUG_EARLY_START,
@@ -38,9 +43,18 @@ from .const import (
     CONF_DEBUG_TRV,
     CONF_DEBUG_UI,
     CONF_DEBUG_VERBOSE,
+    CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
+    CONF_DHW_TEMP_SENSOR,
+    CONF_DONT_HEAT_BELOW_OUTDOOR,
+    CONF_EARLY_START_MAX,
+    CONF_FROST_PROTECTION_TEMP,
+    CONF_GLOBAL_OVERRIDE_TIMEOUT,
     CONF_HUB,
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
+    CONF_TOLERANCE,
+    CONF_WINDOW_CLOSE_TIMEOUT,
+    CONF_WINDOW_OPEN_TIMEOUT,
     DEFAULT_BOOST_DURATION,
     DEFAULT_BOOST_TEMPERATURE,
     DOMAIN,
@@ -60,8 +74,10 @@ from .const import (
     SERVICE_REFRESH_WEATHER_FORECAST,
     SERVICE_RESET_LEARNING,
     SERVICE_SET_HEATING_CURVE,
+    SERVICE_SET_HUB_CONFIG,
     SERVICE_SET_HUB_MODE,
     SERVICE_SET_LOCATION_OVERRIDE,
+    SERVICE_SET_ROOM_CONFIG,
     SERVICE_SET_SCHEDULE,
     SERVICE_SET_TRV_CALIBRATION,
     SERVICE_START_PID_AUTOTUNE,
@@ -77,6 +93,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [
     Platform.CLIMATE,
     Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.BUTTON,
     Platform.SELECT,
     Platform.NUMBER,
@@ -104,14 +121,14 @@ def _apply_debug_settings(config_data: dict) -> None:
     """Apply debug settings from hub config to Python logger level.
 
     When any hub debug flag is enabled, set the TaDIY logger to DEBUG.
-    When all flags are disabled, set it to WARNING to suppress debug spam.
+    When all flags are disabled, set it to INFO so standard operational logs remain visible.
     """
     tadiy_logger = logging.getLogger("custom_components.tadiy")
     any_debug = any(config_data.get(key, False) for key in _DEBUG_KEYS)
     if any_debug:
         tadiy_logger.setLevel(logging.DEBUG)
     else:
-        tadiy_logger.setLevel(logging.WARNING)
+        tadiy_logger.setLevel(logging.INFO)
 
 
 SERVICE_RESET_LEARNING_SCHEMA = vol.Schema({vol.Optional(ATTR_ROOM): cv.string})
@@ -175,19 +192,33 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the TaDIY component."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Register static path for Lovelace card
-    # cache_headers=False ensures fresh content during development
+    # Register static file routes for Lovelace cards and panel (individual file routes avoid
+    # conflicting with the /tadiy frontend panel route, preventing 403 Forbidden on /tadiy)
     files_path = Path(__file__).parent / "www"
     try:
         await hass.http.async_register_static_paths(
             [
-                StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
+                StaticPathConfig(
+                    "/tadiy/tadiy-panel.js",
+                    str(files_path / "tadiy-panel.js"),
+                    cache_headers=False,
+                ),
+                StaticPathConfig(
+                    "/tadiy/tadiy-schedule-card.js",
+                    str(files_path / "tadiy-schedule-card.js"),
+                    cache_headers=False,
+                ),
+                StaticPathConfig(
+                    "/tadiy/tadiy-overview-card.js",
+                    str(files_path / "tadiy-overview-card.js"),
+                    cache_headers=False,
+                ),
             ]
         )
-        _LOGGER.info("TaDIY: Registered static path /tadiy for Lovelace cards")
+        _LOGGER.info("TaDIY: Registered static file paths for Lovelace cards")
     except ValueError as err:
         # Path already registered (can happen during reload)
-        _LOGGER.debug("TaDIY: Static path /tadiy already registered: %s", err)
+        _LOGGER.debug("TaDIY: Static paths already registered: %s", err)
 
     return True
 
@@ -250,15 +281,29 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up TaDIY Hub."""
     _LOGGER.info("Setting up TaDIY Hub: %s", entry.data.get(CONF_NAME))
 
-    # Ensure static path is registered (in case async_setup wasn't called)
+    # Ensure static file paths are registered (in case async_setup wasn't called)
     files_path = Path(__file__).parent / "www"
     try:
         await hass.http.async_register_static_paths(
             [
-                StaticPathConfig("/tadiy", str(files_path), cache_headers=False),
+                StaticPathConfig(
+                    "/tadiy/tadiy-panel.js",
+                    str(files_path / "tadiy-panel.js"),
+                    cache_headers=False,
+                ),
+                StaticPathConfig(
+                    "/tadiy/tadiy-schedule-card.js",
+                    str(files_path / "tadiy-schedule-card.js"),
+                    cache_headers=False,
+                ),
+                StaticPathConfig(
+                    "/tadiy/tadiy-overview-card.js",
+                    str(files_path / "tadiy-overview-card.js"),
+                    cache_headers=False,
+                ),
             ]
         )
-        _LOGGER.debug("TaDIY: Static path /tadiy ensured during hub setup")
+        _LOGGER.debug("TaDIY: Static file paths ensured during hub setup")
     except ValueError:
         # Path already registered, that's fine
         pass
@@ -266,6 +311,7 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hub_coordinator = TaDIYHubCoordinator(hass, entry.entry_id, entry.data, entry)
     await hub_coordinator.async_load_learning_data()
     await hub_coordinator.async_load_schedules()
+    await hub_coordinator.async_load_location_data()
     await hub_coordinator.async_config_entry_first_refresh()
 
     hass.data[DOMAIN]["hub_coordinator"] = hub_coordinator
@@ -274,6 +320,13 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "type": "hub",
         "entry": entry,
     }
+
+    # Update hub_coordinator reference on all existing room coordinators (e.g. after hub reload)
+    for item in hass.data[DOMAIN].values():
+        if isinstance(item, dict) and item.get("type") == "room":
+            room_coord = item.get("coordinator")
+            if room_coord:
+                room_coord.hub_coordinator = hub_coordinator
 
     # Apply debug settings from hub config
     _apply_debug_settings(entry.data)
@@ -328,12 +381,14 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass, entry.entry_id, entry.data, hub_coordinator
     )
     await room_coordinator.async_load_schedules()
+    await room_coordinator.async_load_heat_model()
     await room_coordinator.async_load_calibrations()
     await room_coordinator.async_load_overrides()
     await room_coordinator.async_load_feature_settings()
     await room_coordinator.async_load_thermal_mass()
     await room_coordinator.async_load_overshoot()
     await room_coordinator.async_load_heating_stats()
+    await room_coordinator.async_load_savings_stats()
     await room_coordinator.async_load_valve_protection()
     await room_coordinator.async_config_entry_first_refresh()
 
@@ -363,25 +418,29 @@ async def async_register_services(
         _LOGGER.info("Force refresh triggered")
 
     async def handle_reset_learning(call: ServiceCall) -> None:
+        from .core.early_start import EarlyStartCalculator, HeatUpModel
+
         room_name = call.data.get(ATTR_ROOM)
-        if room_name:
-            if room_name in hub_coordinator.heat_models:
-                from .core.early_start import HeatUpModel
-
-                hub_coordinator.heat_models[room_name] = HeatUpModel(
-                    room_name=room_name
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+                if room_name and room_coord.room_config.name != room_name:
+                    continue
+                new_model = HeatUpModel(room_name=room_coord.room_config.name)
+                new_model.set_debug_callback(room_coord._debug_callback)
+                room_coord._heat_model = new_model
+                room_coord.early_start_calculator = EarlyStartCalculator(
+                    new_model, debug_callback=room_coord._debug_callback
                 )
-                await hub_coordinator.async_save_learning_data()
-                _LOGGER.info("Learning data reset for room: %s", room_name)
-        else:
-            from .core.early_start import HeatUpModel
-
-            for room_name in hub_coordinator.heat_models:
-                hub_coordinator.heat_models[room_name] = HeatUpModel(
-                    room_name=room_name
+                hub_coordinator.register_heat_model(
+                    room_coord.room_config.name, new_model
                 )
-            await hub_coordinator.async_save_learning_data()
-            _LOGGER.info("Learning data reset for all rooms")
+                await room_coord.async_save_heat_model()
+                await room_coord.async_request_refresh()
+        await hub_coordinator.async_save_learning_data()
+        _LOGGER.info(
+            "Learning data reset for %s", f"room: {room_name}" if room_name else "all rooms"
+        )
 
     async def handle_boost_all_rooms(call: ServiceCall) -> None:
         temperature = call.data.get(ATTR_TEMPERATURE, DEFAULT_BOOST_TEMPERATURE)
@@ -420,8 +479,20 @@ async def async_register_services(
         room_name = call.data.get(ATTR_ROOM)
         heating_rate = call.data.get(ATTR_HEATING_RATE)
 
-        if room_name in hub_coordinator.heat_models:
-            hub_coordinator.heat_models[room_name].heating_rate = heating_rate
+        found = False
+        for entry_id, data in hass.data[DOMAIN].items():
+            if isinstance(data, dict) and data.get("type") == "room":
+                room_coord = data["coordinator"]
+                if room_coord.room_config.name == room_name:
+                    room_coord._heat_model.set_manual_rate(heating_rate)
+                    await room_coord.async_save_heat_model()
+                    await room_coord.async_request_refresh()
+                    found = True
+                    break
+
+        if found or room_name in hub_coordinator.heat_models:
+            if room_name in hub_coordinator.heat_models:
+                hub_coordinator.heat_models[room_name].set_manual_rate(heating_rate)
             await hub_coordinator.async_save_learning_data()
             _LOGGER.info(
                 "Heating rate for room %s set to %.2f °C/h", room_name, heating_rate
@@ -553,8 +624,15 @@ async def async_register_services(
         else:
             room_schedule.set_custom_schedule(mode, day_schedule)
 
+        # Clear any next_block/always overrides and force immediate target application
+        for trv_id, override in list(room_coord.override_manager._overrides.items()):
+            if override.timeout_mode in ("next_block", "always"):
+                room_coord.override_manager.clear_override(trv_id)
+        room_coord.trv_manager._last_applied_target = None
+
         # Save and refresh
         await room_coord.async_save_schedules()
+        await room_coord.async_save_overrides()
         await room_coord.async_request_refresh()
         _LOGGER.info("Schedule updated for %s - %s/%s", room_name, mode, schedule_type)
 
@@ -871,6 +949,122 @@ async def async_register_services(
         DOMAIN, SERVICE_REFRESH_WEATHER_FORECAST, handle_refresh_weather_forecast
     )
 
+    # Hub configuration service (allows adjusting Hub settings directly from UI panel)
+    SERVICE_SET_HUB_CONFIG_SCHEMA = vol.Schema(
+        {
+            vol.Optional(CONF_FROST_PROTECTION_TEMP): vol.Coerce(float),
+            vol.Optional(CONF_BOOST_TEMPERATURE): vol.Coerce(float),
+            vol.Optional(CONF_BOOST_DURATION): cv.positive_int,
+            vol.Optional(CONF_WINDOW_OPEN_TIMEOUT): cv.positive_int,
+            vol.Optional(CONF_WINDOW_CLOSE_TIMEOUT): cv.positive_int,
+            vol.Optional(CONF_GLOBAL_OVERRIDE_TIMEOUT): cv.positive_int,
+            vol.Optional(CONF_DONT_HEAT_BELOW_OUTDOOR): vol.Coerce(float),
+            vol.Optional(CONF_BOILER_TEMP_SENSOR): cv.string,
+            vol.Optional(CONF_DHW_TEMP_SENSOR): cv.string,
+            vol.Optional(CONF_BOILER_MIN_RUN_TIME): cv.positive_int,
+            vol.Optional(CONF_CYCLE_LOCK_ON_SETPOINT_DROP): cv.boolean,
+        }
+    )
+
+    async def handle_set_hub_config(call: ServiceCall) -> None:
+        """Update hub configuration options dynamically."""
+        hub_entry = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("is_hub", False) or entry.data.get("entry_type") == "hub":
+                hub_entry = entry
+                break
+        if not hub_entry:
+            _LOGGER.error("Cannot set hub config: No hub entry found")
+            return
+
+        new_options = dict(hub_entry.options)
+        for key in [
+            CONF_FROST_PROTECTION_TEMP,
+            CONF_BOOST_TEMPERATURE,
+            CONF_BOOST_DURATION,
+            CONF_WINDOW_OPEN_TIMEOUT,
+            CONF_WINDOW_CLOSE_TIMEOUT,
+            CONF_GLOBAL_OVERRIDE_TIMEOUT,
+            CONF_DONT_HEAT_BELOW_OUTDOOR,
+            CONF_BOILER_TEMP_SENSOR,
+            CONF_DHW_TEMP_SENSOR,
+            CONF_BOILER_MIN_RUN_TIME,
+            CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
+        ]:
+            if key in call.data:
+                new_options[key] = call.data[key]
+
+        hass.config_entries.async_update_entry(hub_entry, options=new_options)
+        _LOGGER.info("Hub options updated via service: %s", call.data)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_HUB_CONFIG,
+        handle_set_hub_config,
+        schema=SERVICE_SET_HUB_CONFIG_SCHEMA,
+    )
+
+    # Room configuration service (allows adjusting Room settings directly from UI panel)
+    SERVICE_SET_ROOM_CONFIG_SCHEMA = vol.Schema(
+        {
+            vol.Required("entity_id"): cv.string,
+            vol.Optional(CONF_AWAY_TEMPERATURE): vol.Coerce(float),
+            vol.Optional("tolerance"): vol.Coerce(float),
+            vol.Optional("early_start_max_minutes"): cv.positive_int,
+            vol.Optional("window_open_timeout"): cv.positive_int,
+            vol.Optional("window_close_timeout"): cv.positive_int,
+            vol.Optional("min_heating_rate"): vol.Coerce(float),
+            vol.Optional("max_heating_rate"): vol.Coerce(float),
+        }
+    )
+
+    async def handle_set_room_config(call: ServiceCall) -> None:
+        """Update room configuration options dynamically."""
+        entity_id = call.data.get("entity_id")
+        room_entry = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if not entry.data.get("is_hub", False) and entry.data.get("entry_type") != "hub":
+                room_coord = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
+                if room_coord:
+                    climate_id = f"climate.{room_coord.room_config.name.lower().replace(' ', '_')}"
+                    if (
+                        climate_id == entity_id
+                        or entry.entry_id == entity_id
+                        or room_coord.room_config.name.lower() in entity_id.lower()
+                    ):
+                        room_entry = entry
+                        break
+                elif entry.title.lower() in entity_id.lower() or entry.entry_id == entity_id:
+                    room_entry = entry
+                    break
+
+        if not room_entry:
+            _LOGGER.error("Cannot set room config: Room entry not found for %s", entity_id)
+            return
+
+        new_options = dict(room_entry.options)
+        for key in [
+            CONF_AWAY_TEMPERATURE,
+            "tolerance",
+            "early_start_max_minutes",
+            "window_open_timeout",
+            "window_close_timeout",
+            "min_heating_rate",
+            "max_heating_rate",
+        ]:
+            if key in call.data:
+                new_options[key] = call.data[key]
+
+        hass.config_entries.async_update_entry(room_entry, options=new_options)
+        _LOGGER.info("Room options updated via service for %s: %s", room_entry.title, call.data)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_ROOM_CONFIG,
+        handle_set_room_config,
+        schema=SERVICE_SET_ROOM_CONFIG_SCHEMA,
+    )
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
@@ -908,6 +1102,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_GET_SCHEDULE)
             hass.services.async_remove(DOMAIN, SERVICE_SET_TRV_CALIBRATION)
             hass.services.async_remove(DOMAIN, SERVICE_SET_SCHEDULE)
+            hass.services.async_remove(DOMAIN, SERVICE_SET_HUB_CONFIG)
+            hass.services.async_remove(DOMAIN, SERVICE_SET_ROOM_CONFIG)
             hass.services.async_remove(DOMAIN, SERVICE_CLEAR_OVERRIDE)
             hass.services.async_remove(DOMAIN, SERVICE_SET_LOCATION_OVERRIDE)
             hass.data[DOMAIN].pop("hub_coordinator", None)

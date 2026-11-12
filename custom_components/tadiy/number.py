@@ -98,6 +98,7 @@ class TaDIYHubNumber(CoordinatorEntity, NumberEntity):
         """Initialize the number."""
         super().__init__(coordinator)
         self.entity_description = description
+        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_device_info = get_device_info(entry, coordinator.hass)
 
@@ -119,7 +120,15 @@ class TaDIYHubNumber(CoordinatorEntity, NumberEntity):
             await self.coordinator.async_save_schedules()
         elif self.entity_description.key == "boost_temperature":
             self.coordinator.config_data["boost_temperature"] = value
+            if hasattr(self, "_entry") and self._entry:
+                self.hass.config_entries.async_update_entry(
+                    self._entry, data=dict(self.coordinator.config_data)
+                )
         elif self.entity_description.key == "boost_duration":
             self.coordinator.config_data["boost_duration_minutes"] = int(value)
+            if hasattr(self, "_entry") and self._entry:
+                self.hass.config_entries.async_update_entry(
+                    self._entry, data=dict(self.coordinator.config_data)
+                )
 
         self.async_write_ha_state()

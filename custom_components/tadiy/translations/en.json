@@ -126,6 +126,7 @@
           "show_panel": "Show Schedules Panel in Sidebar",
           "weather_entity": "Weather Entity",
           "outdoor_sensor": "Outdoor Temperature Sensor",
+          "boiler_temp_sensor": "Boiler / Hot Water Supply Temperature Sensor",
           "person_entities": "Person Entities",
           "location_mode_enabled": "Enable Location-Based Heating (Away Mode)",
           "global_override_timeout": "Default Override Timeout",
@@ -144,6 +145,7 @@
         "data_description": {
           "weather_entity": "Weather entity for outdoor temperature and forecast data.",
           "outdoor_sensor": "Global outdoor temperature sensor used as fallback when rooms don't have their own outdoor sensor.",
+          "boiler_temp_sensor": "Optional temperature probe on hot water / boiler feed pipe to verify active boiler circulation.",
           "person_entities": "Person entities for presence detection and away mode.",
           "early_start_offset": "Additional buffer minutes to start heating early.",
           "early_start_max": "Maximum pre-heating duration in minutes.",
@@ -192,6 +194,7 @@
           "main_temp_sensor": "Main Temperature Sensor",
           "window_sensors": "Window Sensors",
           "outdoor_sensor": "Outdoor Temperature Sensor",
+          "boiler_temp_sensor": "Boiler / Hot Water Supply Temperature Sensor",
           "window_open_timeout": "Window Open Timeout (Override)",
           "window_close_timeout": "Window Close Cooldown (Override)",
           "dont_heat_below_outdoor": "Don't Heat When Outdoor Above (Override)",
@@ -305,6 +308,14 @@
       },
       "frost_protection_temp": {
         "name": "Frost Protection Temperature"
+      }
+    },
+    "binary_sensor": {
+      "heating_problem": {
+        "name": "Heating Problem"
+      },
+      "window": {
+        "name": "Window"
       }
     },
     "climate": {

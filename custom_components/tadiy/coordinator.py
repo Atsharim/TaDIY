@@ -15,10 +15,16 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     CONF_ADJACENT_ROOMS,
+    CONF_AWAY_TEMPERATURE,
+    CONF_BOILER_TEMP_SENSOR,
     CONF_COUPLING_STRENGTH,
     CONF_CUSTOM_MODES,
     CONF_DISABLE_VALVE_PROTECTION,
+    CONF_EARLY_START_MAX,
+    CONF_EARLY_START_OFFSET,
     CONF_FRIDAY_WEEKEND_START_HOUR,
+    CONF_HOMEOFFICE_END_HOUR,
+    CONF_HOMEOFFICE_SINGLE_DAY,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_EARLY_START_MAX,
     CONF_GLOBAL_EARLY_START_OFFSET,
@@ -59,6 +65,8 @@ from .const import (
     DEFAULT_FROST_PROTECTION_TEMP,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
+    DEFAULT_HOMEOFFICE_END_HOUR,
+    DEFAULT_HOMEOFFICE_SINGLE_DAY,
     DEFAULT_HUB_MODE,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
@@ -79,12 +87,14 @@ from .const import (
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
+    HUB_MODE_HOMEOFFICE,
     HUB_UPDATE_INTERVAL,
     MAX_CUSTOM_MODES,
     MAX_TEMP,
     MIN_TEMP,
     OVERRIDE_TIMEOUT_ALWAYS,
     OVERRIDE_TIMEOUT_NEVER,
+    OVERRIDE_TIMEOUT_NEXT_BLOCK,
     ROOM_UPDATE_INTERVAL,
     STORAGE_KEY,
     STORAGE_KEY_SCHEDULES,
@@ -92,7 +102,7 @@ from .const import (
     STORAGE_VERSION_SCHEDULES,
 )
 from .core.control import HeatingController, PIDConfig, PIDHeatingController
-from .core.early_start import HeatUpModel
+from .core.early_start import EarlyStartCalculator, HeatUpModel
 from .core.heating_curve import HeatingCurve, HeatingCurveConfig
 from .core.location import LocationManager
 from .core.logger import TaDIYLogger
@@ -148,45 +158,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 self.custom_modes.append(mode)
 
         # Global settings for room coordinators
-        self.global_settings: dict[str, Any] = {
-            CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: config_data.get(
-                CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
-            ),
-            CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT: config_data.get(
-                CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
-            ),
-            CONF_GLOBAL_DONT_HEAT_BELOW: config_data.get(
-                CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
-            ),
-            CONF_GLOBAL_USE_EARLY_START: config_data.get(
-                CONF_GLOBAL_USE_EARLY_START, DEFAULT_USE_EARLY_START
-            ),
-            CONF_GLOBAL_LEARN_HEATING_RATE: config_data.get(
-                CONF_GLOBAL_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
-            ),
-            CONF_GLOBAL_EARLY_START_OFFSET: config_data.get(
-                CONF_GLOBAL_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET
-            ),
-            CONF_GLOBAL_EARLY_START_MAX: config_data.get(
-                CONF_GLOBAL_EARLY_START_MAX, DEFAULT_EARLY_START_MAX
-            ),
-            CONF_GLOBAL_OVERRIDE_TIMEOUT: config_data.get(
-                CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
-            ),
-            CONF_FRIDAY_WEEKEND_START_HOUR: config_data.get(
-                CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
-            ),
-            CONF_VALVE_PROTECTION_DAY: config_data.get(
-                CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
-            ),
-            CONF_VALVE_PROTECTION_HOUR: config_data.get(
-                CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
-            ),
-            CONF_VALVE_PROTECTION_INTERVAL_WEEKS: config_data.get(
-                CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
-                DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
-            ),
-        }
+        self.global_settings: dict[str, Any] = {}
+        self._update_global_settings()
 
         # Storage
         self.learning_store = Store(
@@ -198,6 +171,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             hass,
             STORAGE_VERSION_SCHEDULES,
             "{}_{}".format(STORAGE_KEY_SCHEDULES, entry_id),
+        )
+        self.location_store = Store(
+            hass,
+            1,
+            f"tadiy_location_{entry_id}",
         )
 
         # Overrides tracking
@@ -213,6 +191,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         self.location_mode_enabled = config_data.get(CONF_LOCATION_MODE_ENABLED, False)
         person_entities = config_data.get(CONF_PERSON_ENTITIES, [])
         self.location_manager = LocationManager(hass, person_entities)
+
+        # Single-day homeoffice tracking
+        self._homeoffice_started_date = (
+            dt_util.now().date() if self.hub_mode == HUB_MODE_HOMEOFFICE else None
+        )
 
         self.data = {
             "hub": True,
@@ -238,6 +221,12 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         # Room Coupling Manager (Phase 3.2)
         self.room_coupling_manager = RoomCouplingManager()
 
+        # Optional boiler / hot water supply flow temperature probe
+        self.boiler_temp_sensor = config_data.get(CONF_BOILER_TEMP_SENSOR)
+        self.boiler_temperature: float | None = None
+        self.boiler_sensor_available: bool = True
+        self.boiler_active: bool = False
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from coordinator."""
         try:
@@ -256,6 +245,25 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 )
             self._update_global_settings()
 
+            # Auto-reset single-day homeoffice mode at midnight / new day
+            if (
+                self.hub_mode == HUB_MODE_HOMEOFFICE
+                and self.global_settings.get(
+                    CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
+                )
+            ):
+                today = dt_util.now().date()
+                if (
+                    self._homeoffice_started_date is not None
+                    and today != self._homeoffice_started_date
+                ):
+                    _LOGGER.info(
+                        "TaDIY: Single-day homeoffice mode ended (date changed from %s to %s), resetting hub mode to normal",
+                        self._homeoffice_started_date,
+                        today,
+                    )
+                    self.set_hub_mode(HUB_MODE_NORMAL)
+
             # Update weather forecast periodically (every 30 min)
             await self._update_weather_forecast()
 
@@ -266,6 +274,33 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 "hub_mode": self.hub_mode,
                 "frost_protection_temp": self.frost_protection_temp,
             }
+
+            # Optional boiler supply flow temperature probe
+            if self.boiler_temp_sensor:
+                sensor_state = self.hass.states.get(self.boiler_temp_sensor)
+                if (
+                    sensor_state
+                    and sensor_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, "")
+                ):
+                    try:
+                        self.boiler_temperature = round(float(sensor_state.state), 1)
+                        self.boiler_sensor_available = True
+                    except (ValueError, TypeError):
+                        self.boiler_sensor_available = False
+                elif sensor_state and sensor_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                    # Sensor is temporarily unavailable/offline - preserve last known temperature
+                    self.boiler_sensor_available = False
+                else:
+                    self.boiler_sensor_available = False
+
+                if self.boiler_temperature is not None:
+                    # Boiler considered actively delivering heat when supply temp is >= 45.0°C
+                    self.boiler_active = self.boiler_temperature >= 45.0
+
+                data_dict["boiler_temperature"] = self.boiler_temperature
+                data_dict["boiler_sensor_available"] = self.boiler_sensor_available
+                data_dict["boiler_active"] = self.boiler_active
+                data_dict["boiler_temp_sensor_id"] = self.boiler_temp_sensor
 
             # Add location status if location mode enabled
             if self.location_mode_enabled:
@@ -301,13 +336,27 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
     def _update_global_settings(self) -> None:
         """Update global settings from config_data."""
+        early_offset = self.config_data.get(
+            CONF_EARLY_START_OFFSET,
+            self.config_data.get(
+                CONF_GLOBAL_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET
+            ),
+        )
+        early_max = self.config_data.get(
+            CONF_EARLY_START_MAX,
+            self.config_data.get(CONF_GLOBAL_EARLY_START_MAX, DEFAULT_EARLY_START_MAX),
+        )
         self.global_settings.update(
             {
-                CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: self.config_data.get(
-                    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
+                CONF_GLOBAL_WINDOW_OPEN_TIMEOUT: int(
+                    self.config_data.get(
+                        CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
+                    )
                 ),
-                CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT: self.config_data.get(
-                    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
+                CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT: int(
+                    self.config_data.get(
+                        CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
+                    )
                 ),
                 CONF_GLOBAL_DONT_HEAT_BELOW: self.config_data.get(
                     CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
@@ -318,27 +367,55 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 CONF_GLOBAL_LEARN_HEATING_RATE: self.config_data.get(
                     CONF_GLOBAL_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
                 ),
-                CONF_GLOBAL_EARLY_START_OFFSET: self.config_data.get(
-                    CONF_GLOBAL_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET
-                ),
-                CONF_GLOBAL_EARLY_START_MAX: self.config_data.get(
-                    CONF_GLOBAL_EARLY_START_MAX, DEFAULT_EARLY_START_MAX
-                ),
+                CONF_GLOBAL_EARLY_START_OFFSET: int(early_offset),
+                CONF_GLOBAL_EARLY_START_MAX: int(early_max),
                 CONF_GLOBAL_OVERRIDE_TIMEOUT: self.config_data.get(
                     CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
                 ),
-                CONF_FRIDAY_WEEKEND_START_HOUR: self.config_data.get(
-                    CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+                CONF_FRIDAY_WEEKEND_START_HOUR: int(
+                    self.config_data.get(
+                        CONF_FRIDAY_WEEKEND_START_HOUR,
+                        DEFAULT_FRIDAY_WEEKEND_START_HOUR,
+                    )
                 ),
-                CONF_VALVE_PROTECTION_DAY: self.config_data.get(
-                    CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
+                CONF_HOMEOFFICE_END_HOUR: int(
+                    self.config_data.get(
+                        CONF_HOMEOFFICE_END_HOUR,
+                        DEFAULT_HOMEOFFICE_END_HOUR,
+                    )
                 ),
-                CONF_VALVE_PROTECTION_HOUR: self.config_data.get(
-                    CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
+                CONF_HOMEOFFICE_SINGLE_DAY: bool(
+                    self.config_data.get(
+                        CONF_HOMEOFFICE_SINGLE_DAY,
+                        DEFAULT_HOMEOFFICE_SINGLE_DAY,
+                    )
                 ),
-                CONF_VALVE_PROTECTION_INTERVAL_WEEKS: self.config_data.get(
-                    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
-                    DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
+                CONF_VALVE_PROTECTION_DAY: int(
+                    self.config_data.get(
+                        CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
+                    )
+                ),
+                CONF_VALVE_PROTECTION_HOUR: int(
+                    self.config_data.get(
+                        CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
+                    )
+                ),
+                CONF_VALVE_PROTECTION_INTERVAL_WEEKS: int(
+                    self.config_data.get(
+                        CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+                        DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
+                    )
+                ),
+                CONF_USE_HEATING_CURVE: self.config_data.get(
+                    CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
+                ),
+                CONF_HEATING_CURVE_SLOPE: float(
+                    self.config_data.get(
+                        CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
+                    )
+                ),
+                CONF_USE_WEATHER_PREDICTION: self.config_data.get(
+                    CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
                 ),
             }
         )
@@ -529,7 +606,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
     def get_hub_mode(self) -> str:
         """Get current hub mode."""
-        self._update_hub_mode()
+        # Do not poll hass.states via _update_hub_mode() here:
+        # TaDIYHubCoordinator is the single source of truth for hub_mode.
         return self.hub_mode
 
     def set_hub_mode(self, mode: str) -> None:
@@ -538,6 +616,13 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             old_mode = self.hub_mode
             self.hub_mode = mode
             self._hub_mode_set_at = dt_util.utcnow()
+            if mode == HUB_MODE_HOMEOFFICE:
+                self._homeoffice_started_date = dt_util.now().date()
+            else:
+                self._homeoffice_started_date = None
+            if isinstance(self.data, dict):
+                self.data["hub_mode"] = mode
+            self.async_update_listeners()
             _LOGGER.debug("Hub mode set to: %s", mode)
 
             # Clear all room overrides on mode change
@@ -676,9 +761,40 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             return False
         return self.location_manager.should_reduce_heating()
 
-    def set_location_override(self, override: bool | None) -> None:
-        """Set manual location override."""
-        self.location_manager.set_manual_override(override)
+    async def async_load_location_data(self) -> None:
+        """Load persisted location override state."""
+        try:
+            data = await self.location_store.async_load()
+            if data and self.location_manager:
+                self.location_manager.restore_from_dict(data)
+                _LOGGER.debug("Location state restored: %s", data)
+        except Exception as err:
+            _LOGGER.warning("Failed to load location state: %s", err)
+
+    async def async_save_location_data(self) -> None:
+        """Persist location override state."""
+        try:
+            if self.location_manager:
+                await self.location_store.async_save(self.location_manager.to_dict())
+        except Exception as err:
+            _LOGGER.warning("Failed to save location state: %s", err)
+
+    def set_location_override(
+        self, override: bool | None, immediate: bool = True
+    ) -> None:
+        """Set manual location override and refresh all rooms."""
+        self.location_manager.set_manual_override(override, immediate=immediate)
+        self.hass.async_create_task(self.async_save_location_data())
+        self.async_update_listeners()
+
+        from .const import DOMAIN
+        for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and entry_data.get("type") == "room":
+                coord = entry_data.get("coordinator")
+                if coord:
+                    if hasattr(coord, "trv_manager"):
+                        coord.trv_manager._last_applied_target = None
+                    self.hass.async_create_task(coord.async_request_refresh())
 
     def register_heat_model(self, room_name: str, model: Any) -> None:
         """Register a heat model for a room."""
@@ -799,6 +915,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         self.current_room_data: RoomData | None = None
         self._heat_model = HeatUpModel(room_name=self.room_config.name)
         self._heat_model.set_debug_callback(self._debug_callback)
+        self.early_start_calculator = EarlyStartCalculator(
+            self._heat_model, debug_callback=self._debug_callback
+        )
+        if self.hub_coordinator:
+            self.hub_coordinator.register_heat_model(
+                self.room_config.name, self._heat_model
+            )
         self.heat_model_store = Store(
             hass,
             STORAGE_VERSION,
@@ -868,6 +991,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             room_name=self.room_config.name,
             debug_callback=self._debug_callback,
         )
+        self._last_problem_active: bool = False
 
         # Valve Protection Manager
         from .core.valve_protection import ValveProtectionManager
@@ -916,6 +1040,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # Command and Remember: Store the last target TaDIY commanded
         self._commanded_target: float | None = None
         self._commanded_hvac_mode: str = "heat"
+        self._manual_room_off: bool = False
 
         # Change detection: skip heavy work when nothing changed
         self._last_final_target: float | None = None
@@ -960,12 +1085,21 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 hysteresis,
             )
 
-        # Heating Curve (optional weather compensation)
-        use_curve = room_data.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE)
+        # Heating Curve (optional weather compensation - Hub setting or Room fallback)
+        hub_settings = (
+            self.hub_coordinator.global_settings if self.hub_coordinator else {}
+        )
+        use_curve = room_data.get(
+            CONF_USE_HEATING_CURVE,
+            hub_settings.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE),
+        )
         if use_curve:
             curve_config = HeatingCurveConfig(
                 curve_slope=room_data.get(
-                    CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
+                    CONF_HEATING_CURVE_SLOPE,
+                    hub_settings.get(
+                        CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
+                    ),
                 ),
             )
             self.heating_curve = HeatingCurve(curve_config)
@@ -1010,6 +1144,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             return self.hass.data[DOMAIN].get("hub_coordinator")
         return getattr(self, "_hub_coordinator", None)
 
+    @hub_coordinator.setter
+    def hub_coordinator(self, value: TaDIYHubCoordinator | None) -> None:
+        """Set the hub coordinator reference."""
+        # Fehleranalyse: AttributeError 'property hub_coordinator has no setter' bei Setup/Reload
+        self._hub_coordinator = value
+
     def debug(self, category: str, message: str, *args: Any) -> None:
         """Log debug message if category enabled."""
         self._logger.debug(category, message, *args)
@@ -1024,6 +1164,15 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     def _transform_config_data(self, room_data: dict[str, Any]) -> dict[str, Any]:
         """Transform config flow data to RoomConfig expected format."""
+        hub_settings = (
+            self.hub_coordinator.global_settings if self.hub_coordinator else {}
+        )
+        default_open_timeout = hub_settings.get(
+            CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
+        )
+        default_close_timeout = hub_settings.get(
+            CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
+        )
         return {
             "name": room_data.get(CONF_ROOM_NAME, "Unknown"),
             "trv_entity_ids": room_data.get(CONF_TRV_ENTITIES, []),
@@ -1032,11 +1181,26 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "window_sensor_ids": room_data.get(CONF_WINDOW_SENSORS, []),
             "outdoor_sensor_id": room_data.get(CONF_OUTDOOR_SENSOR, ""),
             "weather_entity_id": room_data.get(CONF_WEATHER_ENTITY, ""),
-            "window_open_timeout": room_data.get("window_open_timeout", 300),
-            "window_close_timeout": room_data.get("window_close_timeout", 180),
-            "dont_heat_below_outdoor": room_data.get("dont_heat_below_outdoor", 0.0),
-            "use_early_start": room_data.get("use_early_start", True),
-            "learn_heating_rate": room_data.get("learn_heating_rate", True),
+            "window_open_timeout": room_data.get(
+                "window_open_timeout", default_open_timeout
+            ),
+            "window_close_timeout": room_data.get(
+                "window_close_timeout", default_close_timeout
+            ),
+            "dont_heat_below_outdoor": room_data.get(
+                "dont_heat_below_outdoor",
+                hub_settings.get(CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW),
+            ),
+            "use_early_start": room_data.get(
+                "use_early_start",
+                hub_settings.get(CONF_GLOBAL_USE_EARLY_START, DEFAULT_USE_EARLY_START),
+            ),
+            "learn_heating_rate": room_data.get(
+                "learn_heating_rate",
+                hub_settings.get(
+                    CONF_GLOBAL_LEARN_HEATING_RATE, DEFAULT_LEARN_HEATING_RATE
+                ),
+            ),
             "early_start_offset": room_data.get("early_start_offset"),  # None = use hub
             "early_start_max": room_data.get("early_start_max"),  # None = use hub
             "override_timeout": room_data.get("override_timeout"),  # None = use hub
@@ -1051,10 +1215,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "pid_ki": room_data.get(CONF_PID_KI, DEFAULT_PID_KI),
             "pid_kd": room_data.get(CONF_PID_KD, DEFAULT_PID_KD),
             "use_heating_curve": room_data.get(
-                CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
+                CONF_USE_HEATING_CURVE,
+                hub_settings.get(CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE),
             ),
             "heating_curve_slope": room_data.get(
-                CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
+                CONF_HEATING_CURVE_SLOPE,
+                hub_settings.get(
+                    CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
+                ),
             ),
             "use_humidity_compensation": room_data.get(
                 "use_humidity_compensation", False
@@ -1064,7 +1232,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             ),
             "trv_hvac_modes": room_data.get(CONF_TRV_HVAC_MODES, None),
             "use_weather_prediction": room_data.get(
-                CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
+                CONF_USE_WEATHER_PREDICTION,
+                hub_settings.get(
+                    CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
+                ),
             ),
             "use_room_coupling": room_data.get(
                 CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING
@@ -1301,6 +1472,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         try:
             self._heat_model = HeatUpModel.from_dict(data)
             self._heat_model.set_debug_callback(self._debug_callback)
+            self.early_start_calculator = EarlyStartCalculator(
+                self._heat_model, debug_callback=self._debug_callback
+            )
+            if self.hub_coordinator:
+                self.hub_coordinator.register_heat_model(
+                    self.room_config.name, self._heat_model
+                )
             _LOGGER.info(
                 "Loaded heat model for room %s: %.2f°C/h (samples=%d, confidence=%.0f%%)",
                 self.room_config.name,
@@ -1635,24 +1813,29 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         """Get scheduled target temperature for this room (with optional heating curve and weather prediction)."""
         mode = self.get_hub_mode()
 
-        # Read friday_weekend_start_hour from hub global settings (default: 24 = disabled)
+        # Read friday_weekend_start_hour and homeoffice_end_hour from hub global settings
         friday_weekend_start_hour = DEFAULT_FRIDAY_WEEKEND_START_HOUR
+        homeoffice_end_hour = DEFAULT_HOMEOFFICE_END_HOUR
         if self.hub_coordinator:
             friday_weekend_start_hour = self.hub_coordinator.global_settings.get(
                 CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+            )
+            homeoffice_end_hour = self.hub_coordinator.global_settings.get(
+                CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
             )
 
         base_target = self.schedule_engine.get_target_temperature(
             self.room_config.name,
             mode,
             friday_weekend_start_hour=friday_weekend_start_hour,
+            homeoffice_end_hour=homeoffice_end_hour,
         )
 
         self.debug(
             "rooms", "get_scheduled_target - mode=%s, target=%s", mode, base_target
         )
 
-        # Detect schedule block change for bounce prevention
+        # Detect schedule block change for bounce prevention and next_block override clearing
         if base_target is not None and base_target != self._last_scheduled_target:
             if self._last_scheduled_target is not None:
                 self._schedule_change_at = dt_util.utcnow()
@@ -1662,9 +1845,103 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     self._last_scheduled_target,
                     base_target,
                 )
+                # Clear overrides that expire at the next schedule block
+                for trv_id, override in list(self.override_manager._overrides.items()):
+                    if override.timeout_mode in (
+                        OVERRIDE_TIMEOUT_NEXT_BLOCK,
+                        OVERRIDE_TIMEOUT_ALWAYS,
+                    ):
+                        self.override_manager.clear_override(trv_id)
+                        self.debug(
+                            "rooms",
+                            "Cleared %s override for %s on schedule block change",
+                            override.timeout_mode,
+                            trv_id,
+                        )
+                # Force immediate application of the new scheduled target
+                self.trv_manager._last_applied_target = None
             self._last_scheduled_target = base_target
 
-        # Apply heating curve if enabled and outdoor temp available
+        hub_settings = self.get_hub_settings()
+
+        # Apply Away mode gradual reduction if enabled and active (Hub setting takes effect across all rooms)
+        if (
+            base_target is not None
+            and mode not in ("manual", "off")
+            and self.hub_coordinator
+            and self.hub_coordinator.is_away_mode_active()
+        ):
+            away_temp = self.feature_settings.get(
+                CONF_AWAY_TEMPERATURE,
+    CONF_BOILER_TEMP_SENSOR, DEFAULT_AWAY_TEMPERATURE
+            )
+            base_target = self.hub_coordinator.location_manager.get_gradual_away_target(
+                base_target, away_temp
+            )
+            self.debug(
+                "rooms",
+                "Away mode active: target reduced to %.1f°C",
+                base_target,
+            )
+
+        # Apply Early Start pre-heating if enabled
+        use_early_start = hub_settings.get(
+            CONF_GLOBAL_USE_EARLY_START, self.room_config.use_early_start
+        )
+        if (
+            base_target is not None
+            and use_early_start
+            and mode not in ("manual", "off")
+            and hasattr(self, "early_start_calculator")
+        ):
+            current_temp = self.get_current_temperature()
+            next_change = self.schedule_engine.get_next_schedule_change(
+                self.room_config.name,
+                mode,
+                friday_weekend_start_hour=friday_weekend_start_hour,
+                homeoffice_end_hour=homeoffice_end_hour,
+            )
+            if (
+                next_change is not None
+                and current_temp is not None
+                and next_change[1] > base_target
+                and current_temp < next_change[1]
+            ):
+                next_dt, next_temp = next_change
+                now_local = dt_util.now()
+                raw_start = self.early_start_calculator.calculate_start_time(
+                    current_temp, next_temp, next_dt
+                ) - timedelta(minutes=self.get_early_start_offset())
+                earliest_allowed = next_dt - timedelta(
+                    minutes=self.get_early_start_max()
+                )
+                effective_start = max(raw_start, earliest_allowed)
+                if effective_start <= now_local < next_dt:
+                    self.debug(
+                        "early_start",
+                        "Early start active for %s: pre-heating to %.1f°C for %s (start=%s)",
+                        self.room_config.name,
+                        next_temp,
+                        next_dt.strftime("%H:%M"),
+                        effective_start.strftime("%H:%M"),
+                    )
+                    base_target = next_temp
+
+        # Apply heating curve if enabled and outdoor temp available (Hub setting takes precedence)
+        use_heating_curve = hub_settings.get(
+            CONF_USE_HEATING_CURVE, self.room_config.use_heating_curve
+        )
+        if use_heating_curve:
+            slope = hub_settings.get(
+                CONF_HEATING_CURVE_SLOPE, self.room_config.heating_curve_slope
+            )
+            if self.heating_curve is None:
+                self.heating_curve = HeatingCurve(HeatingCurveConfig(curve_slope=slope))
+            else:
+                self.heating_curve.config.curve_slope = slope
+        elif self.heating_curve is not None and not self.room_config.use_heating_curve:
+            self.heating_curve = None
+
         if (
             base_target is not None
             and self.heating_curve is not None
@@ -1683,9 +1960,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             base_target = adjusted_target
 
         # Apply weather prediction adjustment if enabled (Phase 3.3)
+        use_weather_prediction = hub_settings.get(
+            CONF_USE_WEATHER_PREDICTION, self.room_config.use_weather_prediction
+        )
         if (
             base_target is not None
-            and self.room_config.use_weather_prediction
+            and use_weather_prediction
             and self.hub_coordinator
             and self._cached_outdoor_temp is not None
         ):
@@ -1740,9 +2020,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
             # Update overshoot tracking with current temperature
             if current_temp is not None:
-                self.overshoot_manager.update_temperature(
+                new_overshoot_sample = self.overshoot_manager.update_temperature(
                     self.room_config.name, current_temp, outdoor_temp
                 )
+                if new_overshoot_sample:
+                    self.hass.async_create_task(self.async_save_overshoot())
 
             # Get compensated target (skip during schedule change lockout)
             if not schedule_change_lockout:
@@ -1842,10 +2124,14 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         last_commanded = self.trv_manager.get_last_commanded(entity_id)
         if last_commanded and last_commanded.get("temperature") is not None:
             last_sent_temp = last_commanded["temperature"]
+            uncalibrated_temp = last_commanded.get("uncalibrated_target")
             last_cmd_time = last_commanded.get("timestamp")
 
-            # If new temp matches last sent command, it's just the TRV obeying us
-            if abs(new_temp - last_sent_temp) < 2.0:
+            # If new temp matches last sent command (calibrated or uncalibrated), it's just the TRV obeying us
+            matches_commanded = abs(new_temp - last_sent_temp) < 2.0 or (
+                uncalibrated_temp is not None and abs(new_temp - uncalibrated_temp) < 2.0
+            )
+            if matches_commanded:
                 _LOGGER.debug(
                     "TRV %s: State matches last commanded value (%.1f), ignoring as echo",
                     entity_id,
@@ -1987,6 +2273,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 next_block_time = None
                 if hub_mode not in ("manual", "off"):
                     friday_weekend_start_hour = DEFAULT_FRIDAY_WEEKEND_START_HOUR
+                    homeoffice_end_hour = DEFAULT_HOMEOFFICE_END_HOUR
                     if self.hub_coordinator:
                         friday_weekend_start_hour = (
                             self.hub_coordinator.global_settings.get(
@@ -1994,10 +2281,17 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                                 DEFAULT_FRIDAY_WEEKEND_START_HOUR,
                             )
                         )
+                        homeoffice_end_hour = (
+                            self.hub_coordinator.global_settings.get(
+                                CONF_HOMEOFFICE_END_HOUR,
+                                DEFAULT_HOMEOFFICE_END_HOUR,
+                            )
+                        )
                     next_change = self.schedule_engine.get_next_schedule_change(
                         self.room_config.name,
                         hub_mode,
                         friday_weekend_start_hour=friday_weekend_start_hour,
+                        homeoffice_end_hour=homeoffice_end_hour,
                     )
                     next_block_time = next_change[0] if next_change else None
 
@@ -2251,8 +2545,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 hvac_mode="heat",
             )
 
-            # Hub mode "off": never heat, TRV shows off_temperature but HVAC is off
-            if hub_mode == "off":
+            #Hub mode "off" or window open timeout reached: never heat
+            if hub_mode == "off" or window_state.heating_should_stop:
                 should_heat = False
 
             # Safety overrides
@@ -2273,17 +2567,40 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             await self.trv_manager.apply_target(final_target, should_heat=should_heat)
             self.safety_manager.on_trv_command_sent(fused_temp)
 
+            # Update room coupling heating status (heat transfer to neighbors)
+            if self.hub_coordinator and hasattr(
+                self.hub_coordinator, "room_coupling_manager"
+            ):
+                self.hub_coordinator.room_coupling_manager.update_room_heating_status(
+                    self.room_config.name,
+                    is_heating=bool(should_heat),
+                    current_temp=fused_temp,
+                    target_temp=final_target,
+                )
+
             # Overshoot learning
             if not valve_cycling_active:
                 if should_heat and fused_temp is not None:
                     self.overshoot_manager.start_heating_cycle(
                         self.room_config.name, fused_temp, final_target
                     )
-                elif not should_heat:
+                elif (
+                    hub_mode == "off"
+                    or window_state.heating_should_stop
+                    or self._manual_room_off
+                    or (
+                        self._last_final_target is not None
+                        and final_target < self._last_final_target - 0.1
+                    )
+                ):
                     self.overshoot_manager.end_heating_cycle(self.room_config.name)
 
             self._commanded_target = final_target
-            self._commanded_hvac_mode = "heat" if should_heat else "off"
+            self._commanded_hvac_mode = (
+                "off"
+                if (hub_mode == "off" or window_state.heating_should_stop)
+                else "heat"
+            )
             self._last_final_target = final_target
             self._last_enforce = True
             heating_active = should_heat
@@ -2292,22 +2609,64 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             self._last_enforce = False
             heating_active = trv_state["mode"] == "heat"
 
-        # 6b. Valve stuck detection
-        self.safety_manager.check_valve_stuck(fused_temp, heating_active)
+        # 6b. Safety & Heating problem detection (K-13)
+        self.safety_manager.check_safety(fused_temp, final_target, heating_active)
+        is_problem = self.safety_manager.state.any_alert
+        if is_problem and not self._last_problem_active:
+            problem_type = self.safety_manager.state.active_problem_type
+            problem_msg = self.safety_manager.state.active_problem_description
+            self.hass.bus.async_fire(
+                "tadiy_alert",
+                {
+                    "room": self.room_config.name,
+                    "problem_type": problem_type,
+                    "message": problem_msg,
+                    "timestamp": dt_util.utcnow().isoformat(),
+                },
+            )
+            try:
+                from homeassistant.components import persistent_notification
+
+                persistent_notification.async_create(
+                    self.hass,
+                    message=problem_msg or f"Störung in Raum {self.room_config.name}",
+                    title=f"TaDIY Warnung: {self.room_config.name}",
+                    notification_id=f"tadiy_alert_{self.entry_id}",
+                )
+            except Exception as notif_err:
+                _LOGGER.warning("Could not create persistent notification: %s", notif_err)
+        elif not is_problem and self._last_problem_active:
+            try:
+                from homeassistant.components import persistent_notification
+
+                persistent_notification.async_dismiss(
+                    self.hass,
+                    notification_id=f"tadiy_alert_{self.entry_id}",
+                )
+            except Exception:
+                pass
+        self._last_problem_active = is_problem
 
         # 7. Update models (Learning)
         if fused_temp is not None:
+            hub_settings = self.get_hub_settings()
+            learn_heating_rate = hub_settings.get(
+                CONF_GLOBAL_LEARN_HEATING_RATE, self.room_config.learn_heating_rate
+            )
             # Heat-up Model Tracking (Learning heating rate)
-            if heating_active:
-                prev_temp = getattr(self, "_last_fused_temp", None)
-                prev_time = getattr(self, "_last_temp_time", None)
+            if heating_active and learn_heating_rate:
+                prev_temp = getattr(self, "_learning_start_temp", None)
+                prev_time = getattr(self, "_learning_start_time", None)
                 now = dt_util.utcnow()
 
-                if prev_temp is not None and prev_time is not None:
+                if prev_temp is None or prev_time is None:
+                    self._learning_start_temp = fused_temp
+                    self._learning_start_time = now
+                else:
                     time_delta = (now - prev_time).total_seconds() / 60.0
                     if time_delta >= 5.0:
                         temp_increase = fused_temp - prev_temp
-                        if temp_increase > 0.01:
+                        if temp_increase >= 0.05 or (time_delta >= 15.0 and temp_increase > 0.01):
                             try:
                                 self._heat_model.update_with_measurement(
                                     temp_increase, time_delta
@@ -2316,12 +2675,22 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                                 self.hass.async_create_task(
                                     self.async_save_heat_model()
                                 )
+                                if self.hub_coordinator:
+                                    self.hass.async_create_task(
+                                        self.hub_coordinator.async_save_learning_data()
+                                    )
                             except ValueError:
                                 pass
-                            self._last_temp_time = now
-
-                if not getattr(self, "_last_temp_time", None):
-                    self._last_temp_time = now
+                            # Advance measurement baseline after valid measurement
+                            self._learning_start_temp = fused_temp
+                            self._learning_start_time = now
+                        elif temp_increase < -0.1:
+                            # Temperature dropped despite heating (e.g. open door) - reset baseline
+                            self._learning_start_temp = fused_temp
+                            self._learning_start_time = now
+            else:
+                self._learning_start_temp = None
+                self._learning_start_time = None
 
             # Thermal Mass Model Tracking (Learning cooling rate)
             self._thermal_mass_model.start_cooling_measurement(
@@ -2334,6 +2703,62 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     self.hass.async_create_task(self.async_save_thermal_mass())
 
             self._last_fused_temp = fused_temp
+
+        # Determine human-readable target source description
+        if active_override:
+            until_str = (
+                active_override.valid_until.strftime("%H:%M")
+                if active_override.valid_until
+                else "Dauerhaft"
+            )
+            target_source = f"Manueller Override ({active_override.override_temp:.1f}°C bis {until_str})"
+        elif self._manual_room_off:
+            target_source = "Raum manuell AUS"
+        elif hub_mode == "away":
+            target_source = f"Abwesend-Modus ({self.room_config.away_temperature:.1f}°C)"
+        elif hub_mode == "homeoffice":
+            target_source = (
+                f"Homeoffice ({scheduled_target:.1f}°C)"
+                if scheduled_target
+                else "Homeoffice"
+            )
+        elif hub_mode == "off":
+            target_source = "System AUS (Frostschutz)"
+        elif scheduled_target is not None:
+            sched_label = (
+                "Wochenende" if dt_util.now().weekday() >= 5 else "Wochentag"
+            )
+            target_source = f"Zeitplan ({sched_label}: {scheduled_target:.1f}°C)"
+        else:
+            target_source = "Standard-Sollwert"
+
+        # Determine human-readable decision reason
+        if overheat:
+            decision_reason = "Überhitzungsschutz aktiv (Abschaltung)"
+        elif frost_emergency:
+            decision_reason = "Frostschutz-Notfall aktiv"
+        elif window_state.heating_should_stop:
+            decision_reason = "Fenster geöffnet (Heizstopp)"
+        elif hub_mode == "off":
+            decision_reason = "Hub-Modus ist AUS"
+        elif self._manual_room_off:
+            decision_reason = "Raum manuell ausgeschaltet"
+        elif valve_cycling_active:
+            decision_reason = f"Ventilschutz-Zyklus aktiv ({phase})"
+        elif heating_active:
+            if fused_temp is not None and final_target is not None:
+                if fused_temp < final_target:
+                    decision_reason = f"Heizbedarf aktiv (Ist: {fused_temp:.1f}°C, Soll: {final_target:.1f}°C)"
+                else:
+                    decision_reason = f"Hysterese-Nachlauf aktiv (Ist: {fused_temp:.1f}°C, Soll: {final_target:.1f}°C)"
+            else:
+                decision_reason = "Heizbedarf aktiv"
+        else:
+            decision_reason = (
+                f"Zieltemperatur erreicht / Hysterese im Leerlauf (Ist: {fused_temp:.1f}°C, Soll: {final_target:.1f}°C)"
+                if (fused_temp is not None and final_target is not None)
+                else "Leerlauf / Sollwert erreicht"
+            )
 
         # 8. Create RoomData using COMMANDED target (not TRV feedback)
         room_data = RoomData(
@@ -2358,6 +2783,15 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             heating_rate_last_updated=self._heat_model.last_updated,
             override_active=active_override is not None,
             override_count=1 if active_override else 0,
+            safety_problem_active=self.safety_manager.state.any_alert,
+            safety_problem_type=self.safety_manager.state.active_problem_type,
+            safety_problem_description=self.safety_manager.state.active_problem_description,
+            safety_problem_since=self.safety_manager.state.active_problem_since,
+            target_source=target_source,
+            decision_reason=decision_reason,
+            decision_time=dt_util.utcnow(),
+            active_temp_sensor=self.sensor_manager.active_sensor_id,
+            sensor_fallback_active=self.sensor_manager.is_fallback_active,
         )
 
         # Increment update counter
@@ -2372,6 +2806,15 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
     def _calculate_window_state(self, window_open: bool) -> WindowState:
         """Calculate current window state."""
+        hub_settings = self.get_hub_settings()
+        open_timeout = hub_settings.get(
+            CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, self.room_config.window_open_timeout
+        )
+        close_timeout = hub_settings.get(
+            CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, self.room_config.window_close_timeout
+        )
+        self.window_detector.update_timeouts(open_timeout, close_timeout)
+
         raw_state = WindowState(
             is_open=window_open,
             reason="window_open_heating_disabled" if window_open else "window_closed",

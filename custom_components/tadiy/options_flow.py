@@ -13,6 +13,7 @@ from homeassistant.helpers import selector
 from .const import (
     CONF_ADJACENT_ROOMS,
     CONF_AWAY_TEMPERATURE,
+    CONF_BOILER_TEMP_SENSOR,
     CONF_COUPLING_STRENGTH,
     CONF_DEBUG_CALIBRATION,
     CONF_DEBUG_CARDS,
@@ -34,6 +35,8 @@ from .const import (
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HEATING_CURVE_SLOPE,
+    CONF_HOMEOFFICE_END_HOUR,
+    CONF_HOMEOFFICE_SINGLE_DAY,
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
@@ -68,6 +71,8 @@ from .const import (
     DEFAULT_FRIDAY_WEEKEND_START_HOUR,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
+    DEFAULT_HOMEOFFICE_END_HOUR,
+    DEFAULT_HOMEOFFICE_SINGLE_DAY,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
     DEFAULT_PID_KD,
@@ -113,7 +118,13 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
+        # Call super().__init__() to properly initialize DataEntryFlow/FlowHandler state
+        try:
+            super().__init__(config_entry)
+        except TypeError:
+            super().__init__()
         self._entry = config_entry
+        self._config_entry = config_entry
         # Schedule editor state
         self._selected_mode: str | None = None
         self._selected_schedule_type: str | None = None
@@ -302,7 +313,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             new_data[CONF_SHOW_PANEL] = user_input.get(CONF_SHOW_PANEL, True)
 
             # Remove empty optional fields
-            for key in [CONF_WEATHER_ENTITY, CONF_OUTDOOR_SENSOR, CONF_PERSON_ENTITIES]:
+            for key in [
+                CONF_WEATHER_ENTITY,
+                CONF_OUTDOOR_SENSOR,
+                CONF_PERSON_ENTITIES,
+                CONF_BOILER_TEMP_SENSOR,
+            ]:
                 value = user_input.get(key)
                 if value in ("", [], None):
                     new_data.pop(key, None)
@@ -344,6 +360,14 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                     friday_weekend_start_hour
                 )
 
+            # Homeoffice settings (Hub-level)
+            homeoffice_end_hour = user_input.get(CONF_HOMEOFFICE_END_HOUR)
+            if homeoffice_end_hour is not None:
+                new_data[CONF_HOMEOFFICE_END_HOUR] = int(homeoffice_end_hour)
+            new_data[CONF_HOMEOFFICE_SINGLE_DAY] = user_input.get(
+                CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
+            )
+
             # Valve Protection schedule settings (Hub-level)
             vp_day = user_input.get(CONF_VALVE_PROTECTION_DAY)
             if vp_day is not None:
@@ -382,6 +406,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         current_show_panel = current_data.get(CONF_SHOW_PANEL, True)
         current_weather = current_data.get(CONF_WEATHER_ENTITY, "")
         current_outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR, "")
+        current_boiler_sensor = current_data.get(CONF_BOILER_TEMP_SENSOR, "")
         current_persons = current_data.get(CONF_PERSON_ENTITIES, [])
         current_location_mode = current_data.get(CONF_LOCATION_MODE_ENABLED, False)
         current_override_timeout = current_data.get(
@@ -407,6 +432,12 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         )
         current_friday_weekend_start_hour = current_data.get(
             CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
+        )
+        current_homeoffice_end_hour = current_data.get(
+            CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
+        )
+        current_homeoffice_single_day = current_data.get(
+            CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
         )
         current_vp_day = current_data.get(
             CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
@@ -441,6 +472,18 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             vol.Optional(
                 CONF_OUTDOOR_SENSOR,
                 description={"suggested_value": current_outdoor_sensor},
+            )
+        ] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_BOILER_TEMP_SENSOR,
+                description={"suggested_value": current_boiler_sensor},
             )
         ] = selector.EntitySelector(
             selector.EntitySelectorConfig(
@@ -579,6 +622,28 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 mode=selector.NumberSelectorMode.SLIDER,
             )
         )
+
+        schema_dict[
+            vol.Optional(
+                CONF_HOMEOFFICE_END_HOUR,
+                default=current_homeoffice_end_hour,
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                max=24,
+                step=1,
+                unit_of_measurement="h",
+                mode=selector.NumberSelectorMode.SLIDER,
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_HOMEOFFICE_SINGLE_DAY,
+                default=current_homeoffice_single_day,
+            )
+        ] = selector.BooleanSelector()
 
         # Valve Protection (Anti-Calcification) scheduling
         schema_dict[
@@ -827,9 +892,10 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             optional_entity_fields = [
                 CONF_MAIN_TEMP_SENSOR,
                 CONF_HUMIDITY_SENSOR,
-                CONF_OUTDOOR_SENSOR,
-                CONF_WEATHER_ENTITY,
             ]
+            # Remove any legacy room-level weather/outdoor settings (now Hub-only)
+            new_data.pop(CONF_OUTDOOR_SENSOR, None)
+            new_data.pop(CONF_WEATHER_ENTITY, None)
 
             # Debug logging
             _LOGGER.debug(
@@ -1035,33 +1101,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 domain="binary_sensor",
                 device_class=["door", "window", "opening"],
                 multiple=True,
-            )
-        )
-
-        # Outdoor sensor (optional - can be cleared by not selecting anything)
-        outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR)
-        schema_dict[
-            vol.Optional(
-                CONF_OUTDOOR_SENSOR,
-                description={"suggested_value": outdoor_sensor},
-            )
-        ] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
-            )
-        )
-
-        # Weather entity (optional - can be cleared by not selecting anything)
-        weather_entity = current_data.get(CONF_WEATHER_ENTITY)
-        schema_dict[
-            vol.Optional(
-                CONF_WEATHER_ENTITY,
-                description={"suggested_value": weather_entity},
-            )
-        ] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="weather",
             )
         )
 

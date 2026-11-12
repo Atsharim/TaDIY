@@ -34,15 +34,29 @@ def get_device_info(
     else:
         device_info["model"] = "Room Controller"
 
-        # Link room to hub via via_device
-        hub_entry_id = entry.data.get("hub_entry_id")
-        if hub_entry_id:
-            device_info["via_device"] = (DOMAIN, hub_entry_id)
-        elif hass:
-            # Fallback: Find hub entry if not in data
+        # Link room to hub via via_device_id or via_device
+        target_hub_id = entry.data.get("hub_entry_id")
+        if not target_hub_id and hass:
             for config_entry in hass.config_entries.async_entries(DOMAIN):
                 if config_entry.data.get(CONF_HUB, False):
-                    device_info["via_device"] = (DOMAIN, config_entry.entry_id)
+                    target_hub_id = config_entry.entry_id
                     break
+
+        if target_hub_id and hass:
+            try:
+                from homeassistant.helpers import device_registry as dr
+                dev_reg = dr.async_get(hass)
+                if hasattr(dev_reg, "async_get_device_by_identifier"):
+                    hub_device = dev_reg.async_get_device_by_identifier((DOMAIN, target_hub_id))
+                else:
+                    hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, target_hub_id)})
+                if hub_device:
+                    device_info["via_device_id"] = hub_device.id
+                else:
+                    device_info["via_device"] = (DOMAIN, target_hub_id)
+            except Exception:
+                device_info["via_device"] = (DOMAIN, target_hub_id)
+        elif target_hub_id:
+            device_info["via_device"] = (DOMAIN, target_hub_id)
 
     return device_info

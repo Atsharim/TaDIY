@@ -151,6 +151,9 @@ class WeatherPredictor:
             elif not isinstance(forecast_time, datetime):
                 continue
 
+            # Ensure UTC-aware datetime for safe comparison
+            forecast_time = dt_util.as_utc(forecast_time)
+
             # Only keep forecasts within our horizon
             if forecast_time > cutoff_time:
                 continue

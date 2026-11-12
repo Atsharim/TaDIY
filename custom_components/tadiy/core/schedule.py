@@ -62,6 +62,7 @@ class ScheduleEngine:
         mode: str,
         dt: datetime | None = None,
         friday_weekend_start_hour: int = 24,
+        homeoffice_end_hour: int = 24,
     ) -> float | None:
         """
         Get target temperature for room based on current mode and time.
@@ -71,6 +72,7 @@ class ScheduleEngine:
             mode: Current hub mode (normal|homeoffice|manual|off)
             dt: Datetime to check (defaults to now)
             friday_weekend_start_hour: Hour on Friday to switch to weekend schedule
+            homeoffice_end_hour: Hour to switch from homeoffice to normal evening schedule
 
         Returns:
             Target temperature in C, or None if manual mode or no schedule
@@ -103,14 +105,14 @@ class ScheduleEngine:
         current_time = dt.time()
 
         day_schedule = room_schedule.get_schedule_for_mode(
-            mode, dt, friday_weekend_start_hour
+            mode, dt, friday_weekend_start_hour, homeoffice_end_hour
         )
         schedule_source = mode
 
         if not day_schedule:
             # Custom mode without own schedule: Fall back to normal schedule
             day_schedule = room_schedule.get_schedule_for_mode(
-                "normal", dt, friday_weekend_start_hour
+                "normal", dt, friday_weekend_start_hour, homeoffice_end_hour
             )
             schedule_source = "normal (fallback)"
             if not day_schedule:
@@ -159,6 +161,7 @@ class ScheduleEngine:
         mode: str,
         dt: datetime | None = None,
         friday_weekend_start_hour: int = 24,
+        homeoffice_end_hour: int = 24,
     ) -> tuple[datetime, float] | None:
         """
         Get next scheduled temperature change.
@@ -168,6 +171,7 @@ class ScheduleEngine:
             mode: Current hub mode
             dt: Datetime to check from (defaults to now)
             friday_weekend_start_hour: Hour on Friday to switch to weekend schedule
+            homeoffice_end_hour: Hour to switch from homeoffice to normal evening schedule
 
         Returns:
             Tuple of (next_change_datetime, target_temperature) or None
@@ -183,7 +187,7 @@ class ScheduleEngine:
             return None
 
         day_schedule = room_schedule.get_schedule_for_mode(
-            mode, dt, friday_weekend_start_hour
+            mode, dt, friday_weekend_start_hour, homeoffice_end_hour
         )
         if not day_schedule:
             return None

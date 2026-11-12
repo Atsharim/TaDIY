@@ -251,9 +251,9 @@ class OverrideManager:
             return start_time + timedelta(minutes=minutes)
 
         if timeout_mode == OVERRIDE_TIMEOUT_NEXT_BLOCK:
-            # Expire at next schedule block change
+            # Expire at next schedule block change (convert to UTC to match start_time)
             if next_block_time:
-                return next_block_time
+                return dt_util.as_utc(next_block_time)
             else:
                 # Fallback: 2 hours if next block time not available
                 _LOGGER.warning("Next block time not available, using 2h fallback")

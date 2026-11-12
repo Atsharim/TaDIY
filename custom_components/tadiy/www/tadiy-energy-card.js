@@ -349,7 +349,7 @@ class TaDiyEnergyIQCard extends HTMLElement {
               ${windowHours > 0 ? `
                 <div class="category-item">
                   <div class="category-icon" style="background: ${this._getCategoryColor('window')}">
-                    🪟
+                    <ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size: 18px; color: #fff;"></ha-icon>
                   </div>
                   <div class="category-info">
                     <div class="category-name">${this._getCategoryLabel('window')}</div>

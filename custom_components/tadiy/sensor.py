@@ -20,10 +20,35 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ICON_COMFORT, ICON_ENERGY, ICON_LEARNING, ICON_TEMPERATURE
+from .const import (
+    DOMAIN,
+    ICON_COMFORT,
+    ICON_ENERGY,
+    ICON_LEARNING,
+    ICON_TEMPERATURE,
+    ICON_WINDOW,
+    WINDOW_STATE_CLOSED,
+    WINDOW_STATE_CLOSED_COOLDOWN,
+    WINDOW_STATE_OPEN_GRACE,
+    WINDOW_STATE_OPEN_HEATING_STOPPED,
+)
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _get_window_sensor_state(data: Any) -> str:
+    """Resolve room window state to translation state key."""
+    if not data or not getattr(data, "window_state", None):
+        return WINDOW_STATE_CLOSED
+    ws = data.window_state
+    if ws.heating_should_stop:
+        if ws.is_open and ws.timeout_ends_at is not None:
+            return WINDOW_STATE_CLOSED_COOLDOWN
+        return WINDOW_STATE_OPEN_HEATING_STOPPED
+    if ws.timeout_active:
+        return WINDOW_STATE_OPEN_GRACE
+    return WINDOW_STATE_CLOSED
 
 
 @dataclass
@@ -70,6 +95,19 @@ ROOM_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
             round(data.humidity, 1) if data and data.humidity is not None else None
         ),
         available_fn=lambda data: data is not None and data.humidity is not None,
+    ),
+    TaDIYSensorEntityDescription(
+        key="window_state",
+        translation_key="window_state",
+        name="Window State",
+        icon=ICON_WINDOW,
+        value_fn=_get_window_sensor_state,
+        available_fn=lambda data: data is not None,
+        attr_fn=lambda data: (
+            data.window_state.to_dict()
+            if data and getattr(data, "window_state", None)
+            else {}
+        ),
     ),
     TaDIYSensorEntityDescription(
         key="heating_rate",
@@ -208,6 +246,23 @@ HUB_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
             and data.get("weather_prediction", {}).get("available", False)
         ),
         attr_fn=lambda data: data.get("weather_prediction", {}) if data else {},
+    ),
+    TaDIYSensorEntityDescription(
+        key="boiler_temperature",
+        name="Vorlauftemperatur",
+        icon="mdi:water-boiler",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("boiler_temperature") if data else None,
+        available_fn=lambda data: (
+            data is not None and data.get("boiler_temperature") is not None
+        ),
+        attr_fn=lambda data: {
+            "source_sensor": data.get("boiler_temp_sensor_id"),
+            "sensor_available": data.get("boiler_sensor_available", True),
+            "boiler_active": data.get("boiler_active", False),
+        } if data else {},
     ),
 )
 
@@ -661,139 +716,23 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
         self.async_write_ha_state()
 
 
-# --- Comfort zone definitions ---
-# Perfect comfort zone (100% score)
-COMFORT_TEMP_IDEAL = 21.0  # Ideal temperature
-COMFORT_HUMIDITY_IDEAL = 50.0  # Ideal humidity
-
-# Good comfort zone (85-99% score)
-COMFORT_TEMP_MIN = 20.0
-COMFORT_TEMP_MAX = 22.0
-COMFORT_HUMIDITY_MIN = 45.0
-COMFORT_HUMIDITY_MAX = 55.0
-
-# Acceptable comfort zone (60-84% score)
-COMFORT_TEMP_ACCEPTABLE_MIN = 19.0
-COMFORT_TEMP_ACCEPTABLE_MAX = 23.0
-COMFORT_HUMIDITY_ACCEPTABLE_MIN = 40.0
-COMFORT_HUMIDITY_ACCEPTABLE_MAX = 60.0
-
-# Poor comfort zone (below 60% score)
-COMFORT_TEMP_COLD = 17.0
-COMFORT_TEMP_WARM = 25.0
-COMFORT_HUMIDITY_DRY = 30.0
-COMFORT_HUMIDITY_WET = 70.0
-
-
-def _calculate_comfort(
-    temperature: float | None, humidity: float | None
-) -> dict[str, Any]:
-    """Calculate room comfort level, score, and color with refined scoring."""
-    if temperature is None:
-        return {
-            "comfort_level": "unknown",
-            "comfort_score": 0,
-            "comfort_color": "#9E9E9E",
-            "temperature": None,
-            "humidity": None,
-            "comfort_position": {"x": 50, "y": 50},
-        }
-
-    # Temperature score (0-100): Gaussian-like curve centered at ideal temp
-    temp_diff = abs(temperature - COMFORT_TEMP_IDEAL)
-
-    if temp_diff <= 0.5:  # Within ±0.5°C of ideal
-        temp_score = 100.0
-    elif COMFORT_TEMP_MIN <= temperature <= COMFORT_TEMP_MAX:
-        # Good zone: 85-99%
-        temp_score = 100.0 - (temp_diff * 15.0)  # Max 1.5°C diff = 22.5 penalty
-    elif COMFORT_TEMP_ACCEPTABLE_MIN <= temperature <= COMFORT_TEMP_ACCEPTABLE_MAX:
-        # Acceptable zone: 60-84%
-        if temperature < COMFORT_TEMP_MIN:
-            temp_score = 85.0 - (COMFORT_TEMP_MIN - temperature) * 25.0
-        else:
-            temp_score = 85.0 - (temperature - COMFORT_TEMP_MAX) * 25.0
-    elif temperature < COMFORT_TEMP_COLD:
-        # Poor - too cold
-        temp_score = max(0.0, 60.0 - (COMFORT_TEMP_COLD - temperature) * 15.0)
-    elif temperature > COMFORT_TEMP_WARM:
-        # Poor - too warm
-        temp_score = max(0.0, 60.0 - (temperature - COMFORT_TEMP_WARM) * 15.0)
-    elif temperature < COMFORT_TEMP_ACCEPTABLE_MIN:
-        temp_score = 60.0 - (COMFORT_TEMP_ACCEPTABLE_MIN - temperature) * 20.0
-    else:  # temperature > COMFORT_TEMP_ACCEPTABLE_MAX
-        temp_score = 60.0 - (temperature - COMFORT_TEMP_ACCEPTABLE_MAX) * 20.0
-
-    # Humidity score (0-100): Similar refined approach
-    if humidity is not None:
-        hum_diff = abs(humidity - COMFORT_HUMIDITY_IDEAL)
-
-        if hum_diff <= 2.5:  # Within ±2.5% of ideal
-            hum_score = 100.0
-        elif COMFORT_HUMIDITY_MIN <= humidity <= COMFORT_HUMIDITY_MAX:
-            # Good zone: 85-99%
-            hum_score = 100.0 - (hum_diff * 3.0)
-        elif (
-            COMFORT_HUMIDITY_ACCEPTABLE_MIN
-            <= humidity
-            <= COMFORT_HUMIDITY_ACCEPTABLE_MAX
-        ):
-            # Acceptable zone: 60-84%
-            if humidity < COMFORT_HUMIDITY_MIN:
-                hum_score = 85.0 - (COMFORT_HUMIDITY_MIN - humidity) * 5.0
-            else:
-                hum_score = 85.0 - (humidity - COMFORT_HUMIDITY_MAX) * 5.0
-        elif humidity < COMFORT_HUMIDITY_DRY:
-            hum_score = max(0.0, 60.0 - (COMFORT_HUMIDITY_DRY - humidity) * 4.0)
-        elif humidity > COMFORT_HUMIDITY_WET:
-            hum_score = max(0.0, 60.0 - (humidity - COMFORT_HUMIDITY_WET) * 4.0)
-        elif humidity < COMFORT_HUMIDITY_ACCEPTABLE_MIN:
-            hum_score = 60.0 - (COMFORT_HUMIDITY_ACCEPTABLE_MIN - humidity) * 3.0
-        else:  # humidity > COMFORT_HUMIDITY_ACCEPTABLE_MAX
-            hum_score = 60.0 - (humidity - COMFORT_HUMIDITY_ACCEPTABLE_MAX) * 3.0
-
-        # Combined score: 60% temperature, 40% humidity
-        score = round(temp_score * 0.6 + hum_score * 0.4)
-    else:
-        hum_score = None
-        score = round(temp_score)
-
-    # Determine primary comfort level
-    if score >= 80:
-        level = "optimal"
-        color = "#4CAF50"  # green
-    elif temperature > COMFORT_TEMP_WARM:
-        level = "too_warm"
-        color = "#FF9800"  # orange
-    elif temperature < COMFORT_TEMP_COLD:
-        level = "too_cold"
-        color = "#2196F3"  # blue
-    elif humidity is not None and humidity < COMFORT_HUMIDITY_DRY:
-        level = "too_dry"
-        color = "#FFC107"  # amber
-    elif humidity is not None and humidity > COMFORT_HUMIDITY_WET:
-        level = "too_humid"
-        color = "#9C27B0"  # purple
-    else:
-        level = "moderate"
-        color = "#8BC34A"  # light green
-
-    # Position on a circle indicator (x: humidity axis, y: temperature axis)
-    pos_x = 50
-    if humidity is not None:
-        pos_x = max(0, min(100, int((humidity - 20) / 60 * 100)))
-    pos_y = max(0, min(100, int((30 - temperature) / 20 * 100)))
-
-    return {
-        "comfort_level": level,
-        "comfort_score": max(0, min(100, score)),
-        "comfort_color": color,
-        "temperature": round(temperature, 1),
-        "humidity": round(humidity, 1) if humidity is not None else None,
-        "comfort_position": {"x": pos_x, "y": pos_y},
-        "temp_score": round(temp_score, 1),
-        "humidity_score": round(hum_score, 1) if hum_score is not None else None,
-    }
+from .core.temperature import (
+    COMFORT_HUMIDITY_ACCEPTABLE_MAX,
+    COMFORT_HUMIDITY_ACCEPTABLE_MIN,
+    COMFORT_HUMIDITY_DRY,
+    COMFORT_HUMIDITY_IDEAL,
+    COMFORT_HUMIDITY_MAX,
+    COMFORT_HUMIDITY_MIN,
+    COMFORT_HUMIDITY_WET,
+    COMFORT_TEMP_ACCEPTABLE_MAX,
+    COMFORT_TEMP_ACCEPTABLE_MIN,
+    COMFORT_TEMP_COLD,
+    COMFORT_TEMP_IDEAL,
+    COMFORT_TEMP_MAX,
+    COMFORT_TEMP_MIN,
+    COMFORT_TEMP_WARM,
+    calculate_comfort as _calculate_comfort,
+)
 
 
 class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):

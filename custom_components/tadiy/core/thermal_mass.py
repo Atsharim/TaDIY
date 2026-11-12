@@ -103,8 +103,10 @@ class ThermalMassModel:
         """
         now = dt_util.utcnow()
 
-        # Only start measurement when heating stops
-        if not heating_active and self._heating_was_active:
+        # If heating is active, cancel ongoing cooling measurement
+        if heating_active:
+            self._reset_measurement()
+        elif self._heating_was_active:
             self._measurement_start_time = now
             self._measurement_start_temp = start_temp
             _LOGGER.debug(

@@ -87,10 +87,14 @@ class OvershootModel:
 
     def update_temperature(
         self, current_temp: float, outdoor_temp: float | None = None
-    ) -> None:
-        """Update with current temperature reading."""
+    ) -> bool:
+        """Update with current temperature reading.
+
+        Returns:
+            True if a new overshoot sample was recorded.
+        """
         if not self._heating_cycle_active or self._cycle_target is None:
-            return
+            return False
 
         now = dt_util.utcnow()
 
@@ -115,6 +119,7 @@ class OvershootModel:
         ):
             # Calculate overshoot
             overshoot = self._peak_temp_after_target - self._cycle_target
+            new_sample = False
 
             if overshoot >= MIN_OVERSHOOT_THRESHOLD:
                 # Record this overshoot sample
@@ -126,6 +131,7 @@ class OvershootModel:
                     outdoor_temp=outdoor_temp,
                 )
                 self._add_sample(sample)
+                new_sample = True
                 self._debug(
                     "Room %s: Overshoot recorded - target=%.1f, peak=%.1f, overshoot=%.1f°C",
                     self.room_name,
@@ -136,6 +142,9 @@ class OvershootModel:
 
             # End this cycle
             self._heating_cycle_active = False
+            return new_sample
+
+        return False
 
     def end_heating_cycle(self) -> None:
         """End heating cycle (e.g., when heating is turned off manually)."""
@@ -274,10 +283,10 @@ class OvershootManager:
 
     def update_temperature(
         self, room_name: str, current_temp: float, outdoor_temp: float | None = None
-    ) -> None:
+    ) -> bool:
         """Update temperature reading for a room."""
         model = self.get_or_create_model(room_name)
-        model.update_temperature(current_temp, outdoor_temp)
+        return model.update_temperature(current_temp, outdoor_temp)
 
     def end_heating_cycle(self, room_name: str) -> None:
         """End heating cycle for a room."""

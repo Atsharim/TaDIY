@@ -67,6 +67,7 @@ class WindowDetector:
         self._open_timeout = timedelta(seconds=open_timeout_seconds)
         self._close_timeout = timedelta(seconds=close_timeout_seconds)
         self._current_state: WindowState | None = None
+        self._last_raw_is_open: bool | None = None
         self._state_changed_at: datetime | None = None
         self._timeout_started_at: datetime | None = None
 
@@ -75,6 +76,19 @@ class WindowDetector:
             open_timeout_seconds,
             close_timeout_seconds,
         )
+
+    def update_timeouts(
+        self, open_timeout_seconds: int, close_timeout_seconds: int
+    ) -> None:
+        """Update open and close timeout durations dynamically."""
+        open_clamped = max(
+            MIN_WINDOW_TIMEOUT, min(open_timeout_seconds, MAX_WINDOW_TIMEOUT)
+        )
+        close_clamped = max(
+            MIN_WINDOW_TIMEOUT, min(close_timeout_seconds, MAX_WINDOW_TIMEOUT)
+        )
+        self._open_timeout = timedelta(seconds=open_clamped)
+        self._close_timeout = timedelta(seconds=close_clamped)
 
     def update(self, raw_state: WindowState) -> WindowState:
         """Update window state with timeout logic."""
@@ -88,6 +102,7 @@ class WindowDetector:
                 heating_should_stop=raw_state.is_open,
                 timeout_active=False,
             )
+            self._last_raw_is_open = raw_state.is_open
             self._state_changed_at = now
             _LOGGER.info(
                 "Window state initialized: %s (%s)",
@@ -96,18 +111,18 @@ class WindowDetector:
             )
             return self._current_state
 
-        if raw_state.is_open != self._current_state.is_open:
-            if self._state_changed_at is None or (
-                now - self._state_changed_at
-            ) > timedelta(seconds=5):
-                _LOGGER.info(
-                    "Window state change detected: %s -> %s (%s)",
-                    "OPEN" if self._current_state.is_open else "CLOSED",
-                    "OPEN" if raw_state.is_open else "CLOSED",
-                    raw_state.reason,
-                )
-                self._state_changed_at = now
-                self._timeout_started_at = now
+        # Only reset timer when the raw physical sensor/drop state actually transitions,
+        # not on every 5-second coordinator poll while waiting for open/close timeout.
+        if raw_state.is_open != self._last_raw_is_open:
+            _LOGGER.info(
+                "Window raw state change detected: %s -> %s (%s)",
+                "OPEN" if self._last_raw_is_open else "CLOSED",
+                "OPEN" if raw_state.is_open else "CLOSED",
+                raw_state.reason,
+            )
+            self._last_raw_is_open = raw_state.is_open
+            self._state_changed_at = now
+            self._timeout_started_at = now
 
         if self._state_changed_at is None:
             self._state_changed_at = now
@@ -131,8 +146,10 @@ class WindowDetector:
             else:
                 remaining = (self._open_timeout - time_since_change).total_seconds()
                 _LOGGER.debug("Window opening detected, timeout in %.0fs", remaining)
-                self._current_state.timeout_active = False
+                timeout_end = self._state_changed_at + self._open_timeout
+                self._current_state.timeout_active = True
                 self._current_state.heating_should_stop = False
+                self._current_state.timeout_ends_at = timeout_end
 
         elif not raw_state.is_open and self._current_state.is_open:
             if time_since_change >= self._close_timeout:
@@ -142,6 +159,7 @@ class WindowDetector:
                     last_change=now,
                     heating_should_stop=False,
                     timeout_active=False,
+                    timeout_ends_at=None,
                 )
                 _LOGGER.info(
                     "Window CLOSED timeout exceeded (%ds) - Heating RESUMED",
@@ -158,28 +176,27 @@ class WindowDetector:
                 self._current_state.heating_should_stop = True
                 self._current_state.timeout_ends_at = timeout_end
 
-        elif self._current_state.timeout_active:
-            if self._current_state.is_open:
-                self._current_state.heating_should_stop = True
-            else:
-                if (
-                    self._timeout_started_at
-                    and (now - self._timeout_started_at) >= self._close_timeout
-                ):
-                    self._current_state.timeout_active = False
-                    self._current_state.heating_should_stop = False
-                    self._current_state.timeout_ends_at = None
-                    self._timeout_started_at = None
-                    _LOGGER.info("Window close cooldown complete - Heating can resume")
-                else:
-                    timeout_end = self._state_changed_at + self._close_timeout
-                    self._current_state.timeout_ends_at = timeout_end
+        elif not raw_state.is_open and not self._current_state.is_open:
+            # Window was closed before open_timeout expired -> cancel grace period
+            if self._current_state.timeout_active:
+                self._current_state.timeout_active = False
+                self._current_state.heating_should_stop = False
+                self._current_state.timeout_ends_at = None
+                self._timeout_started_at = None
+                _LOGGER.info("Window closed within grace period - Heating continues")
+
+        elif raw_state.is_open and self._current_state.is_open:
+            # Window remains open (or reopened during cooldown) -> keep heating stopped
+            self._current_state.heating_should_stop = True
+            self._current_state.timeout_active = True
+            self._current_state.timeout_ends_at = None
 
         return self._current_state
 
     def reset(self) -> None:
         """Reset detector state."""
         self._current_state = None
+        self._last_raw_is_open = None
         self._state_changed_at = None
         self._timeout_started_at = None
         _LOGGER.info("Window detector reset")

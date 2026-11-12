@@ -41,8 +41,9 @@ class HeatingController:
     The controller uses four layers of stability:
     1. Hysteresis deadband: prevents toggling around the target.
     2. Trend guard: suppresses state flips when temperature is moving
-       in a direction that makes the flip unnecessary — applied globally,
-       not just inside the deadband.
+       in a direction that makes the flip unnecessary — evaluated only
+       inside the deadband; outside the band the hysteresis decision
+       is authoritative.
     3. Minimum cycle time: hard limit on state change frequency.
     4. Consecutive confirmation: requires multiple readings in agreement
        before allowing a state change, filtering single-sample spikes.
@@ -62,6 +63,7 @@ class HeatingController:
         # Consecutive readings that agree on a state change before we flip.
         self._flip_confirm_count: int = 0
         self._flip_confirm_target: int = 2
+        self._last_target_temp: float | None = None
         self._debug_fn = debug_fn
 
     def _debug(self, message: str, *args: Any) -> None:
@@ -94,6 +96,23 @@ class HeatingController:
         """
         now = dt_util.utcnow()
         self._temp_history.append((current_temp, now))
+
+        # Target step-down detection (K-01):
+        # If target was lowered below previous target and heating is active,
+        # lift minimum cycle guard so heating shuts down immediately without overshoot.
+        target_dropped = (
+            self._last_target_temp is not None
+            and target_temp < self._last_target_temp - 0.1
+        )
+        self._last_target_temp = target_temp
+
+        if target_dropped and self._heating_active:
+            self._debug(
+                "Target dropped (%.1f -> %.1f), lifting cycle guard for immediate shutdown",
+                self._last_target_temp,
+                target_temp,
+            )
+            self._last_state_change = None
 
         turn_on_threshold = target_temp - (self.hysteresis / 2)
         turn_off_threshold = target_temp + (self.hysteresis / 2)
@@ -147,7 +166,11 @@ class HeatingController:
 
         # --- Consecutive confirmation gate ---
         if desired != self._heating_active:
-            self._flip_confirm_count += 1
+            if target_dropped and not desired:
+                # Immediate shutdown on target step-down
+                self._flip_confirm_count = self._flip_confirm_target
+            else:
+                self._flip_confirm_count += 1
             if self._flip_confirm_count < self._flip_confirm_target:
                 self._debug(
                     "Confirm gate: %s->%s needs %d/%d confirmations | "
@@ -259,6 +282,7 @@ class HeatingController:
         self._last_state_change = None
         self._temp_history.clear()
         self._flip_confirm_count = 0
+        self._last_target_temp = None
         self._debug("Controller reset")
 
 

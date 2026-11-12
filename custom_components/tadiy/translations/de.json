@@ -15,6 +15,7 @@
           "humidity_sensor": "Luftfeuchtigkeitssensor",
           "window_sensors": "Fenstersensoren",
           "outdoor_sensor": "Außentemperatursensor",
+          "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
           "weather_entity": "Wetter-Entität",
           "trv_min_temp": "TRV Mindesttemperatur",
           "trv_max_temp": "TRV Höchsttemperatur"
@@ -56,6 +57,7 @@
           "humidity_sensor": "Luftfeuchtigkeitssensor",
           "window_sensors": "Fenstersensoren",
           "outdoor_sensor": "Außentemperatursensor",
+          "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
           "weather_entity": "Wetter-Entität",
           "override_timeout": "Überschreibungs-Timeout",
           "hysteresis": "Temperatur Hysterese",
@@ -120,12 +122,13 @@
         "description": "{modes_info}"
       },
       "panel_settings": {
-        "title": "Globale Einstellungen",
+        "title": "Hub Configuration",
         "description": "Hub-Konfiguration:\n\n• Panel: TaDIY Zeitpläne in Seitenleiste anzeigen\n• Wetter-Entität: Wetter-Entität für Außentemperatur und Vorhersage\n• Personen-Entitäten: Personenverfolgung für ortsbasierte Heizung\n• Ortsmodus: Automatische Heizungsreduzierung wenn niemand zu Hause ist\n• Override Timeout: Wie lange manuelle TRV-Änderungen Zeitpläne überschreiben\n• Fenster-Timeouts: Wie lange vor/nach Fenster öffnen/schließen gewartet wird\n• Early Start: Vorheiz-Einstellungen\n• Heizkurve: Zieltemperatur basierend auf Außentemperatur anpassen\n• Wettervorhersage: Vorheizen vor Kaltfronten, Reduzierung vor Warmfronten",
         "data": {
           "show_panel": "Zeitplan-Panel in Seitenleiste anzeigen",
           "weather_entity": "Wetter-Entität",
           "outdoor_sensor": "Außentemperatursensor",
+          "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
           "person_entities": "Personen-Entitäten",
           "location_mode_enabled": "Ortsbasierte Heizung aktivieren (Abwesenheitsmodus)",
           "global_override_timeout": "Standard-Überschreibungs-Timeout",
@@ -137,6 +140,8 @@
           "global_window_open_timeout": "Fenster-Offen-Timeout (Sekunden)",
           "global_window_close_timeout": "Fenster-Schließ-Timeout (Sekunden)",
           "friday_weekend_start_hour": "Freitag-Wochenende-Startstunde",
+          "homeoffice_end_hour": "Homeoffice-Feierabend-Stunde",
+          "homeoffice_single_day": "Homeoffice eintägig (autom. Rückfall auf Normal um Mitternacht)",
           "valve_protection_day": "Ventilschutz-Wochentag",
           "valve_protection_hour": "Ventilschutz-Uhrzeit",
           "valve_protection_interval_weeks": "Ventilschutz-Intervall (Wochen)"
@@ -144,6 +149,7 @@
         "data_description": {
           "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersagedaten.",
           "outdoor_sensor": "Globaler Außentemperatursensor, der als Fallback verwendet wird, wenn Räume keinen eigenen Außensensor haben.",
+          "boiler_temp_sensor": "Optionaler Temperaturfühler an der Heißwasser-Vorlaufleitung zur Erfassung der Kesselwärme und Zirkulation.",
           "person_entities": "Personen-Entitäten für Anwesenheitserkennung und Abwesenheitsmodus.",
           "early_start_offset": "Zusätzliche Pufferminuten für früheren Heizstart.",
           "early_start_max": "Maximale Vorheiz-Dauer in Minuten.",
@@ -152,6 +158,8 @@
           "global_window_open_timeout": "Wartezeit bevor die Heizung bei geöffnetem Fenster stoppt.",
           "global_window_close_timeout": "Abkühlzeit bevor die Heizung nach Fensterschließung wieder startet.",
           "friday_weekend_start_hour": "Uhrzeit am Freitag, ab der vom Wochentags- auf den Wochenend-Zeitplan gewechselt wird (24 = Mitternacht/deaktiviert).",
+          "homeoffice_end_hour": "Uhrzeit am Feierabend (z. B. 17), ab der vom Homeoffice-Plan wieder auf den regulären Abend-Wochentagsplan geschaltet wird (24 = deaktiviert).",
+          "homeoffice_single_day": "Wenn aktiv, wird der Modus Homeoffice um Mitternacht automatisch wieder auf Normalmodus zurückgesetzt.",
           "valve_protection_day": "Wochentag, an dem die Entkalkungsfahrt (Ventilschutz) durchgeführt wird.",
           "valve_protection_hour": "Uhrzeit (Stunde 0-23), zu der die Entkalkungsfahrt durchgeführt wird.",
           "valve_protection_interval_weeks": "Intervall in Wochen für den Ventilschutz (z. B. alle 2 Wochen, um Batterien zu schonen)."
@@ -164,7 +172,7 @@
           "add_mode": "Benutzerdefinierten Modus hinzufügen",
           "remove_mode": "Benutzerdefinierten Modus entfernen",
           "view_modes": "Alle Modi anzeigen",
-          "panel_settings": "Globale Einstellungen",
+          "panel_settings": "Hub Configuration",
           "debug_settings": "Debug-Einstellungen"
         }
       },
@@ -192,6 +200,7 @@
           "main_temp_sensor": "Haupttemperatursensor",
           "window_sensors": "Fenstersensoren",
           "outdoor_sensor": "Außentemperatursensor",
+          "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
           "window_open_timeout": "Fenster-Offen-Timeout (Überschreiben)",
           "window_close_timeout": "Fenster-Schließ-Abklingzeit (Überschreiben)",
           "dont_heat_below_outdoor": "Nicht heizen bei Außentemperatur über (Überschreiben)",
@@ -305,6 +314,14 @@
       },
       "frost_protection_temp": {
         "name": "Frostschutztemperatur"
+      }
+    },
+    "binary_sensor": {
+      "heating_problem": {
+        "name": "Heizungsproblem"
+      },
+      "window": {
+        "name": "Fenster"
       }
     },
     "climate": {

@@ -7,6 +7,7 @@ jitter and prevent erratic heating decisions.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import logging
 import time as _time
 from typing import Any, NamedTuple
@@ -79,6 +80,9 @@ class SensorManager:
         self.hass = coordinator.hass
         self._ema_value: float | None = None
         self._consecutive_spikes: int = 0
+        self.is_fallback_active: bool = False
+        self.active_sensor_id: str | None = None
+        self.last_valid_sensor_time: datetime | None = None
         # Temperature-based window detection state
         self._temp_drop_history: list[tuple[float, float]] = []  # (temp, timestamp)
         self._temp_drop_detected: bool = False
@@ -105,6 +109,9 @@ class SensorManager:
         main_temp = self._get_sensor_value(config.main_temp_sensor_id)
 
         if main_temp is not None:
+            self.is_fallback_active = False
+            self.active_sensor_id = config.main_temp_sensor_id
+            self.last_valid_sensor_time = datetime.now(timezone.utc)
             self._debug(
                 "Temperature: MAIN SENSOR %s = %.2f",
                 config.main_temp_sensor_id,
@@ -153,6 +160,12 @@ class SensorManager:
             )
         else:
             # Fallback: TRV sensors only (no main sensor)
+            self.is_fallback_active = bool(config.main_temp_sensor_id)
+            self.active_sensor_id = (
+                "TRV intern (Fallback)"
+                if config.main_temp_sensor_id
+                else "TRV intern"
+            )
             trv_readings: list[SensorReading] = []
             for trv_id in config.trv_entity_ids:
                 state = self.hass.states.get(trv_id)
@@ -252,7 +265,7 @@ class SensorManager:
         """Get current outdoor temperature."""
         config = self.coordinator.room_config
 
-        # Try room-level outdoor sensor first
+        # Try room-level outdoor sensor first (if legacy config present)
         outdoor_temp = self._get_sensor_value(config.outdoor_sensor_id)
         if outdoor_temp is not None:
             self._debug(
@@ -262,9 +275,21 @@ class SensorManager:
             )
             return outdoor_temp
 
-        # Fallback to hub's weather entity
+        # Fallback to hub's outdoor sensor or weather entity
         if self.coordinator.hub_coordinator:
-            from ..const import CONF_WEATHER_ENTITY
+            from ..const import CONF_OUTDOOR_SENSOR, CONF_WEATHER_ENTITY
+
+            hub_outdoor_sensor = self.coordinator.hub_coordinator.config_data.get(
+                CONF_OUTDOOR_SENSOR
+            )
+            outdoor_temp = self._get_sensor_value(hub_outdoor_sensor)
+            if outdoor_temp is not None:
+                self._debug(
+                    "Outdoor: HUB SENSOR %s = %.1f",
+                    hub_outdoor_sensor,
+                    outdoor_temp,
+                )
+                return outdoor_temp
 
             weather_entity = self.coordinator.hub_coordinator.config_data.get(
                 CONF_WEATHER_ENTITY
@@ -314,8 +339,10 @@ class SensorManager:
                     self._debug("Window: %s is OPEN (sensor)", entity_id)
                     return True
 
-        # 2. Check temperature-based detection (works without window sensors)
-        if self._temp_drop_detected:
+        # 2. Check temperature-based detection only as fallback for rooms
+        # without physical window sensors (avoids false positives when a
+        # real sensor reports "closed" but the room cools down naturally)
+        if not window_ids and self._temp_drop_detected:
             self._debug("Window: OPEN (temperature drop detected)")
             return True
 

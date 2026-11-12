@@ -252,6 +252,7 @@ class TrvManager:
                 profile = self.get_trv_profile(trv_id)
                 current_hvac = state.state
                 current_temp = state.attributes.get("temperature")
+                trv_target = target
 
                 # Get supported HVAC modes
                 # Priority: 1) User-configured modes, 2) Device state, 3) Fallback
@@ -277,7 +278,7 @@ class TrvManager:
                 # Determine desired HVAC mode
                 if config.use_hvac_off_for_low_temp:
                     # User wants to use HVAC "off" mode to stop heating
-                    if target <= frost_temp:
+                    if trv_target <= frost_temp:
                         desired_hvac = "off"
                     elif should_heat is not None:
                         desired_hvac = "heat" if should_heat else "off"
@@ -288,41 +289,16 @@ class TrvManager:
                     # Always stay in "heat" mode, control via temperature only
                     desired_hvac = "heat"
                     if should_heat is False:
-                        # Check if calibration is available — if so, keep the
-                        # real target and let the calibration offset naturally
-                        # modulate the valve (room at/above target → offset
-                        # shrinks → TRV closes).  Only fall back to min_temp
-                        # when there's no external sensor to calibrate with.
-                        room_temp_check = self.coordinator.get_current_temperature()
-                        trv_temp_check = None
-                        trv_state = self.hass.states.get(trv_id)
-                        if trv_state:
-                            ct = trv_state.attributes.get("current_temperature")
-                            if ct is not None:
-                                try:
-                                    trv_temp_check = float(ct)
-                                except (ValueError, TypeError):
-                                    pass
-                        has_calibration = (
-                            room_temp_check is not None
-                            and trv_temp_check is not None
-                            and hasattr(self.coordinator, "calibration_manager")
+                        # HeatingController / hysteresis / window / off-mode decided heating must stop.
+                        # Never keep target + positive radiator calibration offset when should_heat is False,
+                        # as that forces the TRV valve to stay open above target temperature.
+                        trv_target = min(target, frost_temp, profile.min_temp)
+                        self._debug(
+                            "%s: should_heat=False (use_hvac_off=False), "
+                            "lowering TRV setpoint to %.1f to close valve",
+                            trv_id,
+                            trv_target,
                         )
-                        if has_calibration:
-                            self._debug(
-                                "%s: should_heat=False but calibration active, "
-                                "keeping target %.1f (calibration will modulate valve)",
-                                trv_id,
-                                target,
-                            )
-                        else:
-                            target = profile.min_temp
-                            self._debug(
-                                "%s: use_hvac_off disabled, no calibration, "
-                                "using min_temp %.1f",
-                                trv_id,
-                                profile.min_temp,
-                            )
 
                 # Fallback: if TRV doesn't support the desired HVAC mode,
                 # use temperature-based control instead
@@ -336,7 +312,7 @@ class TrvManager:
                     if desired_hvac == "off":
                         # Can't turn off via HVAC mode — set to minimum temp
                         desired_hvac = "heat"
-                        target = profile.min_temp
+                        trv_target = profile.min_temp
                 else:
                     self._debug(
                         "%s: HVAC mode '%s' is supported",
@@ -356,22 +332,24 @@ class TrvManager:
                         trv_temp = None
 
                 # Calculate calibrated target
-                calibrated = target
+                calibrated = trv_target
                 calibration_offset = 0.0
 
                 # Get configured step size
                 temp_step = config.target_temp_step
 
                 # Apply calibration if we have both sensors and calibration_manager
+                # Only apply calibration when actively heating (should_heat is not False)
                 if (
-                    room_temp
+                    should_heat is not False
+                    and room_temp
                     and trv_temp
                     and hasattr(self.coordinator, "calibration_manager")
                 ):
                     calibrated = (
                         self.coordinator.calibration_manager.get_calibrated_target(
                             trv_id,
-                            target,
+                            trv_target,
                             room_temp,
                             trv_temp,
                             max_temp=config.max_temp
@@ -380,7 +358,7 @@ class TrvManager:
                             min_step=temp_step,
                         )
                     )
-                    calibration_offset = calibrated - target
+                    calibration_offset = calibrated - trv_target
 
                 # Clamp calibrated target to TRV hardware limits
                 trv_min = self.coordinator.room_config.trv_min_temp
@@ -389,6 +367,17 @@ class TrvManager:
 
                 # Round to TRV step to prevent phantom commands from float drift
                 calibrated = _round_to_step(calibrated, step=temp_step)
+
+                # Record commanded state BEFORE sending service calls so state-change
+                # listeners triggered synchronously/immediately see the new command
+                self._last_commanded[trv_id] = {
+                    "hvac_mode": desired_hvac,
+                    "temperature": calibrated,
+                    "uncalibrated_target": target,
+                    "timestamp": self._last_command_time,
+                }
+                if hasattr(self.coordinator, "_last_trv_targets"):
+                    self.coordinator._last_trv_targets[trv_id] = calibrated
 
                 # Apply HVAC mode if changed
                 hvac_changed = current_hvac != desired_hvac
@@ -449,13 +438,6 @@ class TrvManager:
                         current_hvac,
                         float(current_temp) if current_temp else 0,
                     )
-
-                # Track what we commanded (using the FINAL CALIBRATED value)
-                self._last_commanded[trv_id] = {
-                    "hvac_mode": desired_hvac,
-                    "temperature": calibrated,
-                    "timestamp": self._last_command_time,
-                }
 
             except Exception as err:
                 _LOGGER.error("Failed to apply target to TRV %s: %s", trv_id, err)

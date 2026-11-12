@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -79,20 +79,33 @@ class LocationManager:
         """Get current location state."""
         return self._location_state
 
-    def set_manual_override(self, override: bool | None) -> None:
+    def set_manual_override(
+        self, override: bool | None, immediate: bool = True
+    ) -> None:
         """
         Set manual override for location detection.
 
         Args:
             override: None = auto detect, True = force home, False = force away
+            immediate: When forcing away, immediately apply full reduction without waiting for 30min grace
         """
         self._manual_override = override
         if override is None:
             _LOGGER.info("Location override cleared, using automatic detection")
         elif override:
+            self._away_since = None
             _LOGGER.info("Location override: forced to HOME")
         else:
-            _LOGGER.info("Location override: forced to AWAY")
+            if immediate:
+                # Bypass grace and partial period for explicit manual away command
+                self._away_since = dt_util.utcnow() - timedelta(seconds=AWAY_PARTIAL_PERIOD + 1)
+                _LOGGER.info("Location override: forced to AWAY (immediate away target)")
+            else:
+                if self._away_since is None:
+                    self._away_since = dt_util.utcnow()
+                _LOGGER.info("Location override: forced to AWAY (gradual timer started)")
+
+        self.update_location_state()
 
     def update_location_state(self) -> LocationState:
         """
@@ -113,6 +126,11 @@ class LocationManager:
                 persons_away=[] if self._manual_override else self.person_entity_ids,
                 last_updated=dt_util.utcnow(),
             )
+            # Maintain away_since for duration calculation
+            if self._manual_override:
+                self._away_since = None
+            elif self._away_since is None:
+                self._away_since = dt_util.utcnow()
             return self._location_state
 
         # No person entities configured
@@ -239,3 +257,23 @@ class LocationManager:
             away_target,
         )
         return away_target
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize location manager state for persistence."""
+        return {
+            "manual_override": self._manual_override,
+            "away_since": self._away_since.isoformat() if self._away_since else None,
+        }
+
+    def restore_from_dict(self, data: dict[str, Any]) -> None:
+        """Restore location manager state from persistence."""
+        if not isinstance(data, dict):
+            return
+        self._manual_override = data.get("manual_override")
+        away_since_str = data.get("away_since")
+        if away_since_str:
+            try:
+                self._away_since = dt_util.parse_datetime(away_since_str)
+            except Exception:
+                self._away_since = None
+        self.update_location_state()

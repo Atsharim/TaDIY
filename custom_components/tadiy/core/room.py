@@ -195,6 +195,15 @@ class RoomData:
     heating_rate_last_updated: datetime | None = None
     override_count: int = 0  # Number of active overrides
     override_active: bool = False  # At least one override active
+    safety_problem_active: bool = False
+    safety_problem_type: str | None = None
+    safety_problem_description: str | None = None
+    safety_problem_since: datetime | None = None
+    target_source: str | None = None
+    decision_reason: str | None = None
+    decision_time: datetime | None = None
+    active_temp_sensor: str | None = None
+    sensor_fallback_active: bool = False
 
     def __post_init__(self) -> None:
         """Validate data after initialization."""
@@ -254,4 +263,21 @@ class RoomData:
             "is_heating_blocked": self.is_heating_blocked,
             "temperature_delta": self.temperature_delta,
             "is_heating_needed": self.is_heating_needed,
+            "safety_problem_active": self.safety_problem_active,
+            "safety_problem_type": self.safety_problem_type,
+            "safety_problem_description": self.safety_problem_description,
+            "safety_problem_since": (
+                self.safety_problem_since.isoformat()
+                if self.safety_problem_since
+                else None
+            ),
+            "target_source": self.target_source,
+            "decision_reason": self.decision_reason,
+            "decision_time": (
+                self.decision_time.isoformat()
+                if self.decision_time
+                else None
+            ),
+            "active_temp_sensor": self.active_temp_sensor,
+            "sensor_fallback_active": self.sensor_fallback_active,
         }

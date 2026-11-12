@@ -148,8 +148,8 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                 if existing_rooms:
                     errors["base"] = "room_already_exists"
                 else:
-                    # Generate unique_id based on timestamp (not room_name to allow renaming)
-                    unique_id = "{}_room_{}".format(DOMAIN, int(time.time()))
+                    # Generate unique_id based on millisecond timestamp (not room_name to allow renaming)
+                    unique_id = "{}_room_{}".format(DOMAIN, int(time.time() * 1000))
                     await self.async_set_unique_id(unique_id)
                     self._abort_if_unique_id_configured()
 
@@ -205,21 +205,6 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     device_class=["door", "window", "opening"],
                     multiple=True,
                 )
-            )
-        )
-
-        # Outdoor sensor (optional - falls nicht gesetzt, wird Hub-Fallback genutzt)
-        schema_dict[vol.Optional(CONF_OUTDOOR_SENSOR)] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="sensor",
-                device_class="temperature",
-            )
-        )
-
-        # Weather entity (optional - falls nicht gesetzt, wird Hub-Fallback genutzt)
-        schema_dict[vol.Optional(CONF_WEATHER_ENTITY)] = selector.EntitySelector(
-            selector.EntitySelectorConfig(
-                domain="weather",
             )
         )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
@@ -10,7 +11,18 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, ICON_MODE
+from .const import (
+    CONF_BOILER_TEMP_SENSOR,
+    CONF_BOOST_DURATION,
+    CONF_BOOST_TEMPERATURE,
+    CONF_DONT_HEAT_BELOW_OUTDOOR,
+    CONF_FROST_PROTECTION_TEMP,
+    CONF_GLOBAL_OVERRIDE_TIMEOUT,
+    CONF_WINDOW_CLOSE_TIMEOUT,
+    CONF_WINDOW_OPEN_TIMEOUT,
+    DOMAIN,
+    ICON_MODE,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +103,26 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
         if self.entity_description.key == "hub_mode":
             return self.coordinator.get_hub_mode()
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return hub configuration options and boiler attributes."""
+        if self.entity_description.key == "hub_mode":
+            cfg = getattr(self.coordinator, "config_data", {})
+            return {
+                CONF_FROST_PROTECTION_TEMP: getattr(self.coordinator, "frost_protection_temp", 7.0),
+                CONF_BOOST_TEMPERATURE: cfg.get(CONF_BOOST_TEMPERATURE, 24.0),
+                CONF_BOOST_DURATION: cfg.get(CONF_BOOST_DURATION, 60),
+                CONF_WINDOW_OPEN_TIMEOUT: cfg.get(CONF_WINDOW_OPEN_TIMEOUT, 30),
+                CONF_WINDOW_CLOSE_TIMEOUT: cfg.get(CONF_WINDOW_CLOSE_TIMEOUT, 60),
+                CONF_GLOBAL_OVERRIDE_TIMEOUT: cfg.get(CONF_GLOBAL_OVERRIDE_TIMEOUT, 120),
+                CONF_DONT_HEAT_BELOW_OUTDOOR: cfg.get(CONF_DONT_HEAT_BELOW_OUTDOOR),
+                CONF_BOILER_TEMP_SENSOR: getattr(self.coordinator, "boiler_temp_sensor", None),
+                "boiler_temperature": getattr(self.coordinator, "boiler_temperature", None),
+                "boiler_sensor_available": getattr(self.coordinator, "boiler_sensor_available", True),
+                "boiler_active": getattr(self.coordinator, "boiler_active", False),
+            }
+        return {}
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""

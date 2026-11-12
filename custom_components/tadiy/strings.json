@@ -120,12 +120,13 @@
         "description": "{modes_info}"
       },
       "panel_settings": {
-        "title": "Global Settings",
+        "title": "Hub Configuration",
         "description": "Hub Configuration:\n\n• Panel: Show TaDIY Schedules in sidebar\n• Weather Entity: Weather entity for outdoor temperature and forecast\n• Person Entities: Person tracking for location-based heating\n• Location Mode: Automatic heating reduction when nobody is home\n• Override Timeout: How long manual TRV changes override schedules\n• Window Timeouts: How long to wait before/after window open/close\n• Early Start: Pre-heating settings\n• Heating Curve: Adjust target temperature based on outdoor temperature\n• Weather Prediction: Pre-heat before cold fronts, reduce before warm fronts",
         "data": {
           "show_panel": "Show Schedules Panel in Sidebar",
           "weather_entity": "Weather Entity",
           "outdoor_sensor": "Outdoor Temperature Sensor",
+          "boiler_temp_sensor": "Boiler / Hot Water Supply Temperature Sensor",
           "person_entities": "Person Entities",
           "location_mode_enabled": "Enable Location-Based Heating (Away Mode)",
           "global_override_timeout": "Default Override Timeout",
@@ -137,6 +138,8 @@
           "global_window_open_timeout": "Window Open Timeout (seconds)",
           "global_window_close_timeout": "Window Close Timeout (seconds)",
           "friday_weekend_start_hour": "Friday Weekend Start Hour",
+          "homeoffice_end_hour": "Homeoffice End Hour (Feierabend)",
+          "homeoffice_single_day": "Single-Day Homeoffice (Auto-revert to normal at midnight)",
           "valve_protection_day": "Valve Protection Day",
           "valve_protection_hour": "Valve Protection Hour",
           "valve_protection_interval_weeks": "Valve Protection Interval (Weeks)"
@@ -144,6 +147,7 @@
         "data_description": {
           "weather_entity": "Weather entity for outdoor temperature and forecast data.",
           "outdoor_sensor": "Global outdoor temperature sensor used as fallback when rooms don't have their own outdoor sensor.",
+          "boiler_temp_sensor": "Optional temperature probe on hot water / boiler feed pipe to verify active boiler circulation.",
           "person_entities": "Person entities for presence detection and away mode.",
           "early_start_offset": "Additional buffer minutes to start heating early.",
           "early_start_max": "Maximum pre-heating duration in minutes.",
@@ -152,6 +156,8 @@
           "global_window_open_timeout": "Grace period before stopping heating when window opens.",
           "global_window_close_timeout": "Cooldown before resuming heating after window closes.",
           "friday_weekend_start_hour": "Hour on Friday to switch from weekday to weekend schedule (24 = midnight/disabled).",
+          "homeoffice_end_hour": "Hour in the evening (e.g. 17) to revert from homeoffice schedule back to regular weekday evening schedule (24 = disabled).",
+          "homeoffice_single_day": "When enabled, homeoffice mode automatically resets back to normal mode at midnight.",
           "valve_protection_day": "Day of the week to run valve protection cycling.",
           "valve_protection_hour": "Hour of the day to run valve protection cycling (0-23).",
           "valve_protection_interval_weeks": "How often to cycle the valves (e.g. every 2 weeks to save battery and reduce noise)."
@@ -164,7 +170,7 @@
           "add_mode": "Add Custom Mode",
           "remove_mode": "Remove Custom Mode",
           "view_modes": "View All Modes",
-          "panel_settings": "Global Settings",
+          "panel_settings": "Hub Configuration",
           "debug_settings": "Debug Settings"
         }
       },
@@ -192,6 +198,7 @@
           "main_temp_sensor": "Main Temperature Sensor",
           "window_sensors": "Window Sensors",
           "outdoor_sensor": "Outdoor Temperature Sensor",
+          "boiler_temp_sensor": "Boiler / Hot Water Supply Temperature Sensor",
           "window_open_timeout": "Window Open Timeout (Override)",
           "window_close_timeout": "Window Close Cooldown (Override)",
           "dont_heat_below_outdoor": "Don't Heat When Outdoor Above (Override)",
@@ -305,6 +312,14 @@
       },
       "frost_protection_temp": {
         "name": "Frost Protection Temperature"
+      }
+    },
+    "binary_sensor": {
+      "heating_problem": {
+        "name": "Heating Problem"
+      },
+      "window": {
+        "name": "Window"
       }
     },
     "climate": {

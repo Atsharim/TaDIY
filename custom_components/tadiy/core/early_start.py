@@ -54,6 +54,41 @@ class HeatUpModel:
         """Get current heating rate in °C/h."""
         return self.degrees_per_hour
 
+    def set_manual_rate(self, rate: float, reset_samples: bool = True) -> None:
+        """Manually set heating rate with clean baseline (K-09).
+
+        Args:
+            rate: Heating rate in °C/h.
+            reset_samples: If True (default), resets sample count to 1 and starts
+                           learning afresh with realistic initial confidence.
+                           If False, keeps existing sample count.
+        """
+        if not MIN_HEATING_RATE <= rate <= MAX_HEATING_RATE:
+            raise ValueError(
+                f"Heating rate {rate} must be between {MIN_HEATING_RATE} and {MAX_HEATING_RATE} °C/h"
+            )
+        self.degrees_per_hour = rate
+        if reset_samples:
+            self.sample_count = 1
+            self._running_sum = rate
+        else:
+            self._running_sum = rate * max(self.sample_count, 1)
+        self.last_updated = dt_util.utcnow()
+        self._debug(
+            "%s: Heating rate manually set to %.2f °C/h (sample_count=%d)",
+            self.room_name,
+            self.degrees_per_hour,
+            self.sample_count,
+        )
+
+    def reset(self) -> None:
+        """Reset heating model to default state."""
+        self.degrees_per_hour = DEFAULT_HEATING_RATE
+        self.sample_count = 0
+        self._running_sum = 0.0
+        self.last_updated = dt_util.utcnow()
+        self._debug("%s: Heating model reset to defaults", self.room_name)
+
     def update_with_measurement(
         self,
         temp_increase: float,

@@ -73,6 +73,15 @@ class RoomOrchestrator:
                 DEFAULT_OFF_TEMPERATURE,
             )
 
+        # 0. Manual Room Off (User turned room climate off)
+        if getattr(self.coordinator, "_manual_room_off", False):
+            self.coordinator.debug(
+                "rooms",
+                "Target: Manual Room OFF - enforcing frost protection %.1f°C",
+                frost_protection,
+            )
+            return frost_protection, True
+
         # 1. Window Open (Highest Priority)
         if window_should_stop:
             self.coordinator.debug(

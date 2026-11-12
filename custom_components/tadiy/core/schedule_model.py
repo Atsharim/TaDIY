@@ -208,7 +208,11 @@ class RoomSchedule:
         return mode in self.use_normal_for_modes
 
     def get_schedule_for_mode(
-        self, mode: str, dt: datetime | None = None, friday_weekend_start_hour: int = 24
+        self,
+        mode: str,
+        dt: datetime | None = None,
+        friday_weekend_start_hour: int = 24,
+        homeoffice_end_hour: int = 24,
     ) -> DaySchedule | None:
         """Get appropriate schedule for given mode and datetime."""
         if dt is None:
@@ -230,7 +234,17 @@ class RoomSchedule:
             else:
                 result = self.normal_weekend
         elif mode == "homeoffice":
-            result = self.homeoffice_daily
+            # Weekday check: if homeoffice_end_hour is reached on a weekday, revert to normal evening schedule
+            if dt.weekday() < 5 and dt.hour >= homeoffice_end_hour:
+                is_friday_weekend = (
+                    dt.weekday() == 4 and dt.hour >= friday_weekend_start_hour
+                )
+                if is_friday_weekend:
+                    result = self.normal_weekend
+                else:
+                    result = self.normal_weekday
+            else:
+                result = self.homeoffice_daily
         else:
             # Custom mode
             result = self.get_custom_schedule(mode)

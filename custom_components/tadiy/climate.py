@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
+    HVACAction,
     HVACMode,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -56,6 +57,7 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
 
     _attr_has_entity_name = True
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.TURN_OFF
@@ -69,6 +71,7 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
     ) -> None:
         """Initialize the climate entity."""
         super().__init__(coordinator)
+        self._entry = entry
         self._room_name = room_name
         self._trv_entity_ids = trv_entity_ids
         self._attr_unique_id = f"{entry.entry_id}_climate"
@@ -77,14 +80,19 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         self._attr_device_info = get_device_info(entry, coordinator.hass)
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         """Return the current temperature."""
         if not self.coordinator.data:
             return None
         return self.coordinator.data.current_temperature
 
     @property
-    def target_temperature(self) -> float | None:
+    def current_temperature(self) -> float | None:
+        """Return current temperature for older HA versions."""
+        return self.native_current_temperature
+
+    @property
+    def native_target_temperature(self) -> float | None:
         """Return the target temperature."""
         # Use commanded target first (most up-to-date)
         if self.coordinator._commanded_target is not None:
@@ -95,20 +103,47 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         return None
 
     @property
+    def target_temperature(self) -> float | None:
+        """Return target temperature for older HA versions."""
+        return self.native_target_temperature
+
+    @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation mode."""
-        # Use commanded mode first
+        if getattr(self.coordinator, "_manual_room_off", False):
+            return HVACMode.OFF
+        if (
+            hasattr(self.coordinator, "get_hub_mode")
+            and self.coordinator.get_hub_mode() == "off"
+        ):
+            return HVACMode.OFF
+        if (
+            self.coordinator.data
+            and getattr(self.coordinator.data, "window_state", None)
+            and self.coordinator.data.window_state.heating_should_stop
+        ):
+            return HVACMode.OFF
+
         commanded = getattr(self.coordinator, "_commanded_hvac_mode", None)
         if commanded:
             return HVACMode.HEAT if commanded == "heat" else HVACMode.OFF
-        # Fallback to coordinator data
+
         if self.coordinator.data:
             return (
                 HVACMode.HEAT
                 if self.coordinator.data.hvac_mode == "heat"
                 else HVACMode.OFF
             )
-        return HVACMode.OFF
+        return HVACMode.HEAT
+
+    @property
+    def hvac_action(self) -> HVACAction:
+        """Return the current running hvac operation."""
+        if self.hvac_mode == HVACMode.OFF:
+            return HVACAction.OFF
+        if self.coordinator.data and self.coordinator.data.heating_active:
+            return HVACAction.HEATING
+        return HVACAction.IDLE
 
     @property
     def min_temp(self) -> float:
@@ -121,18 +156,83 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         return 30.0
 
     @property
-    def target_temperature_step(self) -> float:
+    def current_humidity(self) -> float | None:
+        """Return the current humidity."""
+        if (
+            self.coordinator
+            and self.coordinator.data
+            and self.coordinator.data.humidity is not None
+        ):
+            return round(self.coordinator.data.humidity, 1)
+        return None
+
+    @property
+    def native_target_temperature_step(self) -> float:
         """Return the supported step of target temperature."""
         if self.coordinator and hasattr(self.coordinator, "room_config"):
             return self.coordinator.room_config.target_temp_step
         return 0.5
 
     @property
+    def target_temperature_step(self) -> float:
+        """Return target temperature step for older HA versions."""
+        return self.native_target_temperature_step
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return entity specific state attributes."""
-        return {
+        attrs: dict[str, Any] = {
             "integration": "tadiy",
+            "room_name": self._room_name,
+            "entry_id": self._entry.entry_id,
         }
+        if self.coordinator and self.coordinator.data:
+            data = self.coordinator.data
+            if data.current_temperature is not None:
+                from .core.temperature import calculate_comfort
+
+                try:
+                    comfort = calculate_comfort(
+                        data.current_temperature,
+                        data.humidity,
+                    )
+                    attrs["comfort_score"] = comfort.get("comfort_score")
+                    attrs["comfort_level"] = comfort.get("comfort_level")
+                    attrs["comfort_color"] = comfort.get("comfort_color")
+                except Exception:
+                    pass
+
+            attrs["target_source"] = getattr(data, "target_source", None)
+            attrs["decision_reason"] = getattr(data, "decision_reason", None)
+            attrs["decision_time"] = (
+                data.decision_time.isoformat()
+                if getattr(data, "decision_time", None)
+                else None
+            )
+            attrs["active_temp_sensor"] = getattr(data, "active_temp_sensor", None)
+            attrs["sensor_fallback_active"] = getattr(data, "sensor_fallback_active", False)
+            attrs["heating_rate"] = getattr(data, "heating_rate", None)
+            attrs["heating_rate_samples"] = getattr(data, "heating_rate_sample_count", 0)
+            attrs["heating_rate_confidence"] = getattr(data, "heating_rate_confidence", 0.0)
+            attrs["heating_rate_last_updated"] = (
+                data.heating_rate_last_updated.isoformat()
+                if getattr(data, "heating_rate_last_updated", None)
+                else None
+            )
+            attrs["override_active"] = getattr(data, "override_active", False)
+
+        if self.coordinator and hasattr(self.coordinator, "room_config"):
+            cfg = self.coordinator.room_config
+            opts = self._entry.options if self._entry else {}
+            attrs["away_temperature"] = getattr(cfg, "away_temperature", opts.get("away_temperature", 15.0))
+            attrs["tolerance"] = getattr(cfg, "tolerance", opts.get("tolerance", 0.5))
+            attrs["early_start_max_minutes"] = getattr(cfg, "early_start_max_minutes", opts.get("early_start_max_minutes", 120))
+            attrs["window_open_timeout"] = getattr(cfg, "window_open_timeout", opts.get("window_open_timeout", 30))
+            attrs["window_close_timeout"] = getattr(cfg, "window_close_timeout", opts.get("window_close_timeout", 60))
+            attrs["min_heating_rate"] = getattr(cfg, "min_heating_rate", opts.get("min_heating_rate", 0.5))
+            attrs["max_heating_rate"] = getattr(cfg, "max_heating_rate", opts.get("max_heating_rate", 3.0))
+
+        return attrs
 
     async def async_set_temperature(self, **kwargs: Any) -> None:
         """Set new target temperature for all TRVs in this room."""
@@ -148,6 +248,13 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
 
         # Notify coordinator of user interaction for grace period
         self.coordinator.notify_user_interaction()
+
+        # Setting temperature clears manual room off
+        if (
+            hasattr(self.coordinator, "is_manual_room_off")
+            and self.coordinator.is_manual_room_off()
+        ):
+            self.coordinator.set_manual_room_off(False)
 
         # Unified override logic: same as hardware changes
         hub_mode = self.coordinator.get_hub_mode()
@@ -272,10 +379,25 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         self.coordinator._commanded_target = temperature
         self.async_write_ha_state()
 
+    async def async_turn_off(self) -> None:
+        """Turn off the climate entity."""
+        await self.async_set_hvac_mode(HVACMode.OFF)
+
+    async def async_turn_on(self) -> None:
+        """Turn on the climate entity."""
+        await self.async_set_hvac_mode(HVACMode.HEAT)
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode for all TRVs in this room."""
         # Notify coordinator of user interaction for grace period
         self.coordinator.notify_user_interaction()
+        if hasattr(self.coordinator, "set_manual_room_off"):
+            self.coordinator.set_manual_room_off(hvac_mode == HVACMode.OFF)
+        else:
+            self.coordinator._commanded_hvac_mode = (
+                "heat" if hvac_mode == HVACMode.HEAT else "off"
+            )
+
         # Set HVAC mode for all TRVs in the room
         for trv_entity_id in self._trv_entity_ids:
             try:
@@ -288,11 +410,8 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             except Exception as err:
                 _LOGGER.error("Failed to set HVAC mode for %s: %s", trv_entity_id, err)
 
-        # Update commanded mode (convert enum to string) and refresh state
-        self.coordinator._commanded_hvac_mode = (
-            "heat" if hvac_mode == HVACMode.HEAT else "off"
-        )
         self.async_write_ha_state()
+        await self.coordinator.async_request_refresh()
 
     @callback
     def _handle_coordinator_update(self) -> None:
