@@ -170,12 +170,14 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   getTemperatureColor(temperature) {
-    if (typeof temperature === 'string') return '#64748b';
+    if (typeof temperature === 'string' || temperature === 0) return '#64748b';
     const t = parseFloat(temperature);
-    if (t <= 15) return '#2563eb';
-    if (t <= 18) return '#0284c7';
-    if (t <= 20) return '#059669';
-    if (t <= 22) return '#ea580c';
+    if (t <= 15.0) return '#3b82f6';
+    if (t <= 17.0) return '#06b6d4';
+    if (t <= 18.5) return '#10b981';
+    if (t <= 20.0) return '#84cc16';
+    if (t <= 21.5) return '#f59e0b';
+    if (t <= 23.0) return '#ea580c';
     return '#dc2626';
   }
 
@@ -1378,7 +1380,7 @@ class TaDiyScheduleCard extends HTMLElement {
     }
 
     const exportData = {
-      version: '3.1.0',
+      version: '3.1.2',
       exported_at: new Date().toISOString(),
       room_entity: this._config.entity,
       room_name: roomName,

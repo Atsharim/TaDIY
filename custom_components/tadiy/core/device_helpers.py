@@ -51,12 +51,9 @@ def get_device_info(
                 else:
                     hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, target_hub_id)})
                 if hub_device:
+                    # HA 2024.8+ deprecated via_device tuple in favor of via_device_id
                     device_info["via_device_id"] = hub_device.id
-                else:
-                    device_info["via_device"] = (DOMAIN, target_hub_id)
             except Exception:
-                device_info["via_device"] = (DOMAIN, target_hub_id)
-        elif target_hub_id:
-            device_info["via_device"] = (DOMAIN, target_hub_id)
+                pass
 
     return device_info

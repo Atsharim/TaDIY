@@ -221,6 +221,15 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             )
             attrs["override_active"] = getattr(data, "override_active", False)
 
+            # TRV target exposure for panel diagnosis
+            trv_target = None
+            if hasattr(self.coordinator, "_last_trv_targets") and self.coordinator._last_trv_targets:
+                trv_targets = [t for t in self.coordinator._last_trv_targets.values() if t is not None]
+                if trv_targets:
+                    trv_target = round(sum(trv_targets) / len(trv_targets), 1)
+            attrs["trv_target_temperature"] = trv_target
+            attrs["trv_target"] = trv_target
+
         if self.coordinator and hasattr(self.coordinator, "room_config"):
             cfg = self.coordinator.room_config
             opts = self._entry.options if self._entry else {}

@@ -17,6 +17,7 @@ class TaDiyPanel extends HTMLElement {
     this._selectedScheduleRoom = null;
     this._selectedSettingsRoom = null;
     this._hasOpenDropdown = false;
+    this._openDetails = new Set();
   }
 
   set hass(hass) {
@@ -133,6 +134,16 @@ class TaDiyPanel extends HTMLElement {
           normalize(s.entity_id).replace(/[^a-z0-9]/g, '').includes(cleanSlug)
         );
 
+        // Resolve battery status sensor (multi-device batteries & offline check)
+        const batterySensor = Object.values(this._hass.states).find(s =>
+          s.entity_id.startsWith('sensor.') &&
+          s.entity_id.endsWith('_battery_status') &&
+          normalize(s.entity_id).replace(/[^a-z0-9]/g, '').includes(cleanSlug)
+        );
+        const offlineDevices = batterySensor?.attributes?.offline_devices || [];
+        const lowBatteryDevices = batterySensor?.attributes?.low_battery_devices || [];
+        const deviceDetails = batterySensor?.attributes?.device_details || [];
+
         return {
           entity_id: entity.entity_id,
           name: entity.attributes.friendly_name || entity.entity_id,
@@ -166,6 +177,10 @@ class TaDiyPanel extends HTMLElement {
           heating_rate_confidence: entity.attributes.heating_rate_confidence !== undefined ? entity.attributes.heating_rate_confidence : 0,
           heating_rate_last_updated: entity.attributes.heating_rate_last_updated || null,
           override_active: !!entity.attributes.override_active,
+          battery_status: batterySensor ? batterySensor.state : null,
+          offline_devices: offlineDevices,
+          low_battery_devices: lowBatteryDevices,
+          device_details: deviceDetails,
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -263,6 +278,31 @@ class TaDiyPanel extends HTMLElement {
         }
 
         /* Hub Mode Pill Selector */
+        .quick-btn-homeoffice {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 14px;
+          border-radius: 20px;
+          background: var(--card-background-color, #ffffff);
+          border: 1px solid var(--divider-color, #e2e8f0);
+          box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--primary-text-color, #1e293b);
+          transition: all 0.15s ease-in-out;
+        }
+        .quick-btn-homeoffice:hover {
+          border-color: #3b82f6;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .quick-btn-homeoffice.active {
+          background: #eff6ff;
+          border-color: #3b82f6;
+          color: #1d4ed8;
+          font-weight: 700;
+        }
         .hub-mode-container {
           position: relative;
         }
@@ -474,7 +514,11 @@ class TaDiyPanel extends HTMLElement {
           font-weight: 800;
           line-height: 1;
           color: var(--primary-text-color, #0f172a);
+          transition: color 0.2s ease-in-out;
         }
+        .current-temp.heating { color: #ef4444; }
+        .current-temp.idle { color: #22c55e; }
+        .current-temp.off { color: #94a3b8; }
         .target-temp-label {
           font-size: 12px;
           font-weight: 600;
@@ -1010,23 +1054,25 @@ class TaDiyPanel extends HTMLElement {
           <div class="logo-icon">🔥</div>
           <div>
             <h1>TaDIY Klima-Manager</h1>
-            <div class="tagline">Adaptive Climate Orchestrator v3.1</div>
+            <div class="tagline">Adaptive Climate Orchestrator v3.1.2</div>
           </div>
         </div>
 
-        <div class="hub-mode-container">
-          <button class="hub-mode-button" data-action="toggle-hub-dropdown">
-            <span class="hub-mode-dot ${this._hubMode}"></span>
-            <span>Modus: <strong>${this._hubMode.toUpperCase()}</strong></span>
-            <span>▼</span>
-          </button>
-          <div class="hub-mode-dropdown" data-dropdown>
-            ${this._hubModeOptions.map(m => `
-              <div class="hub-mode-item ${m === this._hubMode ? 'active' : ''}" data-hub-mode="${m}">
-                <span class="hub-mode-dot ${m}"></span>
-                <span>${m.toUpperCase()}</span>
-              </div>
-            `).join('')}
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="hub-mode-container">
+            <button class="hub-mode-button" data-action="toggle-hub-dropdown">
+              <span class="hub-mode-dot ${this._hubMode}"></span>
+              <span>Modus: <strong>${this._hubMode.toUpperCase()}</strong></span>
+              <span>▼</span>
+            </button>
+            <div class="hub-mode-dropdown" data-dropdown>
+              ${this._hubModeOptions.map(m => `
+                <div class="hub-mode-item ${m === this._hubMode ? 'active' : ''}" data-hub-mode="${m}">
+                  <span class="hub-mode-dot ${m}"></span>
+                  <span>${m.toUpperCase()}</span>
+                </div>
+              `).join('')}
+            </div>
           </div>
         </div>
       </div>
@@ -1095,6 +1141,14 @@ class TaDiyPanel extends HTMLElement {
         </div>
       </div>
 
+      <!-- Action Bar: Rooms Header & Single-Day Homeoffice Toggle -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0 12px 0;">
+        <h2 style="font-size: 18px; font-weight: 700; margin: 0; color: var(--primary-text-color, #1e293b);">Räume</h2>
+        <button class="quick-btn-homeoffice ${this._hubMode === 'homeoffice' ? 'active' : ''}" data-action="toggle-homeoffice" title="Homeoffice für heute aktivieren (automatischer Rückfall auf Normal zum Feierabend)">
+          💼 ${this._hubMode === 'homeoffice' ? 'Homeoffice aktiv (Heute bis Feierabend)' : 'Homeoffice Heute (1 Tag)'}
+        </button>
+      </div>
+
       <!-- Room Cards Grid -->
       <div class="rooms-grid">
         ${this._rooms.map(room => this.renderRoomCard(room)).join('')}
@@ -1120,7 +1174,7 @@ class TaDiyPanel extends HTMLElement {
 
         <div class="room-temp-row">
           <div class="temp-display">
-            <div class="current-temp">${currentTemp}</div>
+            <div class="current-temp ${statusClass}">${currentTemp}</div>
             <div class="target-temp-label">Sollwert: ${targetTemp}</div>
           </div>
           <div class="stepper-controls">
@@ -1139,6 +1193,18 @@ class TaDiyPanel extends HTMLElement {
           ${room.has_problem ? `
             <div class="badge problem" title="${room.problem_desc || 'Kein Temperaturanstieg / Kalkblockade'}">
               ⚠️ Heizstörung / Kalk
+            </div>
+          ` : ''}
+
+          ${room.offline_devices && room.offline_devices.length > 0 ? `
+            <div class="badge" style="background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);" title="Offline: ${room.offline_devices.join(', ')}">
+              ⚠️ ${room.offline_devices.length} Sensor${room.offline_devices.length > 1 ? 'en' : ''} offline
+            </div>
+          ` : ''}
+
+          ${room.low_battery_devices && room.low_battery_devices.length > 0 ? `
+            <div class="badge" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3);" title="Batterie schwach: ${room.low_battery_devices.join(', ')}">
+              🔋 Batterie schwach (${room.low_battery_devices.length})
             </div>
           ` : ''}
 
@@ -1162,7 +1228,7 @@ class TaDiyPanel extends HTMLElement {
           </button>
         </div>
 
-        <details class="room-details-accordion">
+        <details class="room-details-accordion" data-details-id="${room.entity_id}" ${this._openDetails.has(room.entity_id) ? 'open' : ''}>
           <summary class="room-details-summary">ℹ️ Reglerdetails</summary>
           <div class="room-details-content">
             <div class="detail-row">
@@ -1196,9 +1262,19 @@ class TaDiyPanel extends HTMLElement {
                 ${room.heating_rate_samples ? `(${room.heating_rate_samples} Messung${room.heating_rate_samples === 1 ? '' : 'en'}, ${(room.heating_rate_confidence * 100).toFixed(0)}% Konfidenz)` : '(Initial)'}
               </span>
             </div>
-            <button class="detail-btn-reset" data-action="reset-learning" data-room-name="${room.name}" title="Lernwerte und Heizrate für diesen Raum auf Werkseinstellung zurücksetzen">
-              ↺ Lernwerte zurücksetzen
-            </button>
+            ${room.device_details && room.device_details.length > 0 ? `
+              <div class="detail-row" style="margin-top: 8px; border-top: 1px dashed var(--divider-color, #334155); padding-top: 8px;">
+                <span class="detail-label" style="font-weight: 700;">Geräte & Sensoren (${room.device_details.length}):</span>
+              </div>
+              ${room.device_details.map(d => `
+                <div class="detail-row" style="padding-left: 8px; font-size: 11px;">
+                  <span class="detail-label">${d.type === 'trv' ? '🌡️' : (d.type === 'window' ? '🪟' : '📡')} ${d.name}:</span>
+                  <span class="detail-value ${d.is_offline ? 'text-danger' : (d.is_low ? 'text-warning' : '')}">
+                    ${d.is_offline ? '⚠️ Offline' : (d.battery !== null && d.battery !== undefined ? d.battery + '%' : 'Online')}
+                  </span>
+                </div>
+              `).join('')}
+            ` : ''}
           </div>
         </details>
       </div>
@@ -1602,7 +1678,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=' + (this._config?.domain || 'tadiy');
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.2';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -1632,6 +1708,37 @@ class TaDiyPanel extends HTMLElement {
         }
       });
     });
+
+    // Details Accordion State Persistence
+    this.shadowRoot.querySelectorAll('details[data-details-id]').forEach(el => {
+      el.addEventListener('toggle', () => {
+        const id = el.getAttribute('data-details-id');
+        if (el.open) {
+          this._openDetails.add(id);
+        } else {
+          this._openDetails.delete(id);
+        }
+      });
+    });
+
+    // Quick Homeoffice Toggle
+    const homeofficeBtn = this.shadowRoot.querySelector('[data-action="toggle-homeoffice"]');
+    if (homeofficeBtn && this._hubModeEntityId && this._hass) {
+      homeofficeBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const targetMode = this._hubMode === 'homeoffice' ? 'normal' : 'homeoffice';
+        try {
+          await this._hass.callService('select', 'select_option', {
+            entity_id: this._hubModeEntityId,
+            option: targetMode
+          });
+          this._hubMode = targetMode;
+          this.render();
+        } catch (err) {
+          console.error('Failed to toggle homeoffice mode:', err);
+        }
+      });
+    }
 
     // Hub Mode Dropdown Toggle
     const hubBtn = this.shadowRoot.querySelector('[data-action="toggle-hub-dropdown"]');

@@ -196,6 +196,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         self._homeoffice_started_date = (
             dt_util.now().date() if self.hub_mode == HUB_MODE_HOMEOFFICE else None
         )
+        self._homeoffice_started_time = (
+            dt_util.now() if self.hub_mode == HUB_MODE_HOMEOFFICE else None
+        )
 
         self.data = {
             "hub": True,
@@ -245,22 +248,33 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 )
             self._update_global_settings()
 
-            # Auto-reset single-day homeoffice mode at midnight / new day
+            # Auto-reset single-day homeoffice mode at homeoffice_end_hour or midnight
             if (
                 self.hub_mode == HUB_MODE_HOMEOFFICE
                 and self.global_settings.get(
                     CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
                 )
             ):
-                today = dt_util.now().date()
-                if (
-                    self._homeoffice_started_date is not None
-                    and today != self._homeoffice_started_date
-                ):
+                now = dt_util.now()
+                today = now.date()
+                end_hour = self.global_settings.get(
+                    CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
+                )
+                started_date = self._homeoffice_started_date
+                started_time = getattr(self, "_homeoffice_started_time", None)
+
+                should_reset = False
+                if started_date is not None:
+                    if today != started_date:
+                        should_reset = True
+                    elif end_hour < 24 and now.hour >= end_hour:
+                        if started_time is None or started_time.hour < end_hour or (now - started_time).total_seconds() > 3600:
+                            should_reset = True
+
+                if should_reset:
                     _LOGGER.info(
-                        "TaDIY: Single-day homeoffice mode ended (date changed from %s to %s), resetting hub mode to normal",
-                        self._homeoffice_started_date,
-                        today,
+                        "TaDIY: Single-day homeoffice mode ended (end hour: %02d:00), resetting hub mode to normal",
+                        end_hour if (started_date and today == started_date) else 0,
                     )
                     self.set_hub_mode(HUB_MODE_NORMAL)
 
@@ -618,8 +632,10 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             self._hub_mode_set_at = dt_util.utcnow()
             if mode == HUB_MODE_HOMEOFFICE:
                 self._homeoffice_started_date = dt_util.now().date()
+                self._homeoffice_started_time = dt_util.now()
             else:
                 self._homeoffice_started_date = None
+                self._homeoffice_started_time = None
             if isinstance(self.data, dict):
                 self.data["hub_mode"] = mode
             self.async_update_listeners()

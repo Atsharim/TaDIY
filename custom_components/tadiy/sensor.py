@@ -508,58 +508,134 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
         self._attr_name = "Battery Status"
         self._attr_device_info = get_device_info(entry, coordinator.hass)
 
+    def _get_device_battery_info(
+        self, entity_id: str
+    ) -> tuple[float | None, bool | None, bool]:
+        """Resolve battery percentage, low-flag, and offline state for an entity or its device."""
+        state = self.hass.states.get(entity_id)
+        if not state:
+            return None, None, True
+
+        is_offline = state.state in ("unavailable", "unknown")
+        battery_level = None
+        battery_low = None
+
+        # 1. Direct attributes on entity
+        for attr in ("battery", "battery_level"):
+            val = state.attributes.get(attr)
+            if val is not None:
+                try:
+                    battery_level = float(val)
+                    break
+                except (ValueError, TypeError):
+                    pass
+
+        raw_low = state.attributes.get("battery_low")
+        if raw_low is not None:
+            battery_low = bool(raw_low)
+
+        # 2. Associated device entities in device registry / entity registry
+        if battery_level is None:
+            try:
+                from homeassistant.helpers import entity_registry as er
+
+                ent_reg = er.async_get(self.hass)
+                entry = ent_reg.async_get(entity_id)
+                if entry and entry.device_id:
+                    for sibling in er.async_entries_for_device(ent_reg, entry.device_id):
+                        if sibling.entity_id == entity_id:
+                            continue
+                        sib_state = self.hass.states.get(sibling.entity_id)
+                        if not sib_state or sib_state.state in ("unavailable", "unknown"):
+                            continue
+
+                        # Check battery sensor
+                        if sibling.domain == "sensor" and (
+                            sibling.device_class == "battery"
+                            or sibling.original_device_class == "battery"
+                            or sibling.entity_id.endswith("_battery")
+                            or sibling.entity_id.endswith("_battery_level")
+                            or sibling.entity_id.endswith("_battery_plus")
+                        ):
+                            try:
+                                battery_level = float(sib_state.state)
+                                break
+                            except (ValueError, TypeError):
+                                pass
+
+                        # Check binary_sensor for low battery
+                        if sibling.domain == "binary_sensor" and (
+                            sibling.device_class == "battery"
+                            or sibling.original_device_class == "battery"
+                            or sibling.entity_id.endswith("_battery_low")
+                        ):
+                            if sib_state.state == "on":
+                                battery_low = True
+            except Exception:
+                pass
+
+        # 3. Heuristic name fallback if device registry is unavailable
+        if battery_level is None:
+            stem = entity_id.split(".", 1)[-1]
+            # Strip prefixes / suffixes
+            clean_stem = (
+                stem.replace("_window", "")
+                .replace("_contact", "")
+                .replace("_temperature", "")
+            )
+            for candidate in (
+                f"sensor.{stem}_battery",
+                f"sensor.{stem}_battery_level",
+                f"sensor.{stem}_battery_plus",
+                f"sensor.{clean_stem}_battery",
+                f"sensor.{clean_stem}_battery_plus",
+            ):
+                cand_state = self.hass.states.get(candidate)
+                if cand_state and cand_state.state not in ("unavailable", "unknown"):
+                    try:
+                        battery_level = float(cand_state.state)
+                        break
+                    except (ValueError, TypeError):
+                        pass
+
+        if battery_level is not None and battery_low is None:
+            battery_low = battery_level < 20.0
+        elif battery_low is True and battery_level is None:
+            battery_level = 10.0
+
+        return battery_level, battery_low, is_offline
+
+    def _collect_monitored_entities(self) -> list[str]:
+        """Collect all device entities associated with this room."""
+        entities = list(self.coordinator.room_config.trv_entity_ids)
+        if self.coordinator.room_config.main_temp_sensor_id:
+            entities.append(self.coordinator.room_config.main_temp_sensor_id)
+        if self.coordinator.room_config.humidity_sensor_id:
+            entities.append(self.coordinator.room_config.humidity_sensor_id)
+        if getattr(self.coordinator.room_config, "window_sensor_ids", None):
+            entities.extend(self.coordinator.room_config.window_sensor_ids)
+        return entities
+
     @property
     def native_value(self) -> str:
-        """Return the state of the sensor (count of low batteries)."""
+        """Return the state of the sensor (count of low batteries and offline sensors)."""
         low_battery_count = 0
         total_battery_count = 0
+        offline_count = 0
 
-        # Check TRVs
-        for entity_id in self.coordinator.room_config.trv_entity_ids:
-            state = self.hass.states.get(entity_id)
-            if state:
-                battery = state.attributes.get("battery")
-                if battery is not None:
-                    total_battery_count += 1
-                    try:
-                        battery_level = float(battery)
-                        if battery_level < 20:
-                            low_battery_count += 1
-                    except (ValueError, TypeError):
-                        pass
+        for entity_id in self._collect_monitored_entities():
+            bat_lvl, is_low, is_offline = self._get_device_battery_info(entity_id)
+            if is_offline:
+                offline_count += 1
+            if bat_lvl is not None:
+                total_battery_count += 1
+                if is_low:
+                    low_battery_count += 1
 
-        # Check main temperature sensor
-        if self.coordinator.room_config.main_temp_sensor_id:
-            state = self.hass.states.get(
-                self.coordinator.room_config.main_temp_sensor_id
-            )
-            if state:
-                battery = state.attributes.get("battery")
-                if battery is not None:
-                    total_battery_count += 1
-                    try:
-                        battery_level = float(battery)
-                        if battery_level < 20:
-                            low_battery_count += 1
-                    except (ValueError, TypeError):
-                        pass
-
-        # Check humidity sensor
-        if self.coordinator.room_config.humidity_sensor_id:
-            state = self.hass.states.get(
-                self.coordinator.room_config.humidity_sensor_id
-            )
-            if state:
-                battery = state.attributes.get("battery")
-                if battery is not None:
-                    total_battery_count += 1
-                    try:
-                        battery_level = float(battery)
-                        if battery_level < 20:
-                            low_battery_count += 1
-                    except (ValueError, TypeError):
-                        pass
-
+        if offline_count > 0 and low_battery_count > 0:
+            return f"{low_battery_count} Low, {offline_count} Offline"
+        if offline_count > 0:
+            return f"{offline_count} Sensor{'s' if offline_count > 1 else ''} Offline"
         if total_battery_count == 0:
             return "No battery devices"
         if low_battery_count == 0:
@@ -569,63 +645,49 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return entity specific state attributes."""
-        attributes = {}
+        attributes: dict[str, Any] = {
+            "offline_devices": [],
+            "low_battery_devices": [],
+            "device_details": [],
+        }
 
-        # Check TRVs
-        for entity_id in self.coordinator.room_config.trv_entity_ids:
+        for entity_id in self._collect_monitored_entities():
+            bat_lvl, is_low, is_offline = self._get_device_battery_info(entity_id)
             state = self.hass.states.get(entity_id)
-            if state:
-                battery = state.attributes.get("battery")
-                battery_low = state.attributes.get("battery_low")
-
-                trv_key = entity_id.replace("climate.", "").replace(".", "_")
-                if battery is not None:
-                    try:
-                        attributes[f"{trv_key}_battery"] = float(battery)
-                    except (ValueError, TypeError):
-                        attributes[f"{trv_key}_battery"] = battery
-                if battery_low is not None:
-                    attributes[f"{trv_key}_battery_low"] = battery_low
-
-        # Check main temperature sensor
-        if self.coordinator.room_config.main_temp_sensor_id:
-            state = self.hass.states.get(
-                self.coordinator.room_config.main_temp_sensor_id
+            friendly_name = (
+                state.attributes.get("friendly_name", entity_id) if state else entity_id
             )
-            if state:
-                battery = state.attributes.get("battery")
-                battery_low = state.attributes.get("battery_low")
+            key = entity_id.replace("climate.", "").replace("sensor.", "").replace("binary_sensor.", "").replace(".", "_")
 
-                sensor_key = self.coordinator.room_config.main_temp_sensor_id.replace(
-                    "sensor.", ""
-                ).replace(".", "_")
-                if battery is not None:
-                    try:
-                        attributes[f"{sensor_key}_battery"] = float(battery)
-                    except (ValueError, TypeError):
-                        attributes[f"{sensor_key}_battery"] = battery
-                if battery_low is not None:
-                    attributes[f"{sensor_key}_battery_low"] = battery_low
+            if is_offline:
+                attributes["offline_devices"].append(entity_id)
+            if bat_lvl is not None:
+                attributes[f"{key}_battery"] = bat_lvl
+            if is_low is not None:
+                attributes[f"{key}_battery_low"] = is_low
+                if is_low:
+                    attributes["low_battery_devices"].append(entity_id)
 
-        # Check humidity sensor
-        if self.coordinator.room_config.humidity_sensor_id:
-            state = self.hass.states.get(
-                self.coordinator.room_config.humidity_sensor_id
+            dev_type = (
+                "trv"
+                if entity_id.startswith("climate.")
+                else (
+                    "window"
+                    if "window" in entity_id or "fenster" in entity_id or "tuer" in entity_id
+                    else "sensor"
+                )
             )
-            if state:
-                battery = state.attributes.get("battery")
-                battery_low = state.attributes.get("battery_low")
 
-                sensor_key = self.coordinator.room_config.humidity_sensor_id.replace(
-                    "sensor.", ""
-                ).replace(".", "_")
-                if battery is not None:
-                    try:
-                        attributes[f"{sensor_key}_battery"] = float(battery)
-                    except (ValueError, TypeError):
-                        attributes[f"{sensor_key}_battery"] = battery
-                if battery_low is not None:
-                    attributes[f"{sensor_key}_battery_low"] = battery_low
+            attributes["device_details"].append(
+                {
+                    "entity_id": entity_id,
+                    "name": friendly_name,
+                    "type": dev_type,
+                    "battery": bat_lvl,
+                    "is_low": is_low,
+                    "is_offline": is_offline,
+                }
+            )
 
         return attributes
 

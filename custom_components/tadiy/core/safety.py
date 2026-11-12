@@ -23,11 +23,11 @@ _LOGGER = logging.getLogger(__name__)
 # Thresholds
 OVERHEAT_TEMP: float = 28.0  # Force heating off above this (absolute ceiling)
 FROST_FLOOR_TEMP: float = 5.0  # Force heating on below this (absolute floor)
-OVERHEAT_SETPOINT_DELTA: float = 1.2  # °C above setpoint before stuck-open heating detection begins
+OVERHEAT_SETPOINT_DELTA: float = 1.5  # °C above setpoint before stuck-open heating detection begins
 HEATING_FAILURE_SETPOINT_DELTA: float = 0.8  # °C below setpoint before stuck-closed / boiler failure detection begins
-VALVE_STUCK_TIMEOUT: int = 1800  # 30 min without temp change after command / state change
-VALVE_STUCK_MIN_DELTA: float = 0.3  # Expected min change in that period
-MIN_TEMP_RISE_ON_HEAT: float = 0.2  # Expected minimum temperature rise when heating for 30 min
+VALVE_STUCK_TIMEOUT: int = 1800  # 30 min evaluation window
+VALVE_STUCK_MIN_DELTA: float = 0.5  # Expected min climb in that period to declare active runaway heating
+MIN_TEMP_RISE_ON_HEAT: float = 0.0  # Must not be stagnant or falling (temp_rise <= 0.0) when heating
 
 
 @dataclass
@@ -272,15 +272,18 @@ class SafetyManager:
             else:
                 elapsed = (now - self._idle_overheat_started_at).total_seconds()
                 if elapsed >= VALVE_STUCK_TIMEOUT:
-                    # If temperature has not dropped noticeably (cooling failure or continuing rise)
-                    if (
-                        self._temp_at_idle_overheat_start is not None
-                        and current_temp >= self._temp_at_idle_overheat_start - 0.1
-                    ):
+                    # An open stuck valve actually heats the room up while idle!
+                    # Only alert if room temperature has risen noticeably while heating is off.
+                    temp_increase = current_temp - (
+                        self._temp_at_idle_overheat_start
+                        if self._temp_at_idle_overheat_start is not None
+                        else current_temp
+                    )
+                    if temp_increase >= VALVE_STUCK_MIN_DELTA:
                         if not self.state.valve_stuck_open:
                             msg = (
                                 f"Ventil in Raum {self.room_name} klemmt vermutlich offen (Kalkblockade). "
-                                f"Raum heizt weiter ({current_temp:.1f}°C bei Soll {target_temp:.1f}°C) "
+                                f"Raum heizt weiter ({current_temp:.1f}°C bei Soll {target_temp:.1f}°C, Anstieg: +{temp_increase:.2f}°C) "
                                 f"trotz inaktiver Heizung seit {int(elapsed / 60)} Min."
                             )
                             self._debug("SAFETY: %s", msg)
@@ -325,7 +328,7 @@ class SafetyManager:
                         if self._temp_at_heating_start is not None
                         else current_temp
                     )
-                    if temp_rise < MIN_TEMP_RISE_ON_HEAT:
+                    if temp_rise <= MIN_TEMP_RISE_ON_HEAT:
                         if not self.state.heating_failure:
                             msg = (
                                 f"Heizungsstörung in Raum {self.room_name}: Keine Erwärmung seit {int(elapsed / 60)} Min "

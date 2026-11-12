@@ -419,6 +419,8 @@ class TrvManager:
                         blocking=False,
                         context=self._last_command_context,
                     )
+                    if hasattr(self.coordinator, "_last_trv_targets"):
+                        self.coordinator._last_trv_targets[trv_id] = calibrated
 
                 # Log calibration offset if significant
                 if abs(calibration_offset) > 0.1:
