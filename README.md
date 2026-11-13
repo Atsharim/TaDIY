@@ -5,8 +5,8 @@
 # TaDIY - Adaptive Climate Orchestrator for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](https://github.com/Atsharim/TaDIY/releases/)
-[![Tests](https://img.shields.io/badge/tests-64%20passing-brightgreen.svg)](https://github.com/Atsharim/TaDIY)
+[![Version](https://img.shields.io/badge/version-3.1.5-blue.svg)](https://github.com/Atsharim/TaDIY/releases/)
+[![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen.svg)](https://github.com/Atsharim/TaDIY)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **⚠️ Disclaimer**: Personal hobby/learning project. Provided as-is. Use at your own risk.
@@ -55,12 +55,12 @@ TaDIY/
 │   ├── select.py             # Mode selectors (away, override)
 │   ├── sensor.py             # Sensors (heating rate, savings, comfort)
 │   ├── www/                  # Frontend panel & Lovelace cards
-│   ├── manifest.json         # Integration manifest (v3.1.0)
+│   ├── manifest.json         # Integration manifest (v3.1.5)
 │   └── strings.json          # UI translations schema
 ├── docs/                     # Technical documentation & change logs
 │   ├── AENDERUNGEN-2026-11.md# Milestone change log
 │   └── STATUS.md             # Project status & open tasks
-└── tests/                    # Automated unit tests (61 tests)
+└── tests/                    # Automated unit tests (69 tests)
 ```
 
 ---

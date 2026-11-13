@@ -170,15 +170,15 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   getTemperatureColor(temperature) {
-    if (typeof temperature === 'string' || temperature === 0) return '#475569';
+    if (typeof temperature === 'string' || temperature === 0) return '#64748b';
     const t = parseFloat(temperature);
-    if (t <= 15.0) return '#475569';
-    if (t <= 17.0) return '#3d6473';
-    if (t <= 18.5) return '#3b6e63';
-    if (t <= 20.0) return '#587352';
-    if (t <= 21.5) return '#7d6b47';
-    if (t <= 23.0) return '#8c5945';
-    return '#8f4646';
+    if (t <= 15.0) return '#4dabf7';
+    if (t <= 17.0) return '#22b8cf';
+    if (t <= 18.5) return '#20c997';
+    if (t <= 20.0) return '#40c057';
+    if (t <= 21.5) return '#fab005';
+    if (t <= 23.0) return '#fd7e14';
+    return '#fa5252';
   }
 
   formatTemperature(temperature) {
@@ -591,18 +591,18 @@ class TaDiyScheduleCard extends HTMLElement {
           flex-wrap: wrap;
           gap: 12px;
           padding: 10px 14px;
-          background: #f8fafc;
+          background: var(--card-background-color, rgba(255, 255, 255, 0.04));
           border: 1px solid var(--tadiy-divider);
           border-radius: 8px;
           transition: all 0.15s ease-in-out;
         }
         .block-editor:hover {
-          background: #f1f5f9;
+          background: rgba(255, 255, 255, 0.08);
         }
         .block-editor.selected {
           border-color: var(--tadiy-primary);
-          background: #ffffff;
-          box-shadow: 0 2px 8px rgba(2, 132, 199, 0.12);
+          background: rgba(2, 132, 199, 0.12);
+          box-shadow: 0 2px 8px rgba(2, 132, 199, 0.15);
         }
         .block-header-info {
           display: flex;
@@ -640,7 +640,8 @@ class TaDiyScheduleCard extends HTMLElement {
           align-items: center;
           gap: 4px;
           padding: 5px 10px;
-          background: #e2e8f0;
+          background: rgba(255, 255, 255, 0.08);
+          border: 1px solid var(--tadiy-divider);
           border-radius: 6px;
           font-size: 13px;
           font-weight: 600;
