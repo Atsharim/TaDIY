@@ -118,3 +118,4 @@ ip_bans.yaml
 
 # Local reference / live backup
 .ignore/
+scratch/

@@ -242,13 +242,19 @@ class SafetyManager:
         current_temp: float | None,
         target_temp: float | None,
         heating_active: bool,
+        trv_temperatures: list[float] | None = None,
+        trv_targets: list[float] | None = None,
+        trv_modes: list[str] | None = None,
     ) -> SafetyState:
         """Comprehensive safety and failure monitoring (K-13).
 
         Detects:
         - Absolute overheat / frost
-        - Valve stuck open (limescale clog): Room exceeds target and fails to cool down while idle
-        - Heating failure (boiler/pump outage or stuck closed): Room fails to rise despite 30 min heat call
+        - Valve stuck open (limescale clog): Room exceeds target and fails to cool down while idle.
+          Cross-checks TRV temperature: if TRVs are cold (<= current_temp + 1.5°C), the warmth
+          is due to passive drift from adjacent rooms, NOT a stuck radiator valve.
+        - Heating failure (boiler/pump outage or stuck closed): Room fails to rise despite heat call.
+          Cross-checks TRV state: if TRVs are off/low (e.g. 5°C), or TRVs are actively hot, false alarms are suppressed.
         """
         if current_temp is None:
             return self.state
@@ -259,12 +265,34 @@ class SafetyManager:
         self.check_overheat(current_temp)
         self.check_frost(current_temp, heating_active)
 
+        # TRV sensor cross-check
+        valid_trvs = [t for t in (trv_temperatures or []) if isinstance(t, (int, float))]
+        trv_is_hot = True
+        trv_actively_heating = False
+        if valid_trvs:
+            max_trv = max(valid_trvs)
+            # A stuck-open radiator must heat its own TRV significantly above room temperature
+            trv_is_hot = max_trv > current_temp + 1.5
+            # In heating failure check: if TRV is hot, valve and hot water are flowing
+            trv_actively_heating = max_trv >= current_temp + 2.5
+
+        # Check if TRVs are commanded to be off or low (e.g. 5°C or off mode)
+        trvs_commanded_to_heat = True
+        if trv_targets:
+            valid_targets = [t for t in trv_targets if isinstance(t, (int, float))]
+            if valid_targets and all(t <= current_temp or t <= 10.0 for t in valid_targets):
+                trvs_commanded_to_heat = False
+        if trv_modes and all(m == "off" for m in trv_modes):
+            trvs_commanded_to_heat = False
+
         # 2. Valve Stuck Open / Uncontrolled Heating (Kalkblockade)
-        # Occurs when heating is OFF (or target is lower than room temp) but room temp is significantly above setpoint
+        # Occurs when heating is OFF (or target is lower than room temp) but room temp is significantly above setpoint.
+        # Suppressed if TRVs are confirmed cold (passive heating from adjacent rooms).
         if (
             target_temp is not None
             and not heating_active
             and (current_temp >= target_temp + OVERHEAT_SETPOINT_DELTA)
+            and trv_is_hot
         ):
             if self._idle_overheat_started_at is None:
                 self._idle_overheat_started_at = now
@@ -273,7 +301,6 @@ class SafetyManager:
                 elapsed = (now - self._idle_overheat_started_at).total_seconds()
                 if elapsed >= VALVE_STUCK_TIMEOUT:
                     # An open stuck valve actually heats the room up while idle!
-                    # Only alert if room temperature has risen noticeably while heating is off.
                     temp_increase = current_temp - (
                         self._temp_at_idle_overheat_start
                         if self._temp_at_idle_overheat_start is not None
@@ -310,11 +337,13 @@ class SafetyManager:
             self._temp_at_idle_overheat_start = None
 
         # 3. Heating Failure (Kesselausfall / Pumpenausfall / Ventil klemmt geschlossen)
-        # Occurs when heating is active and room is noticeably below target
+        # Occurs when heating is active, room is noticeably below target, TRVs are actually commanded to heat, and TRVs are NOT hot
         if (
             target_temp is not None
             and heating_active
+            and trvs_commanded_to_heat
             and (target_temp - current_temp >= HEATING_FAILURE_SETPOINT_DELTA)
+            and not trv_actively_heating
         ):
             if self._heating_started_at is None:
                 self._heating_started_at = now

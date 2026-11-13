@@ -668,15 +668,22 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
                 if is_low:
                     attributes["low_battery_devices"].append(entity_id)
 
-            dev_type = (
-                "trv"
-                if entity_id.startswith("climate.")
-                else (
-                    "window"
-                    if "window" in entity_id or "fenster" in entity_id or "tuer" in entity_id
-                    else "sensor"
-                )
-            )
+            dev_class = state.attributes.get("device_class") if state else None
+            clean_lower = entity_id.lower()
+            name_lower = friendly_name.lower()
+
+            if entity_id.startswith("climate."):
+                dev_type = "trv"
+            elif dev_class == "door" or any(k in clean_lower or k in name_lower for k in ("tuer", "tür", "door", "tor", "gate")):
+                dev_type = "door"
+            elif dev_class == "window" or any(k in clean_lower or k in name_lower for k in ("window", "fenster", "roof")):
+                dev_type = "window"
+            elif dev_class == "humidity" or any(k in clean_lower or k in name_lower for k in ("humidity", "feucht")):
+                dev_type = "humidity"
+            elif dev_class == "temperature" or any(k in clean_lower or k in name_lower for k in ("temp", "temperatur")):
+                dev_type = "temp"
+            else:
+                dev_type = "sensor"
 
             attributes["device_details"].append(
                 {

@@ -276,6 +276,7 @@ SERVICE_APPLY_PID_AUTOTUNE: Final = "apply_pid_autotune"
 SERVICE_REFRESH_WEATHER_FORECAST: Final = "refresh_weather_forecast"
 SERVICE_SET_HUB_CONFIG: Final = "set_hub_config"
 SERVICE_SET_ROOM_CONFIG: Final = "set_room_config"
+SERVICE_SET_HOMEOFFICE_TOMORROW: Final = "set_homeoffice_tomorrow"
 
 # Service attributes
 ATTR_ROOM: Final = "room"

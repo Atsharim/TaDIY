@@ -170,15 +170,15 @@ class TaDiyScheduleCard extends HTMLElement {
   }
 
   getTemperatureColor(temperature) {
-    if (typeof temperature === 'string' || temperature === 0) return '#64748b';
+    if (typeof temperature === 'string' || temperature === 0) return '#475569';
     const t = parseFloat(temperature);
-    if (t <= 15.0) return '#3b82f6';
-    if (t <= 17.0) return '#06b6d4';
-    if (t <= 18.5) return '#10b981';
-    if (t <= 20.0) return '#84cc16';
-    if (t <= 21.5) return '#f59e0b';
-    if (t <= 23.0) return '#ea580c';
-    return '#dc2626';
+    if (t <= 15.0) return '#475569';
+    if (t <= 17.0) return '#3d6473';
+    if (t <= 18.5) return '#3b6e63';
+    if (t <= 20.0) return '#587352';
+    if (t <= 21.5) return '#7d6b47';
+    if (t <= 23.0) return '#8c5945';
+    return '#8f4646';
   }
 
   formatTemperature(temperature) {

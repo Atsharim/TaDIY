@@ -154,6 +154,7 @@ class TaDiyPanel extends HTMLElement {
           window_close_timeout: entity.attributes.window_close_timeout !== undefined ? entity.attributes.window_close_timeout : 60,
           min_heating_rate: entity.attributes.min_heating_rate !== undefined ? entity.attributes.min_heating_rate : 0.5,
           max_heating_rate: entity.attributes.max_heating_rate !== undefined ? entity.attributes.max_heating_rate : 3.0,
+          dont_heat_below_outdoor: entity.attributes.dont_heat_below_outdoor !== undefined ? entity.attributes.dont_heat_below_outdoor : null,
           current_temp: entity.attributes.current_temperature,
           target_temp: entity.attributes.temperature,
           hvac_action: entity.attributes.hvac_action,
@@ -201,7 +202,14 @@ class TaDiyPanel extends HTMLElement {
       this._hubModeOptions = hubModeEntity.attributes.options || [];
       this._hubModeEntityId = hubModeEntity.entity_id;
       this._hubAttributes = hubModeEntity.attributes || {};
+      this._homeofficeTomorrow = !!this._hubAttributes.homeoffice_tomorrow;
     }
+
+    // Resolve person presence
+    const personEntities = Object.values(this._hass.states).filter(s => s.entity_id.startsWith('person.'));
+    this._activePersons = personEntities.filter(p => p.state !== 'unavailable');
+    this._personHomeCount = this._activePersons.filter(p => p.state === 'home').length;
+    this._totalPersonCount = this._activePersons.length;
 
     // Resolve optional boiler temperature and active state
     const boilerTempEntity = Object.values(this._hass.states).find(
@@ -502,8 +510,22 @@ class TaDiyPanel extends HTMLElement {
           align-items: center;
           justify-content: space-between;
           padding: 12px 14px;
-          background: var(--secondary-background-color, #f8fafc);
+          background: var(--secondary-background-color, #20242d);
           border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        .room-temp-row.heating {
+          background: rgba(239, 68, 68, 0.28);
+          border-color: rgba(239, 68, 68, 0.55);
+        }
+        .room-temp-row.idle {
+          background: rgba(34, 197, 94, 0.18);
+          border-color: rgba(34, 197, 94, 0.4);
+        }
+        .room-temp-row.off {
+          background: rgba(100, 116, 139, 0.14);
+          border-color: rgba(100, 116, 139, 0.25);
         }
         .temp-display {
           display: flex;
@@ -514,11 +536,7 @@ class TaDiyPanel extends HTMLElement {
           font-weight: 800;
           line-height: 1;
           color: var(--primary-text-color, #0f172a);
-          transition: color 0.2s ease-in-out;
         }
-        .current-temp.heating { color: #ef4444; }
-        .current-temp.idle { color: #22c55e; }
-        .current-temp.off { color: #94a3b8; }
         .target-temp-label {
           font-size: 12px;
           font-weight: 600;
@@ -1108,6 +1126,10 @@ class TaDiyPanel extends HTMLElement {
   }
 
   renderOverviewTab(roomCount, heatingCount, openWindowsCount, problemCount, avgTemp) {
+    const personPresenceText = (this._totalPersonCount !== undefined && this._totalPersonCount > 0)
+      ? `${this._personHomeCount} / ${this._totalPersonCount}`
+      : '---';
+
     return `
       <!-- KPI Stats -->
       <div class="kpi-row">
@@ -1133,6 +1155,13 @@ class TaDiyPanel extends HTMLElement {
           </div>
         </div>
         <div class="kpi-card">
+          <div class="kpi-icon">👥</div>
+          <div class="kpi-meta">
+            <div class="kpi-value">${personPresenceText}</div>
+            <div class="kpi-label">Personen anwesend</div>
+          </div>
+        </div>
+        <div class="kpi-card">
           <div class="kpi-icon">⚠️</div>
           <div class="kpi-meta">
             <div class="kpi-value">${problemCount}</div>
@@ -1141,12 +1170,17 @@ class TaDiyPanel extends HTMLElement {
         </div>
       </div>
 
-      <!-- Action Bar: Rooms Header & Single-Day Homeoffice Toggle -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0 12px 0;">
+      <!-- Action Bar: Rooms Header & Single-Day Homeoffice Toggles -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0 12px 0; flex-wrap: wrap; gap: 8px;">
         <h2 style="font-size: 18px; font-weight: 700; margin: 0; color: var(--primary-text-color, #1e293b);">Räume</h2>
-        <button class="quick-btn-homeoffice ${this._hubMode === 'homeoffice' ? 'active' : ''}" data-action="toggle-homeoffice" title="Homeoffice für heute aktivieren (automatischer Rückfall auf Normal zum Feierabend)">
-          💼 ${this._hubMode === 'homeoffice' ? 'Homeoffice aktiv (Heute bis Feierabend)' : 'Homeoffice Heute (1 Tag)'}
-        </button>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="quick-btn-homeoffice ${this._hubMode === 'homeoffice' ? 'active' : ''}" data-action="toggle-homeoffice" title="Homeoffice für heute aktivieren (automatischer Rückfall auf Normal zum Feierabend)">
+            💼 ${this._hubMode === 'homeoffice' ? 'Homeoffice aktiv (Heute)' : 'Homeoffice Heute (1 Tag)'}
+          </button>
+          <button class="quick-btn-homeoffice ${this._homeofficeTomorrow ? 'active' : ''}" data-action="toggle-homeoffice-tomorrow" title="Homeoffice für morgen vormerken (aktiviert sich morgen früh automatisch bis Feierabend)">
+            📅 ${this._homeofficeTomorrow ? 'Homeoffice Morgen aktiv' : 'Homeoffice Morgen'}
+          </button>
+        </div>
       </div>
 
       <!-- Room Cards Grid -->
@@ -1165,6 +1199,13 @@ class TaDiyPanel extends HTMLElement {
     const currentTemp = typeof room.current_temp === 'number' ? room.current_temp.toFixed(1) + ' °C' : '--.- °C';
     const targetTemp = typeof room.target_temp === 'number' ? room.target_temp.toFixed(1) + ' °C' : 'AUS';
 
+    const hasDoor = room.device_details && room.device_details.some(d => d.type === 'door');
+    const hasWindow = room.device_details && room.device_details.some(d => d.type === 'window');
+    const isDoorOnly = hasDoor && !hasWindow;
+    const openIcon = isDoorOnly ? 'mdi:door-open' : 'mdi:window-open-variant';
+    const closedIcon = isDoorOnly ? 'mdi:door-closed' : 'mdi:window-closed-variant';
+    const contactName = isDoorOnly ? 'Tür' : 'Fenster';
+
     return `
       <div class="room-card ${room.has_problem ? 'has-problem' : ''}" data-room="${room.entity_id}">
         <div class="room-header">
@@ -1172,9 +1213,9 @@ class TaDiyPanel extends HTMLElement {
           <div class="status-pill ${statusClass}">${statusText}</div>
         </div>
 
-        <div class="room-temp-row">
+        <div class="room-temp-row ${statusClass}">
           <div class="temp-display">
-            <div class="current-temp ${statusClass}">${currentTemp}</div>
+            <div class="current-temp">${currentTemp}</div>
             <div class="target-temp-label">Sollwert: ${targetTemp}</div>
           </div>
           <div class="stepper-controls">
@@ -1185,9 +1226,9 @@ class TaDiyPanel extends HTMLElement {
 
         <div class="room-badges">
           ${room.window_open ? `
-            <div class="badge window-open"><ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size: 14px; margin-right: 4px;"></ha-icon> Fenster offen (Heizstopp)</div>
+            <div class="badge window-open"><ha-icon icon="${openIcon}" style="--mdc-icon-size: 14px; margin-right: 4px;"></ha-icon> ${contactName} offen (Heizstopp)</div>
           ` : `
-            <div class="badge window-closed"><ha-icon icon="mdi:window-closed-variant" style="--mdc-icon-size: 14px; margin-right: 4px;"></ha-icon> Fenster zu</div>
+            <div class="badge window-closed"><ha-icon icon="${closedIcon}" style="--mdc-icon-size: 14px; margin-right: 4px;"></ha-icon> ${contactName} zu</div>
           `}
 
           ${room.has_problem ? `
@@ -1266,14 +1307,22 @@ class TaDiyPanel extends HTMLElement {
               <div class="detail-row" style="margin-top: 8px; border-top: 1px dashed var(--divider-color, #334155); padding-top: 8px;">
                 <span class="detail-label" style="font-weight: 700;">Geräte & Sensoren (${room.device_details.length}):</span>
               </div>
-              ${room.device_details.map(d => `
+              ${room.device_details.map(d => {
+                const devIcon = d.type === 'trv' ? '🌡️' :
+                  (d.type === 'door' ? '<ha-icon icon="mdi:door-closed" style="--mdc-icon-size: 14px; vertical-align: text-bottom; margin-right: 2px;"></ha-icon>' :
+                  (d.type === 'window' ? '<ha-icon icon="mdi:window-closed-variant" style="--mdc-icon-size: 14px; vertical-align: text-bottom; margin-right: 2px;"></ha-icon>' :
+                  (d.type === 'humidity' ? '💧' :
+                  (d.type === 'temp' ? '🌡️' :
+                  (d.name && (d.name.toLowerCase().includes('tür') || d.name.toLowerCase().includes('tuer')) ? '<ha-icon icon="mdi:door-closed" style="--mdc-icon-size: 14px; vertical-align: text-bottom; margin-right: 2px;"></ha-icon>' :
+                  (d.name && (d.name.toLowerCase().includes('fenster') || d.name.toLowerCase().includes('window')) ? '<ha-icon icon="mdi:window-closed-variant" style="--mdc-icon-size: 14px; vertical-align: text-bottom; margin-right: 2px;"></ha-icon>' : '📡'))))));
+                return `
                 <div class="detail-row" style="padding-left: 8px; font-size: 11px;">
-                  <span class="detail-label">${d.type === 'trv' ? '🌡️' : (d.type === 'window' ? '🪟' : '📡')} ${d.name}:</span>
+                  <span class="detail-label">${devIcon} ${d.name}:</span>
                   <span class="detail-value ${d.is_offline ? 'text-danger' : (d.is_low ? 'text-warning' : '')}">
                     ${d.is_offline ? '⚠️ Offline' : (d.battery !== null && d.battery !== undefined ? d.battery + '%' : 'Online')}
                   </span>
                 </div>
-              `).join('')}
+              `;}).join('')}
             ` : ''}
           </div>
         </details>
@@ -1418,9 +1467,9 @@ class TaDiyPanel extends HTMLElement {
           </div>
           <div class="tado-extra-row">
             ${room.window_open ? `
-              <span class="tado-badge"><ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size: 14px; margin-right: 3px;"></ha-icon> Offen</span>
+              <span class="tado-badge"><ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size: 14px; margin-right: 4px; vertical-align: text-bottom;"></ha-icon>Offen</span>
             ` : `
-              <span class="tado-badge"><ha-icon icon="mdi:window-closed-variant" style="--mdc-icon-size: 14px; margin-right: 3px;"></ha-icon> Zu</span>
+              <span class="tado-badge"><ha-icon icon="mdi:window-closed-variant" style="--mdc-icon-size: 14px; margin-right: 4px; vertical-align: text-bottom;"></ha-icon>Zu</span>
             `}
             <button class="tado-btn-plan" data-action="open-schedule" data-entity="${room.entity_id}">
               📅 Zeitplan
@@ -1483,6 +1532,28 @@ class TaDiyPanel extends HTMLElement {
                 <span>${m.toUpperCase()}</span>
               </button>
             `).join('')}
+          </div>
+        </div>
+
+        <div class="system-card">
+          <h3>👥 Personen-Anwesenheit</h3>
+          <p style="font-size: 13px; color: var(--secondary-text-color);">
+            Aktueller Aufenthaltsstatus der Hausbewohner (${this._totalPersonCount || 0}):
+          </p>
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+            ${this._activePersons && this._activePersons.length > 0 ? this._activePersons.map(p => {
+              const isHome = p.state === 'home';
+              const name = p.attributes.friendly_name || p.entity_id.replace('person.', '');
+              const stateLabel = isHome ? '🟢 Zu Hause' : (p.state === 'not_home' ? '🚶 Abwesend' : '❓ ' + p.state);
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: var(--secondary-background-color, #f8fafc); border-radius: 8px; font-size: 13px;">
+                  <span style="font-weight: 600;">👤 ${name}</span>
+                  <span style="font-weight: 600; font-size: 12px; padding: 4px 8px; border-radius: 6px; ${isHome ? 'background: rgba(34, 197, 94, 0.15); color: #16a34a;' : 'background: rgba(148, 163, 184, 0.15); color: #64748b;'}">
+                    ${stateLabel}
+                  </span>
+                </div>
+              `;
+            }).join('') : '<div style="color: var(--secondary-text-color); font-size: 13px;">Keine Personen-Entitäten in Home Assistant konfiguriert.</div>'}
           </div>
         </div>
 
@@ -1585,6 +1656,10 @@ class TaDiyPanel extends HTMLElement {
                   <span class="setting-label">📉 Max. Heizrate (°C/h)</span>
                   <input type="number" class="setting-input" id="room-setting-max-rate" value="${currentRoom.max_heating_rate ?? 3.0}" step="0.1" min="0.5" max="10.0">
                 </div>
+                <div class="setting-item">
+                  <span class="setting-label">☀️ Sommerabschaltung (°C)</span>
+                  <input type="number" class="setting-input" id="room-setting-dont-heat" value="${currentRoom.dont_heat_below_outdoor ?? ''}" step="0.5" min="10" max="30" placeholder="Global (${dontHeatBelow !== '' ? dontHeatBelow + ' °C' : 'Deaktiviert'})">
+                </div>
               </div>
             `;
           })()}
@@ -1678,7 +1753,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.2';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.3';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -1736,6 +1811,24 @@ class TaDiyPanel extends HTMLElement {
           this.render();
         } catch (err) {
           console.error('Failed to toggle homeoffice mode:', err);
+        }
+      });
+    }
+
+    // Quick Homeoffice Tomorrow Toggle
+    const homeofficeTomorrowBtn = this.shadowRoot.querySelector('[data-action="toggle-homeoffice-tomorrow"]');
+    if (homeofficeTomorrowBtn && this._hass) {
+      homeofficeTomorrowBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const nextState = !this._homeofficeTomorrow;
+        try {
+          await this._hass.callService('tadiy', 'set_homeoffice_tomorrow', {
+            enabled: nextState,
+          });
+          this._homeofficeTomorrow = nextState;
+          this.render();
+        } catch (err) {
+          console.error('Failed to toggle homeoffice tomorrow:', err);
         }
       });
     }
@@ -1885,20 +1978,73 @@ class TaDiyPanel extends HTMLElement {
         if (boostDurEl && boostDurEl.value !== '') serviceData.boost_duration = parseInt(boostDurEl.value);
         if (winOpenEl && winOpenEl.value !== '') serviceData.window_open_timeout = parseInt(winOpenEl.value);
         if (winCloseEl && winCloseEl.value !== '') serviceData.window_close_timeout = parseInt(winCloseEl.value);
-        if (dontHeatEl && dontHeatEl.value !== '') serviceData.dont_heat_below_outdoor = parseFloat(dontHeatEl.value);
+        if (dontHeatEl) {
+          serviceData.dont_heat_below_outdoor = dontHeatEl.value !== '' ? parseFloat(dontHeatEl.value) : null;
+        }
 
         try {
           saveSettingsBtn.textContent = '⏳ Wird gespeichert...';
           await this._hass.callService('tadiy', 'set_hub_config', serviceData);
           saveSettingsBtn.textContent = '✅ Gespeichert!';
           setTimeout(() => {
-            saveSettingsBtn.textContent = '💾 Einstellungen speichern';
+            saveSettingsBtn.textContent = '💾 Hub-Einstellungen speichern';
           }, 2000);
         } catch (err) {
           saveSettingsBtn.textContent = '❌ Fehler!';
           console.error('Failed to save hub settings:', err);
           setTimeout(() => {
-            saveSettingsBtn.textContent = '💾 Einstellungen speichern';
+            saveSettingsBtn.textContent = '💾 Hub-Einstellungen speichern';
+          }, 3000);
+        }
+      });
+    }
+
+    // Room Settings Selector Dropdown
+    const roomSelector = this.shadowRoot.getElementById('room-settings-selector');
+    if (roomSelector) {
+      roomSelector.addEventListener('change', (e) => {
+        this._selectedSettingsRoom = e.target.value;
+        this.render();
+      });
+    }
+
+    // Room Settings Save Button
+    const saveRoomBtn = this.shadowRoot.querySelector('[data-action="save-room-settings"]');
+    if (saveRoomBtn) {
+      saveRoomBtn.addEventListener('click', async () => {
+        const roomId = this._selectedSettingsRoom || (this._rooms[0] ? this._rooms[0].entity_id : null);
+        if (!roomId) return;
+        const awayEl = this.shadowRoot.getElementById('room-setting-away');
+        const tolEl = this.shadowRoot.getElementById('room-setting-tolerance');
+        const earlyEl = this.shadowRoot.getElementById('room-setting-early-start');
+        const winEl = this.shadowRoot.getElementById('room-setting-win-open');
+        const minRateEl = this.shadowRoot.getElementById('room-setting-min-rate');
+        const maxRateEl = this.shadowRoot.getElementById('room-setting-max-rate');
+        const dontHeatEl = this.shadowRoot.getElementById('room-setting-dont-heat');
+
+        const serviceData = { entity_id: roomId };
+        if (awayEl && awayEl.value !== '') serviceData.away_temperature = parseFloat(awayEl.value);
+        if (tolEl && tolEl.value !== '') serviceData.tolerance = parseFloat(tolEl.value);
+        if (earlyEl && earlyEl.value !== '') serviceData.early_start_max_minutes = parseInt(earlyEl.value);
+        if (winEl && winEl.value !== '') serviceData.window_open_timeout = parseInt(winEl.value);
+        if (minRateEl && minRateEl.value !== '') serviceData.min_heating_rate = parseFloat(minRateEl.value);
+        if (maxRateEl && maxRateEl.value !== '') serviceData.max_heating_rate = parseFloat(maxRateEl.value);
+        if (dontHeatEl) {
+          serviceData.dont_heat_below_outdoor = dontHeatEl.value !== '' ? parseFloat(dontHeatEl.value) : null;
+        }
+
+        try {
+          saveRoomBtn.textContent = '⏳ Wird gespeichert...';
+          await this._hass.callService('tadiy', 'set_room_config', serviceData);
+          saveRoomBtn.textContent = '✅ Gespeichert!';
+          setTimeout(() => {
+            saveRoomBtn.textContent = '💾 Raum-Einstellungen speichern';
+          }, 2000);
+        } catch (err) {
+          saveRoomBtn.textContent = '❌ Fehler!';
+          console.error('Failed to save room settings:', err);
+          setTimeout(() => {
+            saveRoomBtn.textContent = '💾 Raum-Einstellungen speichern';
           }, 3000);
         }
       });

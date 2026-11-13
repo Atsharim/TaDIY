@@ -146,7 +146,7 @@ class RoomConfig:
             window_close_timeout=data.get(
                 "window_close_timeout", DEFAULT_WINDOW_CLOSE_TIMEOUT
             ),
-            dont_heat_below_outdoor=data.get("dont_heat_below_outdoor", 0.0),
+            dont_heat_below_outdoor=float(data.get("dont_heat_below_outdoor") or 0.0),
             use_early_start=data.get("use_early_start", True),
             learn_heating_rate=data.get("learn_heating_rate", True),
             early_start_offset=data.get("early_start_offset"),

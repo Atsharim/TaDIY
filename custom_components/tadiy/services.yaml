@@ -64,6 +64,18 @@ set_hub_mode:
             - label: "Party"
               value: "party"
 
+set_homeoffice_tomorrow:
+  name: Set Homeoffice Tomorrow
+  description: Schedules or cancels single-day homeoffice mode for tomorrow.
+  fields:
+    enabled:
+      name: Enabled
+      description: Whether homeoffice mode should activate tomorrow
+      required: false
+      default: true
+      selector:
+        boolean:
+
 set_heating_curve:
   name: Set Heating Curve
   description: Manually sets the heating rate for a room (overrides learned value)

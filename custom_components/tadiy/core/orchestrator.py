@@ -129,6 +129,7 @@ class RoomOrchestrator:
         # 3. Outdoor Temperature Threshold (Heat below outside)
         if (
             outdoor_temp is not None
+            and self.room_config.dont_heat_below_outdoor is not None
             and self.room_config.dont_heat_below_outdoor > 0
             and outdoor_temp >= self.room_config.dont_heat_below_outdoor
         ):

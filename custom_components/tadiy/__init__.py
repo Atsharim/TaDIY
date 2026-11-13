@@ -74,6 +74,7 @@ from .const import (
     SERVICE_REFRESH_WEATHER_FORECAST,
     SERVICE_RESET_LEARNING,
     SERVICE_SET_HEATING_CURVE,
+    SERVICE_SET_HOMEOFFICE_TOMORROW,
     SERVICE_SET_HUB_CONFIG,
     SERVICE_SET_HUB_MODE,
     SERVICE_SET_LOCATION_OVERRIDE,
@@ -475,6 +476,12 @@ async def async_register_services(
             if isinstance(data, dict) and data.get("type") == "room":
                 await data["coordinator"].async_request_refresh()
 
+    async def handle_set_homeoffice_tomorrow(call: ServiceCall) -> None:
+        enabled = call.data.get("enabled", True)
+        if hasattr(hub_coordinator, "set_homeoffice_tomorrow"):
+            hub_coordinator.set_homeoffice_tomorrow(enabled)
+            await hub_coordinator.async_request_refresh()
+
     async def handle_set_heating_curve(call: ServiceCall) -> None:
         room_name = call.data.get(ATTR_ROOM)
         heating_rate = call.data.get(ATTR_HEATING_RATE)
@@ -874,6 +881,12 @@ async def async_register_services(
     )
     hass.services.async_register(
         DOMAIN,
+        SERVICE_SET_HOMEOFFICE_TOMORROW,
+        handle_set_homeoffice_tomorrow,
+        schema=vol.Schema({vol.Optional("enabled", default=True): cv.boolean}),
+    )
+    hass.services.async_register(
+        DOMAIN,
         SERVICE_SET_HEATING_CURVE,
         handle_set_heating_curve,
         schema=SERVICE_SET_HEATING_CURVE_SCHEMA,
@@ -958,7 +971,7 @@ async def async_register_services(
             vol.Optional(CONF_WINDOW_OPEN_TIMEOUT): cv.positive_int,
             vol.Optional(CONF_WINDOW_CLOSE_TIMEOUT): cv.positive_int,
             vol.Optional(CONF_GLOBAL_OVERRIDE_TIMEOUT): cv.positive_int,
-            vol.Optional(CONF_DONT_HEAT_BELOW_OUTDOOR): vol.Coerce(float),
+            vol.Optional(CONF_DONT_HEAT_BELOW_OUTDOOR): vol.Any(None, vol.Coerce(float)),
             vol.Optional(CONF_BOILER_TEMP_SENSOR): cv.string,
             vol.Optional(CONF_DHW_TEMP_SENSOR): cv.string,
             vol.Optional(CONF_BOILER_MIN_RUN_TIME): cv.positive_int,
@@ -992,7 +1005,15 @@ async def async_register_services(
             CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
         ]:
             if key in call.data:
-                new_options[key] = call.data[key]
+                val = call.data[key]
+                if val is None:
+                    new_options.pop(key, None)
+                    if key == CONF_DONT_HEAT_BELOW_OUTDOOR:
+                        new_options.pop(CONF_GLOBAL_DONT_HEAT_BELOW, None)
+                else:
+                    new_options[key] = val
+                    if key == CONF_DONT_HEAT_BELOW_OUTDOOR:
+                        new_options[CONF_GLOBAL_DONT_HEAT_BELOW] = val
 
         hass.config_entries.async_update_entry(hub_entry, options=new_options)
         _LOGGER.info("Hub options updated via service: %s", call.data)
@@ -1013,6 +1034,7 @@ async def async_register_services(
             vol.Optional("early_start_max_minutes"): cv.positive_int,
             vol.Optional("window_open_timeout"): cv.positive_int,
             vol.Optional("window_close_timeout"): cv.positive_int,
+            vol.Optional("dont_heat_below_outdoor"): vol.Any(None, vol.Coerce(float)),
             vol.Optional("min_heating_rate"): vol.Coerce(float),
             vol.Optional("max_heating_rate"): vol.Coerce(float),
         }
@@ -1049,11 +1071,16 @@ async def async_register_services(
             "early_start_max_minutes",
             "window_open_timeout",
             "window_close_timeout",
+            "dont_heat_below_outdoor",
             "min_heating_rate",
             "max_heating_rate",
         ]:
             if key in call.data:
-                new_options[key] = call.data[key]
+                val = call.data[key]
+                if val is None:
+                    new_options.pop(key, None)
+                else:
+                    new_options[key] = val
 
         hass.config_entries.async_update_entry(room_entry, options=new_options)
         _LOGGER.info("Room options updated via service for %s: %s", room_entry.title, call.data)
@@ -1098,6 +1125,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_RESET_LEARNING)
             hass.services.async_remove(DOMAIN, SERVICE_BOOST_ALL_ROOMS)
             hass.services.async_remove(DOMAIN, SERVICE_SET_HUB_MODE)
+            hass.services.async_remove(DOMAIN, SERVICE_SET_HOMEOFFICE_TOMORROW)
             hass.services.async_remove(DOMAIN, SERVICE_SET_HEATING_CURVE)
             hass.services.async_remove(DOMAIN, SERVICE_GET_SCHEDULE)
             hass.services.async_remove(DOMAIN, SERVICE_SET_TRV_CALIBRATION)

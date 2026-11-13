@@ -116,11 +116,14 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
                 CONF_WINDOW_OPEN_TIMEOUT: cfg.get(CONF_WINDOW_OPEN_TIMEOUT, 30),
                 CONF_WINDOW_CLOSE_TIMEOUT: cfg.get(CONF_WINDOW_CLOSE_TIMEOUT, 60),
                 CONF_GLOBAL_OVERRIDE_TIMEOUT: cfg.get(CONF_GLOBAL_OVERRIDE_TIMEOUT, 120),
-                CONF_DONT_HEAT_BELOW_OUTDOOR: cfg.get(CONF_DONT_HEAT_BELOW_OUTDOOR),
+                CONF_DONT_HEAT_BELOW_OUTDOOR: cfg.get(
+                    CONF_DONT_HEAT_BELOW_OUTDOOR, cfg.get(CONF_GLOBAL_DONT_HEAT_BELOW)
+                ),
                 CONF_BOILER_TEMP_SENSOR: getattr(self.coordinator, "boiler_temp_sensor", None),
                 "boiler_temperature": getattr(self.coordinator, "boiler_temperature", None),
                 "boiler_sensor_available": getattr(self.coordinator, "boiler_sensor_available", True),
                 "boiler_active": getattr(self.coordinator, "boiler_active", False),
+                "homeoffice_tomorrow": getattr(self.coordinator, "_homeoffice_tomorrow", False),
             }
         return {}
 

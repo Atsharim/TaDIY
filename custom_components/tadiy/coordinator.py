@@ -88,6 +88,7 @@ from .const import (
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     HUB_MODE_HOMEOFFICE,
+    HUB_MODE_NORMAL,
     HUB_UPDATE_INTERVAL,
     MAX_CUSTOM_MODES,
     MAX_TEMP,
@@ -199,6 +200,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         self._homeoffice_started_time = (
             dt_util.now() if self.hub_mode == HUB_MODE_HOMEOFFICE else None
         )
+        self._homeoffice_tomorrow: bool = False
+        self._homeoffice_tomorrow_set_date = None
 
         self.data = {
             "hub": True,
@@ -248,6 +251,19 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 )
             self._update_global_settings()
 
+            # Activate scheduled homeoffice tomorrow when date rolls over
+            now = dt_util.now()
+            today = now.date()
+            if self._homeoffice_tomorrow:
+                set_date = getattr(self, "_homeoffice_tomorrow_set_date", None)
+                if set_date is not None and today > set_date:
+                    _LOGGER.info(
+                        "TaDIY: Activating scheduled Homeoffice for today (%s)", today
+                    )
+                    self._homeoffice_tomorrow = False
+                    self._homeoffice_tomorrow_set_date = None
+                    self.set_hub_mode(HUB_MODE_HOMEOFFICE)
+
             # Auto-reset single-day homeoffice mode at homeoffice_end_hour or midnight
             if (
                 self.hub_mode == HUB_MODE_HOMEOFFICE
@@ -255,8 +271,6 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
                 )
             ):
-                now = dt_util.now()
-                today = now.date()
                 end_hour = self.global_settings.get(
                     CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
                 )
@@ -287,6 +301,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 "name": self.config_data.get("name", "TaDIY Hub"),
                 "hub_mode": self.hub_mode,
                 "frost_protection_temp": self.frost_protection_temp,
+                "homeoffice_tomorrow": getattr(self, "_homeoffice_tomorrow", False),
             }
 
             # Optional boiler supply flow temperature probe
@@ -373,7 +388,10 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     )
                 ),
                 CONF_GLOBAL_DONT_HEAT_BELOW: self.config_data.get(
-                    CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
+                    CONF_DONT_HEAT_BELOW_OUTDOOR,
+                    self.config_data.get(
+                        CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
+                    ),
                 ),
                 CONF_GLOBAL_USE_EARLY_START: self.config_data.get(
                     CONF_GLOBAL_USE_EARLY_START, DEFAULT_USE_EARLY_START
@@ -648,6 +666,18 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             _LOGGER.warning(
                 "Invalid hub mode: %s (available: %s)", mode, self.custom_modes
             )
+
+    def set_homeoffice_tomorrow(self, enabled: bool = True) -> None:
+        """Schedule or cancel single-day homeoffice for tomorrow."""
+        self._homeoffice_tomorrow = bool(enabled)
+        self._homeoffice_tomorrow_set_date = dt_util.now().date() if enabled else None
+        if isinstance(self.data, dict):
+            self.data["homeoffice_tomorrow"] = self._homeoffice_tomorrow
+        self.async_update_listeners()
+        _LOGGER.info(
+            "TaDIY: Scheduled Homeoffice for tomorrow set to: %s",
+            self._homeoffice_tomorrow,
+        )
 
     def _clear_all_room_overrides(self) -> None:
         """Clear overrides in all room coordinators on mode change and refresh immediately."""
@@ -1203,9 +1233,13 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "window_close_timeout": room_data.get(
                 "window_close_timeout", default_close_timeout
             ),
-            "dont_heat_below_outdoor": room_data.get(
-                "dont_heat_below_outdoor",
-                hub_settings.get(CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW),
+            "dont_heat_below_outdoor": (
+                room_data["dont_heat_below_outdoor"]
+                if room_data.get("dont_heat_below_outdoor") is not None
+                else hub_settings.get(
+                    CONF_DONT_HEAT_BELOW_OUTDOOR,
+                    hub_settings.get(CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW),
+                )
             ),
             "use_early_start": room_data.get(
                 "use_early_start",
@@ -2625,8 +2659,33 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             self._last_enforce = False
             heating_active = trv_state["mode"] == "heat"
 
-        # 6b. Safety & Heating problem detection (K-13)
-        self.safety_manager.check_safety(fused_temp, final_target, heating_active)
+        # 6b. Safety & Heating problem detection with TRV cross-check (K-13)
+        trv_current_temps: list[float] = []
+        trv_target_temps: list[float] = []
+        trv_modes: list[str] = []
+        for trv_id in self.room_config.trv_entity_ids:
+            st = self.hass.states.get(trv_id)
+            if st:
+                if st.attributes.get("current_temperature") is not None:
+                    try:
+                        trv_current_temps.append(float(st.attributes["current_temperature"]))
+                    except (ValueError, TypeError):
+                        pass
+                if st.attributes.get("temperature") is not None:
+                    try:
+                        trv_target_temps.append(float(st.attributes["temperature"]))
+                    except (ValueError, TypeError):
+                        pass
+                trv_modes.append(st.state)
+
+        self.safety_manager.check_safety(
+            fused_temp,
+            final_target,
+            heating_active,
+            trv_temperatures=trv_current_temps,
+            trv_targets=trv_target_temps,
+            trv_modes=trv_modes,
+        )
         is_problem = self.safety_manager.state.any_alert
         if is_problem and not self._last_problem_active:
             problem_type = self.safety_manager.state.active_problem_type
