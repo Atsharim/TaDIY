@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.storage import Store
@@ -20,6 +21,7 @@ from .const import (
     CONF_COUPLING_STRENGTH,
     CONF_CUSTOM_MODES,
     CONF_DISABLE_VALVE_PROTECTION,
+    CONF_DONT_HEAT_BELOW_OUTDOOR,
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
     CONF_FRIDAY_WEEKEND_START_HOUR,
@@ -57,6 +59,7 @@ from .const import (
     CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
+    DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_COUPLING_STRENGTH,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
@@ -97,6 +100,9 @@ from .const import (
     OVERRIDE_TIMEOUT_NEVER,
     OVERRIDE_TIMEOUT_NEXT_BLOCK,
     ROOM_UPDATE_INTERVAL,
+    SCHEDULE_TYPE_DAILY,
+    SCHEDULE_TYPE_WEEKDAY,
+    SCHEDULE_TYPE_WEEKEND,
     STORAGE_KEY,
     STORAGE_KEY_SCHEDULES,
     STORAGE_VERSION,
@@ -1923,7 +1929,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         ):
             away_temp = self.feature_settings.get(
                 CONF_AWAY_TEMPERATURE,
-    CONF_BOILER_TEMP_SENSOR, DEFAULT_AWAY_TEMPERATURE
+                DEFAULT_AWAY_TEMPERATURE,
             )
             base_target = self.hub_coordinator.location_manager.get_gradual_away_target(
                 base_target, away_temp
