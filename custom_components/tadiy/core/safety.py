@@ -276,15 +276,6 @@ class SafetyManager:
             # In heating failure check: if TRV is hot, valve and hot water are flowing
             trv_actively_heating = max_trv >= current_temp + 2.5
 
-        # Check if TRVs are commanded to be off or low (e.g. 5°C or off mode)
-        trvs_commanded_to_heat = True
-        if trv_targets:
-            valid_targets = [t for t in trv_targets if isinstance(t, (int, float))]
-            if valid_targets and all(t <= current_temp or t <= 10.0 for t in valid_targets):
-                trvs_commanded_to_heat = False
-        if trv_modes and all(m == "off" for m in trv_modes):
-            trvs_commanded_to_heat = False
-
         # 2. Valve Stuck Open / Uncontrolled Heating (Kalkblockade)
         # Occurs when heating is OFF (or target is lower than room temp) but room temp is significantly above setpoint.
         # Suppressed if TRVs are confirmed cold (passive heating from adjacent rooms).
@@ -336,12 +327,11 @@ class SafetyManager:
             self._idle_overheat_started_at = None
             self._temp_at_idle_overheat_start = None
 
-        # 3. Heating Failure (Kesselausfall / Pumpenausfall / Ventil klemmt geschlossen)
-        # Occurs when heating is active, room is noticeably below target, TRVs are actually commanded to heat, and TRVs are NOT hot
+        # 3. Heating Failure (Kesselausfall / Pumpenausfall / Ventil klemmt geschlossen / TRV reagiert nicht)
+        # Occurs when heating is active, room is noticeably below target, and TRVs are NOT hot
         if (
             target_temp is not None
             and heating_active
-            and trvs_commanded_to_heat
             and (target_temp - current_temp >= HEATING_FAILURE_SETPOINT_DELTA)
             and not trv_actively_heating
         ):
@@ -351,7 +341,7 @@ class SafetyManager:
             else:
                 elapsed = (now - self._heating_started_at).total_seconds()
                 if elapsed >= VALVE_STUCK_TIMEOUT:
-                    # Check directional rise: if temp has not risen by at least 0.2°C
+                    # Check directional rise
                     temp_rise = current_temp - (
                         self._temp_at_heating_start
                         if self._temp_at_heating_start is not None
@@ -359,11 +349,27 @@ class SafetyManager:
                     )
                     if temp_rise <= MIN_TEMP_RISE_ON_HEAT:
                         if not self.state.heating_failure:
-                            msg = (
-                                f"Heizungsstörung in Raum {self.room_name}: Keine Erwärmung seit {int(elapsed / 60)} Min "
-                                f"trotz Heizanforderung (Ist: {current_temp:.1f}°C, Soll: {target_temp:.1f}°C, Anstieg: {temp_rise:+.2f}°C). "
-                                f"Möglicher Kessel-/Pumpenausfall oder Ventil klemmt geschlossen."
-                            )
+                            # Diagnose whether TRV failed to follow command or boiler/pipes are cold
+                            trv_not_responding = False
+                            if trv_targets:
+                                valid_targets = [t for t in trv_targets if isinstance(t, (int, float))]
+                                if valid_targets and all(t <= (current_temp or 20.0) or t <= 10.0 for t in valid_targets):
+                                    trv_not_responding = True
+                            if trv_modes and all(m == "off" for m in trv_modes):
+                                trv_not_responding = True
+
+                            if trv_not_responding:
+                                msg = (
+                                    f"Heizungsstörung in Raum {self.room_name}: Thermostat übernimmt Heizbefehl nicht "
+                                    f"(steht weiterhin auf 5.0°C bzw. Aus trotz Heizanforderung seit {int(elapsed / 60)} Min). "
+                                    f"Möglicher Funkabriss, leere Batterie oder blockierter Stellmotor."
+                                )
+                            else:
+                                msg = (
+                                    f"Heizungsstörung in Raum {self.room_name}: Keine Erwärmung seit {int(elapsed / 60)} Min "
+                                    f"trotz Heizanforderung (Ist: {current_temp:.1f}°C, Soll: {target_temp:.1f}°C, Anstieg: {temp_rise:+.2f}°C). "
+                                    f"Möglicher Kessel-/Pumpenausfall oder Ventil klemmt geschlossen."
+                                )
                             self._debug("SAFETY: %s", msg)
                             self.state.alerts.append(
                                 SafetyAlert(
