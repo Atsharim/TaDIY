@@ -77,6 +77,18 @@ class WindowDetector:
             close_timeout_seconds,
         )
 
+    @property
+    def is_open(self) -> bool:
+        """Return True if window is currently evaluated as open (heating stopped)."""
+        # Fehleranalyse: AttributeError 'WindowDetector' object has no attribute 'is_open'
+        # Vorher fehlte die Property is_open auf WindowDetector, was beim Raum-Setup zum Absturz führte.
+        return self._current_state.is_open if self._current_state else False
+
+    @property
+    def heating_should_stop(self) -> bool:
+        """Return True if heating should stop due to open window."""
+        return self._current_state.heating_should_stop if self._current_state else False
+
     def update_timeouts(
         self, open_timeout_seconds: int, close_timeout_seconds: int
     ) -> None:

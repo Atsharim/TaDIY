@@ -850,7 +850,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
             if isinstance(entry_data, dict) and entry_data.get("type") == "room":
                 coord = entry_data.get("coordinator")
-                if coord and hasattr(coord, "window_detector") and coord.window_detector.is_open:
+                if coord and getattr(coord, "is_window_open", False):
                     return True
         return False
 
@@ -869,7 +869,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     and getattr(coord, "room_config", None)
                     and coord.room_config.name.strip().lower() in clean_adjacent
                 ):
-                    if hasattr(coord, "window_detector") and coord.window_detector.is_open:
+                    if getattr(coord, "is_window_open", False):
                         return True
         return False
 
@@ -1382,6 +1382,21 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 adjacent_rooms=self.room_config.adjacent_rooms,
                 coupling_strength=self.room_config.coupling_strength,
             )
+
+    @property
+    def is_window_open(self) -> bool:
+        """Return True if window is currently evaluated as open in this room."""
+        # Fehleranalyse: AttributeError 'WindowDetector' object has no attribute 'is_open'
+        # Zentrale Property zur robusten Abfrage des Fensterzustands ohne direkte Attributannahmen.
+        if (
+            hasattr(self, "current_room_data")
+            and self.current_room_data
+            and hasattr(self.current_room_data, "window_state")
+        ):
+            return bool(getattr(self.current_room_data.window_state, "is_open", False))
+        if hasattr(self, "window_detector") and self.window_detector:
+            return bool(getattr(self.window_detector, "is_open", False))
+        return False
 
     @property
     def hub_coordinator(self) -> TaDIYHubCoordinator | None:
@@ -2321,7 +2336,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             base_target is not None
             and self.hub_coordinator
             and getattr(self.hub_coordinator, "window_neighbor_setback_enabled", True)
-            and not (hasattr(self, "window_detector") and self.window_detector.is_open)
+            and not self.is_window_open
         ):
             neighbor_open = False
             if self.room_config.adjacent_rooms:

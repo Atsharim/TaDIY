@@ -1740,6 +1740,7 @@ class TaDiyPanel extends HTMLElement {
             </div>
             <div class="setting-item" style="grid-column: 1 / -1;">
               <span class="setting-label">🔥 Kessel-Vorlauftemperaturfühler</span>
+              <input type="text" class="setting-input" id="filter-boiler-sensor" placeholder="🔍 Sensor suchen / filtern (z.B. kessel, vorlauf)..." style="font-size: 12px; padding: 6px 10px; margin-bottom: 4px;">
               <select class="setting-input" id="setting-boiler-sensor">
                 <option value="">-- Nicht konfiguriert / Deaktiviert --</option>
                 ${boilerSensorOptions.map(s => `
@@ -1751,6 +1752,7 @@ class TaDiyPanel extends HTMLElement {
             </div>
             <div class="setting-item" style="grid-column: 1 / -1;">
               <span class="setting-label">🚰 Warmwasser-Zirkulationsfühler</span>
+              <input type="text" class="setting-input" id="filter-dhw-sensor" placeholder="🔍 Sensor suchen / filtern (z.B. warmwasser, zirkulation)..." style="font-size: 12px; padding: 6px 10px; margin-bottom: 4px;">
               <select class="setting-input" id="setting-dhw-sensor">
                 <option value="">-- Nicht konfiguriert / Deaktiviert --</option>
                 ${dhwSensorOptions.map(s => `
@@ -1762,7 +1764,8 @@ class TaDiyPanel extends HTMLElement {
             </div>
             <div class="setting-item" style="grid-column: 1 / -1;">
               <span class="setting-label">👥 Zählende Personen (Anwesenheit)</span>
-              <div class="person-checkbox-list">
+              <input type="text" class="setting-input" id="filter-persons" placeholder="🔍 Personen filtern..." style="font-size: 12px; padding: 6px 10px; margin-bottom: 4px;">
+              <div class="person-checkbox-list" id="person-checkbox-list">
                 ${allPersonEntities.map(p => {
                   const isSelected = configuredPersons
                     ? configuredPersons.includes(p.entity_id)
@@ -1942,7 +1945,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.6';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.8';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -2183,6 +2186,53 @@ class TaDiyPanel extends HTMLElement {
         }
       });
     });
+
+    // Sensor / Entity Dropdown Filter Helpers
+    const setupSelectFilter = (filterInputId, selectId) => {
+      const input = this.shadowRoot.getElementById(filterInputId);
+      const select = this.shadowRoot.getElementById(selectId);
+      if (!input || !select) return;
+
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        Array.from(select.options).forEach((opt, idx) => {
+          if (idx === 0) {
+            opt.hidden = false;
+            opt.style.display = '';
+            return;
+          }
+          const match = opt.textContent.toLowerCase().includes(q) || opt.value.toLowerCase().includes(q);
+          opt.hidden = !match;
+          opt.style.display = match ? '' : 'none';
+        });
+      });
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const firstVisible = Array.from(select.options).find((opt, idx) => idx > 0 && !opt.hidden);
+          if (firstVisible) {
+            select.value = firstVisible.value;
+          }
+        }
+      });
+    };
+
+    setupSelectFilter('filter-boiler-sensor', 'setting-boiler-sensor');
+    setupSelectFilter('filter-dhw-sensor', 'setting-dhw-sensor');
+
+    // Person Checkbox Filter Helper
+    const personFilterInput = this.shadowRoot.getElementById('filter-persons');
+    const personList = this.shadowRoot.getElementById('person-checkbox-list');
+    if (personFilterInput && personList) {
+      personFilterInput.addEventListener('input', () => {
+        const q = personFilterInput.value.trim().toLowerCase();
+        personList.querySelectorAll('.person-checkbox-item').forEach(item => {
+          const match = item.textContent.toLowerCase().includes(q);
+          item.style.display = match ? 'flex' : 'none';
+        });
+      });
+    }
 
     // Hub Settings Save Button
     const saveSettingsBtn = this.shadowRoot.querySelector('[data-action="save-hub-settings"]');
