@@ -146,6 +146,8 @@ class TaDiyPanel extends HTMLElement {
 
         return {
           entity_id: entity.entity_id,
+          entry_id: entity.attributes.entry_id || null,
+          trv_entities: entity.attributes.trv_entities || [],
           name: entity.attributes.friendly_name || entity.entity_id,
           away_temperature: entity.attributes.away_temperature !== undefined ? entity.attributes.away_temperature : 15.0,
           tolerance: entity.attributes.tolerance !== undefined ? entity.attributes.tolerance : 0.5,
@@ -905,6 +907,158 @@ class TaDiyPanel extends HTMLElement {
           color: var(--primary-text-color, #0f172a);
         }
 
+        /* TRV Diagnostics Tab */
+        .trvs-container {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }
+        .trvs-cards-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 16px;
+        }
+        .trv-item-card {
+          background: var(--card-background-color, #ffffff);
+          border: 1px solid var(--divider-color, #e2e8f0);
+          border-radius: 16px;
+          padding: 18px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .trv-item-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+        }
+        .trv-item-card.heating {
+          border-color: #f97316;
+          box-shadow: 0 4px 14px rgba(249, 115, 22, 0.12);
+        }
+        .trv-item-card.offline {
+          opacity: 0.7;
+          border-color: #ef4444;
+        }
+        .trv-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 8px;
+        }
+        .trv-title {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--primary-text-color, #0f172a);
+        }
+        .trv-id {
+          font-size: 11px;
+          color: var(--secondary-text-color, #64748b);
+          word-break: break-all;
+        }
+        .trv-room-badge {
+          font-size: 11px;
+          font-weight: 700;
+          background: var(--secondary-background-color, #f1f5f9);
+          padding: 3px 8px;
+          border-radius: 8px;
+          white-space: nowrap;
+        }
+        .trv-temp-main {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: var(--secondary-background-color, #f8fafc);
+          padding: 10px 14px;
+          border-radius: 12px;
+        }
+        .trv-temp-label {
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          color: var(--secondary-text-color, #64748b);
+          display: block;
+        }
+        .trv-temp-value {
+          font-size: 24px;
+          font-weight: 800;
+          color: var(--primary-text-color, #0f172a);
+        }
+        .trv-temp-target {
+          font-size: 22px;
+          font-weight: 800;
+          color: #3b82f6;
+        }
+        .trv-status-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+        .trv-action-pill {
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 700;
+        }
+        .trv-action-pill.action-heat {
+          background: #ffedd5;
+          color: #c2410c;
+        }
+        .trv-action-pill.action-idle {
+          background: #dcfce7;
+          color: #15803d;
+        }
+        .trv-discrepancy-pill {
+          background: #fef3c7;
+          color: #92400e;
+          padding: 3px 8px;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 700;
+        }
+        .trv-meta-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          font-size: 12px;
+          border-top: 1px solid var(--divider-color, #e2e8f0);
+          padding-top: 10px;
+        }
+        .trv-meta-label {
+          font-size: 11px;
+          color: var(--secondary-text-color, #64748b);
+          display: block;
+        }
+        .trv-meta-val {
+          font-weight: 700;
+          color: var(--primary-text-color, #0f172a);
+        }
+        .trv-meta-val.meta-warning {
+          color: #ef4444;
+        }
+        .trv-control-footer {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-top: 1px solid var(--divider-color, #e2e8f0);
+          padding-top: 10px;
+        }
+        .btn-trv-test {
+          background: var(--secondary-background-color, #f1f5f9);
+          border: 1px solid var(--divider-color, #cbd5e1);
+          border-radius: 8px;
+          padding: 4px 8px;
+          font-size: 12px;
+          font-weight: 700;
+          cursor: pointer;
+          color: var(--primary-text-color, #0f172a);
+        }
+        .btn-trv-test:hover {
+          background: #e2e8f0;
+        }
+
         /* tado° Style Comfort Tab */
         .tado-container {
           display: flex;
@@ -1158,6 +1312,9 @@ class TaDiyPanel extends HTMLElement {
         <button class="nav-tab ${this._activeTab === 'system' ? 'active' : ''}" data-tab="system">
           ⚙️ Kessel & Systemstatus
         </button>
+        <button class="nav-tab ${this._activeTab === 'trvs' ? 'active' : ''}" data-tab="trvs">
+          🎛️ Einzel-TRVs
+        </button>
       </div>
 
       <!-- Tab Content -->
@@ -1165,6 +1322,7 @@ class TaDiyPanel extends HTMLElement {
       ${this._activeTab === 'comfort' ? this.renderComfortTab(openWindowsCount) : ''}
       ${this._activeTab === 'schedules' ? this.renderSchedulesTab() : ''}
       ${this._activeTab === 'system' ? this.renderSystemTab(heatingCount) : ''}
+      ${this._activeTab === 'trvs' ? this.renderTrvsTab() : ''}
     `;
 
     this.attachEventListeners();
@@ -1713,7 +1871,7 @@ class TaDiyPanel extends HTMLElement {
               </select>
             </div>
             <div class="setting-item">
-              <span class="setting-label">🪟 Nachbar-Fenster Absenkung</span>
+              <span class="setting-label"><ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size: 16px; vertical-align: text-bottom; margin-right: 4px;"></ha-icon> Nachbar-Fenster Absenkung</span>
               <select class="setting-input" id="setting-win-neighbor-enabled">
                 <option value="true" ${hubAttrs.window_neighbor_setback_enabled !== false ? 'selected' : ''}>Aktiviert</option>
                 <option value="false" ${hubAttrs.window_neighbor_setback_enabled === false ? 'selected' : ''}>Deaktiviert</option>
@@ -1941,6 +2099,221 @@ class TaDiyPanel extends HTMLElement {
     `;
   }
 
+  renderTrvsTab() {
+    if (!this._hass) return '';
+
+    // Collect all physical TRVs
+    const trvToRoom = new Map();
+    this._rooms.forEach(r => {
+      if (Array.isArray(r.trv_entities)) {
+        r.trv_entities.forEach(tId => trvToRoom.set(tId, r));
+      }
+      if (Array.isArray(r.device_details)) {
+        r.device_details.filter(d => d.type === 'trv').forEach(d => {
+          if (!trvToRoom.has(d.entity_id)) trvToRoom.set(d.entity_id, r);
+        });
+      }
+    });
+
+    const allClimateStates = Object.values(this._hass.states).filter(s =>
+      s.entity_id.startsWith('climate.') &&
+      !s.entity_id.startsWith('climate.ta_') &&
+      s.attributes.integration !== 'tadiy'
+    );
+
+    const normalize = (str) =>
+      str.toLowerCase()
+        .replace(/ä/g, 'ae')
+        .replace(/ö/g, 'oe')
+        .replace(/ü/g, 'ue')
+        .replace(/ß/g, 'ss')
+        .replace(/[^a-z0-9]/g, '');
+
+    const trvList = allClimateStates.map(climateState => {
+      let assignedRoom = trvToRoom.get(climateState.entity_id);
+      if (!assignedRoom) {
+        const slug = normalize(climateState.entity_id.replace('climate.', '').replace('thermostat_', ''));
+        assignedRoom = this._rooms.find(r => normalize(r.name).includes(slug) || slug.includes(normalize(r.name)));
+      }
+
+      const trvBase = climateState.entity_id.replace('climate.', '');
+      const batterySensor = Object.values(this._hass.states).find(s =>
+        s.entity_id.startsWith('sensor.') &&
+        s.entity_id.includes(trvBase) &&
+        s.entity_id.endsWith('_battery')
+      );
+      const batteryLowSensor = Object.values(this._hass.states).find(s =>
+        s.entity_id.startsWith('binary_sensor.') &&
+        s.entity_id.includes(trvBase) &&
+        s.entity_id.includes('battery')
+      );
+
+      const batteryVal = batterySensor && !isNaN(parseFloat(batterySensor.state))
+        ? Math.round(parseFloat(batterySensor.state))
+        : (climateState.attributes.battery_level ?? null);
+
+      const isOffline = climateState.state === 'unavailable';
+      const isHeating = climateState.attributes.hvac_action === 'heating' || (climateState.state === 'heat' && climateState.attributes.hvac_action !== 'idle');
+      const currentTemp = climateState.attributes.current_temperature;
+      const targetTemp = climateState.attributes.temperature;
+      const roomTarget = assignedRoom && typeof assignedRoom.target_temp === 'number' ? assignedRoom.target_temp : null;
+
+      const hasDiscrepancy = (targetTemp !== null && targetTemp !== undefined && roomTarget !== null && Math.abs(targetTemp - roomTarget) > 0.4);
+
+      return {
+        entity_id: climateState.entity_id,
+        friendly_name: climateState.attributes.friendly_name || climateState.entity_id,
+        room: assignedRoom,
+        room_name: assignedRoom ? assignedRoom.name : 'Nicht zugeordnet',
+        state: climateState.state,
+        hvac_action: climateState.attributes.hvac_action || (climateState.state === 'heat' ? 'heating' : 'idle'),
+        current_temp: currentTemp,
+        target_temp: targetTemp,
+        room_target: roomTarget,
+        has_discrepancy: hasDiscrepancy,
+        is_heating: isHeating,
+        is_offline: isOffline,
+        battery: batteryVal,
+        is_battery_low: batteryLowSensor ? batteryLowSensor.state === 'on' : (batteryVal !== null && batteryVal <= 20),
+        last_updated: climateState.last_updated,
+        min_temp: climateState.attributes.min_temp ?? 4.0,
+        max_temp: climateState.attributes.max_temp ?? 35.0,
+      };
+    }).sort((a, b) => a.room_name.localeCompare(b.room_name) || a.friendly_name.localeCompare(b.friendly_name));
+
+    const totalTrvs = trvList.length;
+    const heatingCount = trvList.filter(t => t.is_heating).length;
+    const offlineCount = trvList.filter(t => t.is_offline).length;
+    const validTemps = trvList.filter(t => t.current_temp !== null && t.current_temp !== undefined && !isNaN(t.current_temp));
+    const avgTemp = validTemps.length > 0
+      ? (validTemps.reduce((acc, t) => acc + t.current_temp, 0) / validTemps.length).toFixed(1)
+      : '---';
+
+    return `
+      <div class="trvs-container">
+        <!-- KPI Row -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon">🎛️</div>
+            <div class="kpi-content">
+              <div class="kpi-value">${totalTrvs}</div>
+              <div class="kpi-label">Thermostate aktiv</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon">🔥</div>
+            <div class="kpi-content">
+              <div class="kpi-value">${heatingCount} / ${totalTrvs}</div>
+              <div class="kpi-label">Ventile im Heizbetrieb</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon">🌡️</div>
+            <div class="kpi-content">
+              <div class="kpi-value">${avgTemp} °C</div>
+              <div class="kpi-label">Ø Ist-Temperatur</div>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon">${offlineCount === 0 ? '🟢' : '⚠️'}</div>
+            <div class="kpi-content">
+              <div class="kpi-value">${offlineCount === 0 ? 'Alle Online' : `${offlineCount} Offline`}</div>
+              <div class="kpi-label">Verbindungsstatus</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter bar -->
+        <div style="margin: 4px 0 8px 0;">
+          <input type="text" class="setting-input" id="filter-single-trvs"
+            placeholder="🔍 Thermostat oder Raum filtern (z.B. wohnbereich, links, buero)..."
+            style="width: 100%; max-width: 480px; padding: 10px 14px; font-size: 14px; border-radius: 10px;">
+        </div>
+
+        <!-- TRVs Card Grid -->
+        <div class="trvs-cards-grid" id="trvs-cards-grid">
+          ${trvList.map(t => {
+            const tempDiff = (t.target_temp !== null && t.current_temp !== null)
+              ? (t.current_temp - t.target_temp).toFixed(1)
+              : null;
+
+            return `
+              <div class="trv-item-card ${t.is_offline ? 'offline' : ''} ${t.is_heating ? 'heating' : ''}" data-trv-search="${(t.friendly_name + ' ' + t.entity_id + ' ' + t.room_name).toLowerCase()}">
+                <div class="trv-header">
+                  <div>
+                    <div class="trv-title">${t.friendly_name}</div>
+                    <div class="trv-id">${t.entity_id}</div>
+                  </div>
+                  <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                    <span class="trv-room-badge">📍 ${t.room_name}</span>
+                    <span style="font-size: 11px; font-weight: 700; color: ${t.is_offline ? '#ef4444' : '#10b981'};">
+                      ${t.is_offline ? '🔴 Offline' : '🟢 Online'}
+                    </span>
+                  </div>
+                </div>
+
+                <div class="trv-temp-main">
+                  <div>
+                    <span class="trv-temp-label">Ist</span>
+                    <span class="trv-temp-value">${t.current_temp !== null && t.current_temp !== undefined ? t.current_temp.toFixed(1) + '°C' : '---'}</span>
+                  </div>
+                  <div style="text-align: right;">
+                    <span class="trv-temp-label">Soll</span>
+                    <span class="trv-temp-target">${t.target_temp !== null && t.target_temp !== undefined ? t.target_temp.toFixed(1) + '°C' : '---'}</span>
+                  </div>
+                </div>
+
+                <div class="trv-status-row">
+                  <span class="trv-action-pill ${t.is_heating ? 'action-heat' : 'action-idle'}">
+                    ${t.is_heating ? '🔥 Heizen' : (t.state === 'off' ? '⏹️ Aus' : '🟢 Standby')}
+                  </span>
+                  ${t.has_discrepancy ? `
+                    <span class="trv-discrepancy-pill" title="TRV-Sollwert weicht vom TaDIY Raum-Sollwert (${t.room_target}°C) ab">
+                      ⚠️ TaDIY: ${t.room_target}°C
+                    </span>
+                  ` : (t.room_target !== null ? `
+                    <span style="font-size: 11px; color: var(--secondary-text-color);">TaDIY: ${t.room_target}°C</span>
+                  ` : '')}
+                </div>
+
+                <div class="trv-meta-grid">
+                  <div>
+                    <span class="trv-meta-label">Batterie</span>
+                    <span class="trv-meta-val ${t.is_battery_low ? 'meta-warning' : ''}">
+                      ${t.battery !== null ? `🔋 ${t.battery}%` : (t.is_battery_low ? '🪫 Niedrig' : '🔋 OK')}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="trv-meta-label">Differenz</span>
+                    <span class="trv-meta-val">${tempDiff !== null ? (tempDiff > 0 ? `+${tempDiff}°` : `${tempDiff}°`) : '---'}</span>
+                  </div>
+                  <div style="grid-column: 1 / -1;">
+                    <span class="trv-meta-label">Letztes Update:</span>
+                    <span style="font-size: 11px; color: var(--secondary-text-color);">
+                      ${t.last_updated ? new Date(t.last_updated).toLocaleTimeString() : '---'}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Debug Manual Adjust Controls -->
+                <div class="trv-control-footer">
+                  <span style="font-size: 11px; font-weight: 600; color: var(--secondary-text-color);">Debug:</span>
+                  <div style="display: flex; gap: 6px;">
+                    <button type="button" class="btn-trv-test" data-action="adjust-trv-temp" data-trv-id="${t.entity_id}" data-current="${t.target_temp ?? 20}" data-delta="-0.5" title="Sollwert um -0.5°C verstellen">-0.5°</button>
+                    <button type="button" class="btn-trv-test" data-action="adjust-trv-temp" data-trv-id="${t.entity_id}" data-current="${t.target_temp ?? 20}" data-delta="0.5" title="Sollwert um +0.5°C verstellen">+0.5°</button>
+                    ${t.room_target !== null ? `
+                      <button type="button" class="btn-trv-test" data-action="sync-trv-room" data-trv-id="${t.entity_id}" data-target="${t.room_target}" title="Auf TaDIY Raum-Sollwert (${t.room_target}°C) synchronisieren">🔄 Sync</button>
+                    ` : ''}
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
   async embedScheduleCard() {
     const mount = this.shadowRoot.getElementById('schedule-card-mount');
     if (!mount || !this._selectedScheduleRoom) return;
@@ -1949,7 +2322,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.8';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.9';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -2354,6 +2727,56 @@ class TaDiyPanel extends HTMLElement {
         }
       });
     }
+
+    // TRV Diagnose Tab Filter
+    const trvFilterInput = this.shadowRoot.getElementById('filter-single-trvs');
+    const trvGrid = this.shadowRoot.getElementById('trvs-cards-grid');
+    if (trvFilterInput && trvGrid) {
+      trvFilterInput.addEventListener('input', () => {
+        const q = trvFilterInput.value.trim().toLowerCase();
+        trvGrid.querySelectorAll('.trv-item-card').forEach(card => {
+          const match = card.dataset.trvSearch ? card.dataset.trvSearch.includes(q) : true;
+          card.style.display = match ? 'flex' : 'none';
+        });
+      });
+    }
+
+    // TRV Debug Adjust Test Buttons
+    this.shadowRoot.querySelectorAll('[data-action="adjust-trv-temp"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const trvId = btn.dataset.trvId;
+        const current = parseFloat(btn.dataset.current) || 20.0;
+        const delta = parseFloat(btn.dataset.delta) || 0.0;
+        const newTarget = Math.round((current + delta) * 10) / 10;
+        if (!trvId || !this._hass) return;
+        try {
+          await this._hass.callService('climate', 'set_temperature', {
+            entity_id: trvId,
+            temperature: newTarget
+          });
+        } catch (err) {
+          console.error('Failed to adjust TRV temperature:', err);
+        }
+      });
+    });
+
+    this.shadowRoot.querySelectorAll('[data-action="sync-trv-room"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const trvId = btn.dataset.trvId;
+        const target = parseFloat(btn.dataset.target);
+        if (!trvId || isNaN(target) || !this._hass) return;
+        try {
+          await this._hass.callService('climate', 'set_temperature', {
+            entity_id: trvId,
+            temperature: target
+          });
+        } catch (err) {
+          console.error('Failed to sync TRV temperature:', err);
+        }
+      });
+    });
   }
 }
 

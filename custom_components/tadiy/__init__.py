@@ -1044,9 +1044,14 @@ async def async_register_services(
         entry_data = hass.data.get(DOMAIN, {}).get(hub_entry.entry_id, {})
         coord = entry_data.get("coordinator") if isinstance(entry_data, dict) else None
         if coord:
-            coord.config_data.update(new_options)
+            # Fehleranalyse: AttributeError 'mappingproxy' object has no attribute 'update'
+            # Sicherstellen, dass config_data immer ein modifizierbares dict ist.
+            updated_config = dict(getattr(coord, "config_data", {}))
+            updated_config.update(new_options)
+            coord.config_data = updated_config
             coord._update_global_settings()
             coord.async_update_listeners()
+            hass.async_create_task(coord.async_request_refresh())
         _LOGGER.info("Hub options updated via service: %s", call.data)
 
     hass.services.async_register(

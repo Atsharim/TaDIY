@@ -185,6 +185,7 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             "integration": "tadiy",
             "room_name": self._room_name,
             "entry_id": self._entry.entry_id,
+            "trv_entities": list(self._trv_entity_ids or []),
         }
         if self.coordinator and self.coordinator.data:
             data = self.coordinator.data

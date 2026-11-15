@@ -162,7 +162,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         )
         self.entry_id = entry_id
         self.config_entry = config_entry
-        self.config_data = config_data
+        # Fehleranalyse: AttributeError 'mappingproxy' object has no attribute 'update'
+        # config_data kann als mappingproxy (read-only) übergeben werden; wir erzwingen ein reguläres dict.
+        self.config_data = dict(config_data)
 
         # Hub state
         self.hub_mode = DEFAULT_HUB_MODE
@@ -2398,7 +2400,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     delta = getattr(
                         self.hub_coordinator, "window_neighbor_setback_delta", 1.5
                     )
-                    adjusted = max(self.room_config.min_temp, base_target - delta)
+                    min_limit = getattr(self.room_config, "min_temp", getattr(self.room_config, "trv_min_temp", MIN_TEMP))
+                    adjusted = max(min_limit, base_target - delta)
                     self.debug(
                         "rooms",
                         "Neighbor window open: reducing target by %.1f°C (base=%.1f°C -> %.1f°C)",
@@ -2414,7 +2417,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     delta = getattr(
                         self.hub_coordinator, "window_house_setback_delta", 1.0
                     )
-                    adjusted = max(self.room_config.min_temp, base_target - delta)
+                    min_limit = getattr(self.room_config, "min_temp", getattr(self.room_config, "trv_min_temp", MIN_TEMP))
+                    adjusted = max(min_limit, base_target - delta)
                     self.debug(
                         "rooms",
                         "House-wide window open: reducing target by %.1f°C (base=%.1f°C -> %.1f°C)",
@@ -2455,9 +2459,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 )
             else:
                 offset_val = self.hub_coordinator.global_offset_temp
+                min_limit = getattr(self.room_config, "min_temp", getattr(self.room_config, "trv_min_temp", MIN_TEMP))
+                max_limit = getattr(self.room_config, "max_temp", getattr(self.room_config, "trv_max_temp", MAX_TEMP))
                 adjusted = max(
-                    self.room_config.min_temp,
-                    min(self.room_config.max_temp, base_target + offset_val),
+                    min_limit,
+                    min(max_limit, base_target + offset_val),
                 )
                 self.debug(
                     "rooms",

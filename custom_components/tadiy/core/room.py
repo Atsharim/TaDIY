@@ -74,6 +74,18 @@ class RoomConfig:
         False  # True = skip anti-calcification cycling for this room
     )
 
+    @property
+    def min_temp(self) -> float:
+        """Return minimum allowed room target temperature."""
+        # Fehleranalyse: AttributeError 'RoomConfig' object has no attribute 'min_temp'
+        # Bei der Fenster- und Offsetabsenkung in coordinator.py wird min_temp abgefragt.
+        return getattr(self, "trv_min_temp", MIN_TARGET_TEMP)
+
+    @property
+    def max_temp(self) -> float:
+        """Return maximum allowed room target temperature."""
+        return getattr(self, "trv_max_temp", MAX_TARGET_TEMP)
+
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
         if not self.name:
