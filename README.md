@@ -5,7 +5,7 @@
 # TaDIY - Adaptive Climate Orchestrator for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-3.1.6-blue.svg)](https://github.com/Atsharim/TaDIY/releases/)
+[![Version](https://img.shields.io/badge/version-3.1.7-blue.svg)](https://github.com/Atsharim/TaDIY/releases/)
 [![Tests](https://img.shields.io/badge/tests-69%20passing-brightgreen.svg)](https://github.com/Atsharim/TaDIY)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -55,7 +55,7 @@ TaDIY/
 │   ├── select.py             # Mode selectors (away, override)
 │   ├── sensor.py             # Sensors (heating rate, savings, comfort)
 │   ├── www/                  # Frontend panel & Lovelace cards
-│   ├── manifest.json         # Integration manifest (v3.1.6)
+│   ├── manifest.json         # Integration manifest (v3.1.7)
 │   └── strings.json          # UI translations schema
 ├── docs/                     # Technical documentation & change logs
 │   ├── AENDERUNGEN-2026-11.md# Milestone change log

@@ -178,7 +178,6 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
         # Global settings for room coordinators
         self.global_settings: dict[str, Any] = {}
-        self._update_global_settings()
 
         # Storage
         self.learning_store = Store(
@@ -244,6 +243,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 CONF_WINDOW_HOUSE_SETBACK_DELTA, DEFAULT_WINDOW_HOUSE_SETBACK_DELTA
             )
         )
+
+        # Update global settings now that all attributes are initialized
+        self._update_global_settings()
 
         # Single-day homeoffice tracking
         self._homeoffice_started_date = (
@@ -524,18 +526,41 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 CONF_USE_WEATHER_PREDICTION: self.config_data.get(
                     CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
                 ),
-                CONF_PERSON_ENTITIES: self.person_entities,
-                CONF_GLOBAL_OFFSET_STEP: self.global_offset_step,
-                CONF_GLOBAL_OFFSET_MODE: self.global_offset_mode,
-                CONF_GLOBAL_OFFSET_DURATION_HOURS: self.global_offset_duration_hours,
-                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: self.window_neighbor_setback_enabled,
-                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: self.window_neighbor_setback_delta,
-                CONF_WINDOW_HOUSE_SETBACK_DELTA: self.window_house_setback_delta,
+                # Fehleranalyse: AttributeError 'TaDIYHubCoordinator' object has no attribute 'person_entities'
+                # Beim Aufruf von _update_global_settings() in __init__ bzw. bei dynamischen Updates müssen
+                # neue Hub-Attribute per getattr abgesichert sein, falls _update_global_settings vor deren Initialisierung läuft.
+                CONF_PERSON_ENTITIES: getattr(self, "person_entities", []),
+                CONF_GLOBAL_OFFSET_STEP: getattr(
+                    self, "global_offset_step", DEFAULT_GLOBAL_OFFSET_STEP
+                ),
+                CONF_GLOBAL_OFFSET_MODE: getattr(
+                    self, "global_offset_mode", DEFAULT_GLOBAL_OFFSET_MODE
+                ),
+                CONF_GLOBAL_OFFSET_DURATION_HOURS: getattr(
+                    self,
+                    "global_offset_duration_hours",
+                    DEFAULT_GLOBAL_OFFSET_DURATION_HOURS,
+                ),
+                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: getattr(
+                    self,
+                    "window_neighbor_setback_enabled",
+                    DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED,
+                ),
+                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: getattr(
+                    self,
+                    "window_neighbor_setback_delta",
+                    DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA,
+                ),
+                CONF_WINDOW_HOUSE_SETBACK_DELTA: getattr(
+                    self,
+                    "window_house_setback_delta",
+                    DEFAULT_WINDOW_HOUSE_SETBACK_DELTA,
+                ),
             }
         )
 
         if hasattr(self, "location_manager") and self.location_manager:
-            self.location_manager.person_entities = self.person_entities
+            self.location_manager.person_entities = getattr(self, "person_entities", [])
 
     def _find_hub_mode_entity_id(self) -> str | None:
         """Find the hub mode select entity ID dynamically.
