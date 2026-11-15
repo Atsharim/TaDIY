@@ -77,6 +77,19 @@ CONF_WINDOW_OPEN_TIMEOUT: Final = "window_open_timeout"
 CONF_WINDOW_CLOSE_TIMEOUT: Final = "window_close_timeout"
 CONF_DONT_HEAT_BELOW: Final = "dont_heat_below_outdoor"
 CONF_DONT_HEAT_BELOW_OUTDOOR: Final = "dont_heat_below_outdoor"
+CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: Final = "window_neighbor_setback_enabled"
+CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: Final = "window_neighbor_setback_delta"
+CONF_WINDOW_HOUSE_SETBACK_DELTA: Final = "window_house_setback_delta"
+CONF_GLOBAL_OFFSET_STEP: Final = "global_offset_step"
+CONF_GLOBAL_OFFSET_MODE: Final = "global_offset_mode"
+CONF_GLOBAL_OFFSET_DURATION_HOURS: Final = "global_offset_duration_hours"
+
+DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED: Final = True
+DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA: Final = 1.5
+DEFAULT_WINDOW_HOUSE_SETBACK_DELTA: Final = 1.0
+DEFAULT_GLOBAL_OFFSET_STEP: Final = 1.5
+DEFAULT_GLOBAL_OFFSET_MODE: Final = "next_block"
+DEFAULT_GLOBAL_OFFSET_DURATION_HOURS: Final = 3.0
 CONF_BOOST_TEMPERATURE: Final = "boost_temperature"
 CONF_BOOST_DURATION: Final = "boost_duration"
 CONF_USE_EARLY_START: Final = "use_early_start"
@@ -277,6 +290,7 @@ SERVICE_REFRESH_WEATHER_FORECAST: Final = "refresh_weather_forecast"
 SERVICE_SET_HUB_CONFIG: Final = "set_hub_config"
 SERVICE_SET_ROOM_CONFIG: Final = "set_room_config"
 SERVICE_SET_HOMEOFFICE_TOMORROW: Final = "set_homeoffice_tomorrow"
+SERVICE_SET_GLOBAL_OFFSET: Final = "set_global_offset"
 
 # Service attributes
 ATTR_ROOM: Final = "room"

@@ -31,6 +31,9 @@ from .const import (
     CONF_GLOBAL_EARLY_START_MAX,
     CONF_GLOBAL_EARLY_START_OFFSET,
     CONF_GLOBAL_LEARN_HEATING_RATE,
+    CONF_GLOBAL_OFFSET_DURATION_HOURS,
+    CONF_GLOBAL_OFFSET_MODE,
+    CONF_GLOBAL_OFFSET_STEP,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
     CONF_GLOBAL_USE_EARLY_START,
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
@@ -58,6 +61,9 @@ from .const import (
     CONF_VALVE_PROTECTION_HOUR,
     CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
     CONF_WEATHER_ENTITY,
+    CONF_WINDOW_HOUSE_SETBACK_DELTA,
+    CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
+    CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
     CONF_WINDOW_SENSORS,
     DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_COUPLING_STRENGTH,
@@ -66,6 +72,9 @@ from .const import (
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_FRIDAY_WEEKEND_START_HOUR,
     DEFAULT_FROST_PROTECTION_TEMP,
+    DEFAULT_GLOBAL_OFFSET_DURATION_HOURS,
+    DEFAULT_GLOBAL_OFFSET_MODE,
+    DEFAULT_GLOBAL_OFFSET_STEP,
     DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
     DEFAULT_HOMEOFFICE_END_HOUR,
@@ -88,6 +97,9 @@ from .const import (
     DEFAULT_VALVE_PROTECTION_HOUR,
     DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
+    DEFAULT_WINDOW_HOUSE_SETBACK_DELTA,
+    DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA,
+    DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     HUB_MODE_HOMEOFFICE,
@@ -194,10 +206,44 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         # Schedule engine
         self.schedule_engine: Any = None
 
-        # Location-based control
+        # Location-based control & persons
         self.location_mode_enabled = config_data.get(CONF_LOCATION_MODE_ENABLED, False)
-        person_entities = config_data.get(CONF_PERSON_ENTITIES, [])
-        self.location_manager = LocationManager(hass, person_entities)
+        self.person_entities = list(config_data.get(CONF_PERSON_ENTITIES, []))
+        self.location_manager = LocationManager(hass, self.person_entities)
+
+        # Global quick offset (±X°C)
+        self.global_offset_temp: float = 0.0
+        self.global_offset_step: float = float(
+            config_data.get(CONF_GLOBAL_OFFSET_STEP, DEFAULT_GLOBAL_OFFSET_STEP)
+        )
+        self.global_offset_mode: str = config_data.get(
+            CONF_GLOBAL_OFFSET_MODE, DEFAULT_GLOBAL_OFFSET_MODE
+        )
+        self.global_offset_duration_hours: float = float(
+            config_data.get(
+                CONF_GLOBAL_OFFSET_DURATION_HOURS, DEFAULT_GLOBAL_OFFSET_DURATION_HOURS
+            )
+        )
+        self.global_offset_until: datetime | None = None
+
+        # Window neighbor & house setback
+        self.window_neighbor_setback_enabled: bool = bool(
+            config_data.get(
+                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
+                DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED,
+            )
+        )
+        self.window_neighbor_setback_delta: float = float(
+            config_data.get(
+                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
+                DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA,
+            )
+        )
+        self.window_house_setback_delta: float = float(
+            config_data.get(
+                CONF_WINDOW_HOUSE_SETBACK_DELTA, DEFAULT_WINDOW_HOUSE_SETBACK_DELTA
+            )
+        )
 
         # Single-day homeoffice tracking
         self._homeoffice_started_date = (
@@ -301,6 +347,16 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             # Update weather forecast periodically (every 30 min)
             await self._update_weather_forecast()
 
+            # Auto-reset global quick offset if duration expired
+            if self.global_offset_until and dt_util.utcnow() >= self.global_offset_until:
+                _LOGGER.info(
+                    "TaDIY: Global offset (%.1f°C) duration expired, resetting to 0.0°C",
+                    self.global_offset_temp,
+                )
+                self.global_offset_temp = 0.0
+                self.global_offset_until = None
+                self._notify_rooms_global_offset()
+
             # Build data dict
             data_dict = {
                 "hub": True,
@@ -308,6 +364,19 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 "hub_mode": self.hub_mode,
                 "frost_protection_temp": self.frost_protection_temp,
                 "homeoffice_tomorrow": getattr(self, "_homeoffice_tomorrow", False),
+                "global_offset_temp": self.global_offset_temp,
+                "global_offset_step": self.global_offset_step,
+                "global_offset_mode": self.global_offset_mode,
+                "global_offset_duration_hours": self.global_offset_duration_hours,
+                "global_offset_until": (
+                    self.global_offset_until.isoformat()
+                    if self.global_offset_until
+                    else None
+                ),
+                CONF_PERSON_ENTITIES: self.person_entities,
+                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: self.window_neighbor_setback_enabled,
+                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: self.window_neighbor_setback_delta,
+                CONF_WINDOW_HOUSE_SETBACK_DELTA: self.window_house_setback_delta,
             }
 
             # Optional boiler supply flow temperature probe
@@ -455,8 +524,18 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 CONF_USE_WEATHER_PREDICTION: self.config_data.get(
                     CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
                 ),
+                CONF_PERSON_ENTITIES: self.person_entities,
+                CONF_GLOBAL_OFFSET_STEP: self.global_offset_step,
+                CONF_GLOBAL_OFFSET_MODE: self.global_offset_mode,
+                CONF_GLOBAL_OFFSET_DURATION_HOURS: self.global_offset_duration_hours,
+                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: self.window_neighbor_setback_enabled,
+                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: self.window_neighbor_setback_delta,
+                CONF_WINDOW_HOUSE_SETBACK_DELTA: self.window_house_setback_delta,
             }
         )
+
+        if hasattr(self, "location_manager") and self.location_manager:
+            self.location_manager.person_entities = self.person_entities
 
     def _find_hub_mode_entity_id(self) -> str | None:
         """Find the hub mode select entity ID dynamically.
@@ -684,6 +763,90 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             "TaDIY: Scheduled Homeoffice for tomorrow set to: %s",
             self._homeoffice_tomorrow,
         )
+
+    async def async_set_global_offset(
+        self,
+        offset: float,
+        mode: str | None = None,
+        duration_hours: float | None = None,
+    ) -> None:
+        """Set or reset global quick offset (±X°C) across all rooms."""
+        self.global_offset_temp = round(float(offset), 1)
+        if mode:
+            self.global_offset_mode = mode
+        if duration_hours is not None:
+            self.global_offset_duration_hours = float(duration_hours)
+
+        if self.global_offset_temp == 0.0:
+            self.global_offset_until = None
+            _LOGGER.info("TaDIY: Global offset reset to 0.0°C across all rooms")
+        else:
+            if self.global_offset_mode == "duration":
+                self.global_offset_until = dt_util.utcnow() + timedelta(
+                    hours=self.global_offset_duration_hours
+                )
+            else:
+                self.global_offset_until = None
+            _LOGGER.info(
+                "TaDIY: Global offset set to %+.1f°C (mode=%s, duration=%.1fh, until=%s)",
+                self.global_offset_temp,
+                self.global_offset_mode,
+                self.global_offset_duration_hours,
+                self.global_offset_until,
+            )
+
+        if isinstance(self.data, dict):
+            self.data["global_offset_temp"] = self.global_offset_temp
+            self.data["global_offset_until"] = (
+                self.global_offset_until.isoformat()
+                if self.global_offset_until
+                else None
+            )
+
+        self._notify_rooms_global_offset()
+        self.async_update_listeners()
+
+    def _notify_rooms_global_offset(self) -> None:
+        """Trigger update on all room coordinators for global offset change."""
+        from . import DOMAIN
+
+        for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and entry_data.get("type") == "room":
+                coord = entry_data.get("coordinator")
+                if coord and hasattr(coord, "on_global_offset_changed"):
+                    coord.on_global_offset_changed(self.global_offset_temp)
+                elif coord and hasattr(coord, "async_request_refresh"):
+                    self.hass.async_create_task(coord.async_request_refresh())
+
+    def is_any_window_open(self) -> bool:
+        """Return True if any room in the house has an open window."""
+        from . import DOMAIN
+
+        for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and entry_data.get("type") == "room":
+                coord = entry_data.get("coordinator")
+                if coord and hasattr(coord, "window_detector") and coord.window_detector.is_open:
+                    return True
+        return False
+
+    def is_adjacent_window_open(self, adjacent_room_names: list[str]) -> bool:
+        """Return True if any of the specified adjacent rooms has an open window."""
+        if not adjacent_room_names:
+            return False
+        clean_adjacent = {name.strip().lower() for name in adjacent_room_names if name}
+        from . import DOMAIN
+
+        for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and entry_data.get("type") == "room":
+                coord = entry_data.get("coordinator")
+                if (
+                    coord
+                    and getattr(coord, "room_config", None)
+                    and coord.room_config.name.strip().lower() in clean_adjacent
+                ):
+                    if hasattr(coord, "window_detector") and coord.window_detector.is_open:
+                        return True
+        return False
 
     def _clear_all_room_overrides(self) -> None:
         """Clear overrides in all room coordinators on mode change and refresh immediately."""
@@ -1104,6 +1267,12 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         # Schedule block change tracking for bounce prevention
         self._last_scheduled_target: float | None = None
         self._schedule_change_at: datetime | None = None
+
+        # Global quick offset state for this room
+        self._room_global_offset_active: bool = False
+        self._room_global_offset_block: str | None = None
+        self._neighbor_window_open: bool = False
+        self._house_window_open: bool = False
 
         # Heating Controller with Hysteresis and optional PID
         hysteresis = max(0.3, room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS))
@@ -1810,6 +1979,24 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             return self.hub_coordinator.get_hub_mode()
         return "normal"
 
+    def on_global_offset_changed(self, offset: float) -> None:
+        """Handle global offset change from hub."""
+        if offset != 0.0:
+            self._room_global_offset_active = True
+            current_block = self.schedule_engine.get_current_block(
+                self.room_config.name, self.get_hub_mode()
+            )
+            self._room_global_offset_block = (
+                f"{current_block.start_time}-{current_block.temperature}"
+                if current_block
+                else None
+            )
+        else:
+            self._room_global_offset_active = False
+            self._room_global_offset_block = None
+
+        self.hass.async_create_task(self.async_request_refresh())
+
     def get_early_start_offset(self) -> int:
         """
         Get effective early start offset (Room > Hub priority).
@@ -2101,6 +2288,95 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     "Overshoot compensation suppressed (schedule block changed %.0fs ago)",
                     elapsed,
                 )
+
+        # Apply window neighbor & house setback if enabled (Punkt 2)
+        self._neighbor_window_open = False
+        self._house_window_open = False
+        if (
+            base_target is not None
+            and self.hub_coordinator
+            and getattr(self.hub_coordinator, "window_neighbor_setback_enabled", True)
+            and not (hasattr(self, "window_detector") and self.window_detector.is_open)
+        ):
+            neighbor_open = False
+            if self.room_config.adjacent_rooms:
+                neighbor_open = self.hub_coordinator.is_adjacent_window_open(
+                    self.room_config.adjacent_rooms
+                )
+                if neighbor_open:
+                    self._neighbor_window_open = True
+                    delta = getattr(
+                        self.hub_coordinator, "window_neighbor_setback_delta", 1.5
+                    )
+                    adjusted = max(self.room_config.min_temp, base_target - delta)
+                    self.debug(
+                        "rooms",
+                        "Neighbor window open: reducing target by %.1f°C (base=%.1f°C -> %.1f°C)",
+                        delta,
+                        base_target,
+                        adjusted,
+                    )
+                    base_target = adjusted
+
+            if not neighbor_open and not self.room_config.adjacent_rooms:
+                if self.hub_coordinator.is_any_window_open():
+                    self._house_window_open = True
+                    delta = getattr(
+                        self.hub_coordinator, "window_house_setback_delta", 1.0
+                    )
+                    adjusted = max(self.room_config.min_temp, base_target - delta)
+                    self.debug(
+                        "rooms",
+                        "House-wide window open: reducing target by %.1f°C (base=%.1f°C -> %.1f°C)",
+                        delta,
+                        base_target,
+                        adjusted,
+                    )
+                    base_target = adjusted
+
+        # Apply global quick offset (Punkt 3 & 3.5)
+        if (
+            base_target is not None
+            and self.hub_coordinator
+            and getattr(self.hub_coordinator, "global_offset_temp", 0.0) != 0.0
+            and self._room_global_offset_active
+        ):
+            # If mode is next_block, check if room has changed schedule blocks since activation
+            current_block = self.schedule_engine.get_current_block(
+                self.room_config.name, self.get_hub_mode()
+            )
+            curr_block_str = (
+                f"{current_block.start_time}-{current_block.temperature}"
+                if current_block
+                else None
+            )
+            if (
+                self.hub_coordinator.global_offset_mode == "next_block"
+                and self._room_global_offset_block
+                and curr_block_str != self._room_global_offset_block
+            ):
+                # Schedule block has changed: this room's offset expires
+                self._room_global_offset_active = False
+                self._room_global_offset_block = None
+                self.debug(
+                    "rooms",
+                    "Schedule block changed: global quick offset expired for room %s",
+                    self.room_config.name,
+                )
+            else:
+                offset_val = self.hub_coordinator.global_offset_temp
+                adjusted = max(
+                    self.room_config.min_temp,
+                    min(self.room_config.max_temp, base_target + offset_val),
+                )
+                self.debug(
+                    "rooms",
+                    "Global quick offset applied: %+.1f°C (base=%.1f°C -> %.1f°C)",
+                    offset_val,
+                    base_target,
+                    adjusted,
+                )
+                base_target = adjusted
 
         # Round final target to configured step size to prevent fractional values
         if base_target is not None:

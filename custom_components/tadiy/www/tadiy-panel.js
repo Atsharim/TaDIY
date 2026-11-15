@@ -155,6 +155,7 @@ class TaDiyPanel extends HTMLElement {
           min_heating_rate: entity.attributes.min_heating_rate !== undefined ? entity.attributes.min_heating_rate : 0.5,
           max_heating_rate: entity.attributes.max_heating_rate !== undefined ? entity.attributes.max_heating_rate : 3.0,
           dont_heat_below_outdoor: entity.attributes.dont_heat_below_outdoor !== undefined ? entity.attributes.dont_heat_below_outdoor : null,
+          adjacent_rooms: entity.attributes.adjacent_rooms || [],
           current_temp: entity.attributes.current_temperature,
           target_temp: entity.attributes.temperature,
           hvac_action: entity.attributes.hvac_action,
@@ -203,11 +204,35 @@ class TaDiyPanel extends HTMLElement {
       this._hubModeEntityId = hubModeEntity.entity_id;
       this._hubAttributes = hubModeEntity.attributes || {};
       this._homeofficeTomorrow = !!this._hubAttributes.homeoffice_tomorrow;
+
+      // Hub global offset and window setback settings
+      this._globalOffsetTemp = Number(this._hubAttributes.global_offset_temp) || 0.0;
+      this._globalOffsetStep = Number(this._hubAttributes.global_offset_step) || 1.5;
+      this._globalOffsetMode = this._hubAttributes.global_offset_mode || 'next_block';
+      this._globalOffsetDuration = Number(this._hubAttributes.global_offset_duration_hours) || 3.0;
+      this._globalOffsetUntil = this._hubAttributes.global_offset_until || null;
+
+      this._windowNeighborSetbackEnabled = this._hubAttributes.window_neighbor_setback_enabled !== false;
+      this._windowNeighborSetbackDelta = Number(this._hubAttributes.window_neighbor_setback_delta) || 1.5;
+      this._windowHouseSetbackDelta = Number(this._hubAttributes.window_house_setback_delta) || 1.0;
     }
 
-    // Resolve person presence
+    // Resolve person presence (strict filter to configured persons; exclude system/hassio/unknown)
     const personEntities = Object.values(this._hass.states).filter(s => s.entity_id.startsWith('person.'));
-    this._activePersons = personEntities.filter(p => p.state !== 'unavailable');
+    const configuredPersons = Array.isArray(this._hubAttributes?.person_entities) && this._hubAttributes.person_entities.length > 0
+      ? this._hubAttributes.person_entities
+      : null;
+
+    if (configuredPersons) {
+      this._activePersons = personEntities.filter(p => configuredPersons.includes(p.entity_id) && p.state !== 'unavailable');
+    } else {
+      this._activePersons = personEntities.filter(p =>
+        p.state !== 'unavailable' &&
+        p.state !== 'unknown' &&
+        !p.entity_id.includes('hassio') &&
+        !p.entity_id.includes('supervisor')
+      );
+    }
     this._personHomeCount = this._activePersons.filter(p => p.state === 'home').length;
     this._totalPersonCount = this._activePersons.length;
 
@@ -855,6 +880,26 @@ class TaDiyPanel extends HTMLElement {
         .btn-save-settings:hover {
           background: #0369a1;
         }
+        .person-checkbox-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          margin-top: 4px;
+          max-height: 160px;
+          overflow-y: auto;
+          padding: 8px 10px;
+          background: var(--card-background-color, #fff);
+          border: 1px solid var(--divider-color, #cbd5e1);
+          border-radius: 6px;
+        }
+        .person-checkbox-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          cursor: pointer;
+          color: var(--primary-text-color, #0f172a);
+        }
 
         /* tado° Style Comfort Tab */
         .tado-container {
@@ -1072,7 +1117,7 @@ class TaDiyPanel extends HTMLElement {
           <div class="logo-icon">🔥</div>
           <div>
             <h1>TaDIY Klima-Manager</h1>
-            <div class="tagline">Adaptive Climate Orchestrator v3.1.2</div>
+            <div class="tagline">Adaptive Climate Orchestrator v3</div>
           </div>
         </div>
 
@@ -1130,6 +1175,28 @@ class TaDiyPanel extends HTMLElement {
       ? `${this._personHomeCount} / ${this._totalPersonCount}`
       : '---';
 
+    const offsetStep = this._globalOffsetStep || 1.5;
+    const currentOffset = this._globalOffsetTemp || 0.0;
+    const isOffsetActive = Math.abs(currentOffset) >= 0.01;
+    const offsetMode = this._globalOffsetMode || 'next_block';
+
+    let offsetDurationText = '';
+    if (isOffsetActive) {
+      if (offsetMode === 'duration' && this._globalOffsetUntil) {
+        const remainingMs = new Date(this._globalOffsetUntil).getTime() - Date.now();
+        if (remainingMs > 0) {
+          const totalMins = Math.round(remainingMs / 60000);
+          const hours = Math.floor(totalMins / 60);
+          const mins = totalMins % 60;
+          offsetDurationText = `(noch ${hours > 0 ? hours + 'h ' : ''}${mins}m)`;
+        } else {
+          offsetDurationText = '(läuft ab)';
+        }
+      } else {
+        offsetDurationText = '(bis nächster Block)';
+      }
+    }
+
     return `
       <!-- KPI Stats -->
       <div class="kpi-row">
@@ -1170,10 +1237,22 @@ class TaDiyPanel extends HTMLElement {
         </div>
       </div>
 
-      <!-- Action Bar: Rooms Header & Single-Day Homeoffice Toggles -->
+      <!-- Action Bar: Rooms Header, Quick Offset & Homeoffice Toggles -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin: 20px 0 12px 0; flex-wrap: wrap; gap: 8px;">
         <h2 style="font-size: 18px; font-weight: 700; margin: 0; color: var(--primary-text-color, #1e293b);">Räume</h2>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          ${isOffsetActive ? `
+            <div style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; background: #fef3c7; border: 1px solid #f59e0b; color: #b45309; font-size: 13px; font-weight: 700;">
+              <span>⚡ ${currentOffset > 0 ? '+' : ''}${currentOffset.toFixed(1)} °C ${offsetDurationText}</span>
+              <button data-action="reset-global-offset" title="Offset zurücksetzen" style="background: none; border: none; color: #b45309; font-weight: bold; cursor: pointer; padding: 0 4px; font-size: 14px; line-height: 1;">✕</button>
+            </div>
+          ` : ''}
+          <button class="quick-btn-homeoffice" data-action="apply-global-offset" data-delta="-${offsetStep}" title="Überall um ${offsetStep}°C senken (${offsetMode === 'duration' ? this._globalOffsetDuration + 'h' : 'bis nächster Block'})">
+            ❄️ −${offsetStep}°C
+          </button>
+          <button class="quick-btn-homeoffice" data-action="apply-global-offset" data-delta="${offsetStep}" title="Überall um ${offsetStep}°C erhöhen (${offsetMode === 'duration' ? this._globalOffsetDuration + 'h' : 'bis nächster Block'})">
+            🔥 +${offsetStep}°C
+          </button>
           <button class="quick-btn-homeoffice ${this._hubMode === 'homeoffice' ? 'active' : ''}" data-action="toggle-homeoffice" title="Homeoffice für heute aktivieren (automatischer Rückfall auf Normal zum Feierabend)">
             💼 ${this._hubMode === 'homeoffice' ? 'Homeoffice aktiv (Heute)' : 'Homeoffice Heute (1 Tag)'}
           </button>
@@ -1517,6 +1596,37 @@ class TaDiyPanel extends HTMLElement {
     const boilerSensorAvailable = hubAttrs.boiler_sensor_available !== false;
     const boilerEntity = this._boilerTempEntityId || hubAttrs.boiler_temp_sensor || 'sensor.boilertemperatur_temperature_probe';
 
+    // Temperature sensor candidates for boiler and DHW dropdowns
+    const tempSensors = Object.values(this._hass?.states || {})
+      .filter(s => s.entity_id.startsWith('sensor.') && (
+        s.attributes.device_class === 'temperature' ||
+        s.attributes.unit_of_measurement === '°C' ||
+        s.attributes.unit_of_measurement === 'C' ||
+        s.entity_id.includes('temp') ||
+        s.entity_id.includes('probe') ||
+        s.entity_id.includes('vorlauf')
+      ))
+      .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
+
+    const boilerSensorOptions = tempSensors.slice();
+    if (boilerEntity && !boilerSensorOptions.some(s => s.entity_id === boilerEntity)) {
+      boilerSensorOptions.unshift({ entity_id: boilerEntity, attributes: { friendly_name: boilerEntity } });
+    }
+    const currentDhw = hubAttrs.dhw_temp_sensor || '';
+    const dhwSensorOptions = tempSensors.slice();
+    if (currentDhw && !dhwSensorOptions.some(s => s.entity_id === currentDhw)) {
+      dhwSensorOptions.unshift({ entity_id: currentDhw, attributes: { friendly_name: currentDhw } });
+    }
+
+    // Person entities for explicit presence inclusion
+    const allPersonEntities = Object.values(this._hass?.states || {})
+      .filter(s => s.entity_id.startsWith('person.'))
+      .sort((a, b) => (a.attributes.friendly_name || a.entity_id).localeCompare(b.attributes.friendly_name || b.entity_id));
+
+    const configuredPersons = Array.isArray(hubAttrs.person_entities) && hubAttrs.person_entities.length > 0
+      ? hubAttrs.person_entities
+      : null;
+
     return `
       <div class="system-container">
         <div class="system-card">
@@ -1560,7 +1670,7 @@ class TaDiyPanel extends HTMLElement {
         <div class="system-card">
           <h3>⚙️ Hub-Einstellungen</h3>
           <p style="font-size: 13px; color: var(--secondary-text-color);">
-            Zentrale Parameter für Frostschutz, Boost und Fensterüberwachung:
+            Zentrale Parameter für Frostschutz, Boost, Fensterüberwachung und Schnell-Offset:
           </p>
           <div class="settings-grid">
             <div class="setting-item">
@@ -1598,13 +1708,75 @@ class TaDiyPanel extends HTMLElement {
                 <option value="false" ${hubAttrs.cycle_lock_on_setpoint_drop === false ? 'selected' : ''}>Inaktiv</option>
               </select>
             </div>
+            <div class="setting-item">
+              <span class="setting-label">🪟 Nachbar-Fenster Absenkung</span>
+              <select class="setting-input" id="setting-win-neighbor-enabled">
+                <option value="true" ${hubAttrs.window_neighbor_setback_enabled !== false ? 'selected' : ''}>Aktiviert</option>
+                <option value="false" ${hubAttrs.window_neighbor_setback_enabled === false ? 'selected' : ''}>Deaktiviert</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">📉 Nachbar-Absenkung (°C)</span>
+              <input type="number" class="setting-input" id="setting-win-neighbor-delta" value="${hubAttrs.window_neighbor_setback_delta ?? 1.5}" step="0.5" min="0.5" max="5.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🏠 Haus-Fallback Absenkung (°C)</span>
+              <input type="number" class="setting-input" id="setting-win-house-delta" value="${hubAttrs.window_house_setback_delta ?? 1.0}" step="0.5" min="0.5" max="5.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">⚡ Offset-Schrittweite (°C)</span>
+              <input type="number" class="setting-input" id="setting-offset-step" value="${hubAttrs.global_offset_step ?? 1.5}" step="0.5" min="0.5" max="5.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">⏱️ Offset-Modus</span>
+              <select class="setting-input" id="setting-offset-mode">
+                <option value="next_block" ${(hubAttrs.global_offset_mode || 'next_block') === 'next_block' ? 'selected' : ''}>Bis zum nächsten Zeitplan-Block</option>
+                <option value="duration" ${hubAttrs.global_offset_mode === 'duration' ? 'selected' : ''}>Feste Dauer (X Stunden)</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">⏳ Offset-Dauer (Stunden)</span>
+              <input type="number" class="setting-input" id="setting-offset-duration" value="${hubAttrs.global_offset_duration_hours ?? 3.0}" step="0.5" min="0.5" max="24.0">
+            </div>
             <div class="setting-item" style="grid-column: 1 / -1;">
               <span class="setting-label">🔥 Kessel-Vorlauftemperaturfühler</span>
-              <input type="text" class="setting-input" id="setting-boiler-sensor" value="${boilerEntity}" placeholder="sensor.kessel_vorlauf">
+              <select class="setting-input" id="setting-boiler-sensor">
+                <option value="">-- Nicht konfiguriert / Deaktiviert --</option>
+                ${boilerSensorOptions.map(s => `
+                  <option value="${s.entity_id}" ${s.entity_id === boilerEntity ? 'selected' : ''}>
+                    ${s.attributes.friendly_name ? `${s.attributes.friendly_name} (${s.entity_id})` : s.entity_id}
+                  </option>
+                `).join('')}
+              </select>
             </div>
             <div class="setting-item" style="grid-column: 1 / -1;">
               <span class="setting-label">🚰 Warmwasser-Zirkulationsfühler</span>
-              <input type="text" class="setting-input" id="setting-dhw-sensor" value="${hubAttrs.dhw_temp_sensor || ''}" placeholder="sensor.warmwasser_vorlauf">
+              <select class="setting-input" id="setting-dhw-sensor">
+                <option value="">-- Nicht konfiguriert / Deaktiviert --</option>
+                ${dhwSensorOptions.map(s => `
+                  <option value="${s.entity_id}" ${s.entity_id === currentDhw ? 'selected' : ''}>
+                    ${s.attributes.friendly_name ? `${s.attributes.friendly_name} (${s.entity_id})` : s.entity_id}
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+            <div class="setting-item" style="grid-column: 1 / -1;">
+              <span class="setting-label">👥 Zählende Personen (Anwesenheit)</span>
+              <div class="person-checkbox-list">
+                ${allPersonEntities.map(p => {
+                  const isSelected = configuredPersons
+                    ? configuredPersons.includes(p.entity_id)
+                    : (!p.entity_id.includes('hassio') && !p.entity_id.includes('supervisor'));
+                  const label = p.attributes.friendly_name || p.entity_id.replace('person.', '');
+                  return `
+                    <label class="person-checkbox-item">
+                      <input type="checkbox" class="setting-person-checkbox" value="${p.entity_id}" ${isSelected ? 'checked' : ''}>
+                      <span>👤 ${label} <small style="color: var(--secondary-text-color);">(${p.entity_id})</small></span>
+                    </label>
+                  `;
+                }).join('')}
+                ${allPersonEntities.length === 0 ? '<div style="font-size: 12px; color: var(--secondary-text-color);">Keine person.* Entitäten in Home Assistant gefunden.</div>' : ''}
+              </div>
             </div>
           </div>
           <button type="button" class="btn-save-settings" data-action="save-hub-settings">
@@ -1615,7 +1787,7 @@ class TaDiyPanel extends HTMLElement {
         <div class="system-card">
           <h3>🚪 Raum-Einstellungen</h3>
           <p style="font-size: 13px; color: var(--secondary-text-color);">
-            Spezifische Regelungsparameter, Hysterese und Vorheizzeiten je Raum:
+            Spezifische Regelungsparameter, Hysterese, Vorheizzeiten und Nachbarräume je Raum:
           </p>
           <div style="margin-bottom: 14px;">
             <label style="font-size: 12px; font-weight: 600; color: var(--secondary-text-color);">Raum auswählen:</label>
@@ -1630,6 +1802,8 @@ class TaDiyPanel extends HTMLElement {
 
           ${(() => {
             const currentRoom = this._rooms.find(r => r.entity_id === this._selectedSettingsRoom) || this._rooms[0] || {};
+            const otherRooms = this._rooms.filter(r => r.entity_id !== currentRoom.entity_id);
+            const currentAdj = Array.isArray(currentRoom.adjacent_rooms) ? currentRoom.adjacent_rooms : [];
             return `
               <div class="settings-grid">
                 <div class="setting-item">
@@ -1659,6 +1833,21 @@ class TaDiyPanel extends HTMLElement {
                 <div class="setting-item">
                   <span class="setting-label">☀️ Sommerabschaltung (°C)</span>
                   <input type="number" class="setting-input" id="room-setting-dont-heat" value="${currentRoom.dont_heat_below_outdoor ?? ''}" step="0.5" min="10" max="30" placeholder="Global (${dontHeatBelow !== '' ? dontHeatBelow + ' °C' : 'Deaktiviert'})">
+                </div>
+                <div class="setting-item" style="grid-column: 1 / -1;">
+                  <span class="setting-label">🚪 Nachbarräume (Fenster-Absenkung & Kopplung)</span>
+                  <div class="person-checkbox-list">
+                    ${otherRooms.map(r => {
+                      const isAdj = currentAdj.includes(r.name) || currentAdj.includes(r.entity_id);
+                      return `
+                        <label class="person-checkbox-item">
+                          <input type="checkbox" class="setting-adjacent-room-checkbox" value="${r.name}" ${isAdj ? 'checked' : ''}>
+                          <span>🚪 ${r.name}</span>
+                        </label>
+                      `;
+                    }).join('')}
+                    ${otherRooms.length === 0 ? '<div style="font-size: 12px; color: var(--secondary-text-color);">Keine weiteren Räume vorhanden.</div>' : ''}
+                  </div>
                 </div>
               </div>
             `;
@@ -1753,7 +1942,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.5';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.6';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -1961,6 +2150,40 @@ class TaDiyPanel extends HTMLElement {
       });
     });
 
+    // Global Quick Offset Actions
+    this.shadowRoot.querySelectorAll('[data-action="apply-global-offset"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const delta = parseFloat(btn.dataset.delta);
+        if (isNaN(delta) || !this._hass) return;
+        const current = this._globalOffsetTemp || 0;
+        const newTemp = Math.round((current + delta) * 10) / 10;
+        try {
+          await this._hass.callService('tadiy', 'set_global_offset', {
+            offset: newTemp,
+            mode: this._globalOffsetMode || 'next_block',
+            duration_hours: this._globalOffsetDuration || 3.0
+          });
+        } catch (err) {
+          console.error('Failed to set global offset:', err);
+        }
+      });
+    });
+
+    this.shadowRoot.querySelectorAll('[data-action="reset-global-offset"]').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!this._hass) return;
+        try {
+          await this._hass.callService('tadiy', 'set_global_offset', {
+            offset: 0.0
+          });
+        } catch (err) {
+          console.error('Failed to reset global offset:', err);
+        }
+      });
+    });
+
     // Hub Settings Save Button
     const saveSettingsBtn = this.shadowRoot.querySelector('[data-action="save-hub-settings"]');
     if (saveSettingsBtn) {
@@ -1971,6 +2194,16 @@ class TaDiyPanel extends HTMLElement {
         const winOpenEl = this.shadowRoot.getElementById('setting-win-open');
         const winCloseEl = this.shadowRoot.getElementById('setting-win-close');
         const dontHeatEl = this.shadowRoot.getElementById('setting-dont-heat');
+        const boilerMinRunEl = this.shadowRoot.getElementById('setting-boiler-min-run');
+        const cycleLockEl = this.shadowRoot.getElementById('setting-cycle-lock');
+        const winNeighborEnabledEl = this.shadowRoot.getElementById('setting-win-neighbor-enabled');
+        const winNeighborDeltaEl = this.shadowRoot.getElementById('setting-win-neighbor-delta');
+        const winHouseDeltaEl = this.shadowRoot.getElementById('setting-win-house-delta');
+        const offsetStepEl = this.shadowRoot.getElementById('setting-offset-step');
+        const offsetModeEl = this.shadowRoot.getElementById('setting-offset-mode');
+        const offsetDurEl = this.shadowRoot.getElementById('setting-offset-duration');
+        const boilerEl = this.shadowRoot.getElementById('setting-boiler-sensor');
+        const dhwEl = this.shadowRoot.getElementById('setting-dhw-sensor');
 
         const serviceData = {};
         if (frostEl && frostEl.value !== '') serviceData.frost_protection_temp = parseFloat(frostEl.value);
@@ -1981,6 +2214,20 @@ class TaDiyPanel extends HTMLElement {
         if (dontHeatEl) {
           serviceData.dont_heat_below_outdoor = dontHeatEl.value !== '' ? parseFloat(dontHeatEl.value) : null;
         }
+        if (boilerMinRunEl && boilerMinRunEl.value !== '') serviceData.boiler_min_run_time = parseInt(boilerMinRunEl.value);
+        if (cycleLockEl) serviceData.cycle_lock_on_setpoint_drop = cycleLockEl.value === 'true';
+        if (winNeighborEnabledEl) serviceData.window_neighbor_setback_enabled = winNeighborEnabledEl.value === 'true';
+        if (winNeighborDeltaEl && winNeighborDeltaEl.value !== '') serviceData.window_neighbor_setback_delta = parseFloat(winNeighborDeltaEl.value);
+        if (winHouseDeltaEl && winHouseDeltaEl.value !== '') serviceData.window_house_setback_delta = parseFloat(winHouseDeltaEl.value);
+        if (offsetStepEl && offsetStepEl.value !== '') serviceData.global_offset_step = parseFloat(offsetStepEl.value);
+        if (offsetModeEl) serviceData.global_offset_mode = offsetModeEl.value;
+        if (offsetDurEl && offsetDurEl.value !== '') serviceData.global_offset_duration_hours = parseFloat(offsetDurEl.value);
+        if (boilerEl) serviceData.boiler_temp_sensor = boilerEl.value;
+        if (dhwEl) serviceData.dhw_temp_sensor = dhwEl.value;
+
+        const checkedPersons = Array.from(this.shadowRoot.querySelectorAll('.setting-person-checkbox:checked'))
+          .map(cb => cb.value);
+        serviceData.person_entities = checkedPersons;
 
         try {
           saveSettingsBtn.textContent = '⏳ Wird gespeichert...';
@@ -2022,6 +2269,9 @@ class TaDiyPanel extends HTMLElement {
         const maxRateEl = this.shadowRoot.getElementById('room-setting-max-rate');
         const dontHeatEl = this.shadowRoot.getElementById('room-setting-dont-heat');
 
+        const checkedAdjRooms = Array.from(this.shadowRoot.querySelectorAll('.setting-adjacent-room-checkbox:checked'))
+          .map(cb => cb.value);
+
         const serviceData = { entity_id: roomId };
         if (awayEl && awayEl.value !== '') serviceData.away_temperature = parseFloat(awayEl.value);
         if (tolEl && tolEl.value !== '') serviceData.tolerance = parseFloat(tolEl.value);
@@ -2032,6 +2282,7 @@ class TaDiyPanel extends HTMLElement {
         if (dontHeatEl) {
           serviceData.dont_heat_below_outdoor = dontHeatEl.value !== '' ? parseFloat(dontHeatEl.value) : null;
         }
+        serviceData.adjacent_rooms = checkedAdjRooms;
 
         try {
           saveRoomBtn.textContent = '⏳ Wird gespeichert...';

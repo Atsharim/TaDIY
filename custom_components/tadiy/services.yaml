@@ -173,3 +173,100 @@ set_hub_config:
           max: 25.0
           step: 0.5
           unit_of_measurement: "°C"
+
+set_global_offset:
+  name: Set Global Quick Offset
+  description: Apply a temporary ±X°C offset across all rooms (e.g. for sunny days or quick boost)
+  fields:
+    offset:
+      name: Temperature Offset
+      description: Relative offset in °C (-5.0 to +5.0, set 0 to cancel)
+      required: true
+      default: 0.0
+      selector:
+        number:
+          min: -5.0
+          max: 5.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    mode:
+      name: Offset Mode
+      description: Duration mode ('next_block' or 'duration')
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Bis zum nächsten Zeitplan-Block"
+              value: "next_block"
+            - label: "Feste Dauer (Stunden)"
+              value: "duration"
+    duration_hours:
+      name: Duration in Hours
+      description: Duration when mode is set to 'duration'
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 24.0
+          step: 0.5
+          unit_of_measurement: "h"
+
+set_room_config:
+  name: Set Room Configuration
+  description: Update room configuration settings dynamically
+  fields:
+    entity_id:
+      name: Room Climate Entity
+      description: Entity ID of the room climate entity or room ID
+      required: true
+      selector:
+        entity:
+          domain: climate
+    away_temperature:
+      name: Away Temperature
+      description: Target temperature when away (°C)
+      required: false
+      selector:
+        number:
+          min: 5.0
+          max: 22.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    tolerance:
+      name: Temperature Tolerance
+      description: Deadband / hysteresis tolerance (°C)
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 2.0
+          step: 0.1
+          unit_of_measurement: "°C"
+    early_start_max_minutes:
+      name: Max Early Start Minutes
+      description: Maximum preheat time in minutes
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 360
+          step: 15
+          unit_of_measurement: "min"
+    window_open_timeout:
+      name: Window Open Timeout
+      description: Wait time before shutting off heating when window opens (s)
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 300
+          step: 5
+          unit_of_measurement: "s"
+    adjacent_rooms:
+      name: Adjacent Rooms
+      description: List of neighboring rooms for window setback and thermal coupling
+      required: false
+      selector:
+        select:
+          multiple: true
+          custom_value: true

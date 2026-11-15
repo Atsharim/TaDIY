@@ -26,6 +26,7 @@ from .const import (
     ATTR_ROOM,
     ATTR_SCHEDULE_TYPE,
     ATTR_TEMPERATURE,
+    CONF_ADJACENT_ROOMS,
     CONF_AWAY_TEMPERATURE,
     CONF_BOILER_MIN_RUN_TIME,
     CONF_BOILER_TEMP_SENSOR,
@@ -49,12 +50,19 @@ from .const import (
     CONF_EARLY_START_MAX,
     CONF_FROST_PROTECTION_TEMP,
     CONF_GLOBAL_DONT_HEAT_BELOW,
+    CONF_GLOBAL_OFFSET_DURATION_HOURS,
+    CONF_GLOBAL_OFFSET_MODE,
+    CONF_GLOBAL_OFFSET_STEP,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
     CONF_HUB,
+    CONF_PERSON_ENTITIES,
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
     CONF_TOLERANCE,
     CONF_WINDOW_CLOSE_TIMEOUT,
+    CONF_WINDOW_HOUSE_SETBACK_DELTA,
+    CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
+    CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
     CONF_WINDOW_OPEN_TIMEOUT,
     DEFAULT_BOOST_DURATION,
     DEFAULT_BOOST_TEMPERATURE,
@@ -76,6 +84,7 @@ from .const import (
     SERVICE_RESET_LEARNING,
     SERVICE_SET_HEATING_CURVE,
     SERVICE_SET_HOMEOFFICE_TOMORROW,
+    SERVICE_SET_GLOBAL_OFFSET,
     SERVICE_SET_HUB_CONFIG,
     SERVICE_SET_HUB_MODE,
     SERVICE_SET_LOCATION_OVERRIDE,
@@ -977,6 +986,13 @@ async def async_register_services(
             vol.Optional(CONF_DHW_TEMP_SENSOR): cv.string,
             vol.Optional(CONF_BOILER_MIN_RUN_TIME): cv.positive_int,
             vol.Optional(CONF_CYCLE_LOCK_ON_SETPOINT_DROP): cv.boolean,
+            vol.Optional(CONF_PERSON_ENTITIES): vol.All(cv.ensure_list, [cv.string]),
+            vol.Optional(CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED): cv.boolean,
+            vol.Optional(CONF_WINDOW_NEIGHBOR_SETBACK_DELTA): vol.Coerce(float),
+            vol.Optional(CONF_WINDOW_HOUSE_SETBACK_DELTA): vol.Coerce(float),
+            vol.Optional(CONF_GLOBAL_OFFSET_STEP): vol.Coerce(float),
+            vol.Optional(CONF_GLOBAL_OFFSET_MODE): cv.string,
+            vol.Optional(CONF_GLOBAL_OFFSET_DURATION_HOURS): vol.Coerce(float),
         }
     )
 
@@ -1004,6 +1020,13 @@ async def async_register_services(
             CONF_DHW_TEMP_SENSOR,
             CONF_BOILER_MIN_RUN_TIME,
             CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
+            CONF_PERSON_ENTITIES,
+            CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
+            CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
+            CONF_WINDOW_HOUSE_SETBACK_DELTA,
+            CONF_GLOBAL_OFFSET_STEP,
+            CONF_GLOBAL_OFFSET_MODE,
+            CONF_GLOBAL_OFFSET_DURATION_HOURS,
         ]:
             if key in call.data:
                 val = call.data[key]
@@ -1017,6 +1040,13 @@ async def async_register_services(
                         new_options[CONF_GLOBAL_DONT_HEAT_BELOW] = val
 
         hass.config_entries.async_update_entry(hub_entry, options=new_options)
+        # Apply immediately to running hub coordinator
+        entry_data = hass.data.get(DOMAIN, {}).get(hub_entry.entry_id, {})
+        coord = entry_data.get("coordinator") if isinstance(entry_data, dict) else None
+        if coord:
+            coord.config_data.update(new_options)
+            coord._update_global_settings()
+            coord.async_update_listeners()
         _LOGGER.info("Hub options updated via service: %s", call.data)
 
     hass.services.async_register(
@@ -1024,6 +1054,38 @@ async def async_register_services(
         SERVICE_SET_HUB_CONFIG,
         handle_set_hub_config,
         schema=SERVICE_SET_HUB_CONFIG_SCHEMA,
+    )
+
+    # Global Quick Offset service (±X°C across all rooms)
+    SERVICE_SET_GLOBAL_OFFSET_SCHEMA = vol.Schema(
+        {
+            vol.Required("offset"): vol.Coerce(float),
+            vol.Optional("mode"): cv.string,
+            vol.Optional("duration_hours"): vol.Coerce(float),
+        }
+    )
+
+    async def handle_set_global_offset(call: ServiceCall) -> None:
+        """Set or reset global quick offset across all rooms."""
+        hub_coord = None
+        for entry_id, entry_data in hass.data.get(DOMAIN, {}).items():
+            if isinstance(entry_data, dict) and entry_data.get("type") == "hub":
+                hub_coord = entry_data.get("coordinator")
+                break
+        if not hub_coord:
+            _LOGGER.error("Cannot set global offset: No hub coordinator found")
+            return
+
+        offset = float(call.data["offset"])
+        mode = call.data.get("mode")
+        dur = call.data.get("duration_hours")
+        await hub_coord.async_set_global_offset(offset, mode=mode, duration_hours=dur)
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_GLOBAL_OFFSET,
+        handle_set_global_offset,
+        schema=SERVICE_SET_GLOBAL_OFFSET_SCHEMA,
     )
 
     # Room configuration service (allows adjusting Room settings directly from UI panel)
@@ -1038,6 +1100,7 @@ async def async_register_services(
             vol.Optional("dont_heat_below_outdoor"): vol.Any(None, vol.Coerce(float)),
             vol.Optional("min_heating_rate"): vol.Coerce(float),
             vol.Optional("max_heating_rate"): vol.Coerce(float),
+            vol.Optional(CONF_ADJACENT_ROOMS): vol.All(cv.ensure_list, [cv.string]),
         }
     )
 
@@ -1045,6 +1108,7 @@ async def async_register_services(
         """Update room configuration options dynamically."""
         entity_id = call.data.get("entity_id")
         room_entry = None
+        matched_coordinator = None
         for entry in hass.config_entries.async_entries(DOMAIN):
             if not entry.data.get("is_hub", False) and entry.data.get("entry_type") != "hub":
                 room_coord = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
@@ -1056,6 +1120,7 @@ async def async_register_services(
                         or room_coord.room_config.name.lower() in entity_id.lower()
                     ):
                         room_entry = entry
+                        matched_coordinator = room_coord
                         break
                 elif entry.title.lower() in entity_id.lower() or entry.entry_id == entity_id:
                     room_entry = entry
@@ -1075,6 +1140,7 @@ async def async_register_services(
             "dont_heat_below_outdoor",
             "min_heating_rate",
             "max_heating_rate",
+            CONF_ADJACENT_ROOMS,
         ]:
             if key in call.data:
                 val = call.data[key]
@@ -1084,6 +1150,29 @@ async def async_register_services(
                     new_options[key] = val
 
         hass.config_entries.async_update_entry(room_entry, options=new_options)
+
+        # Apply immediately to running room coordinator if available
+        if matched_coordinator and hasattr(matched_coordinator, "room_config"):
+            if CONF_AWAY_TEMPERATURE in call.data:
+                matched_coordinator.room_config.away_temperature = call.data[CONF_AWAY_TEMPERATURE]
+            if "tolerance" in call.data:
+                matched_coordinator.room_config.tolerance = call.data["tolerance"]
+            if "early_start_max_minutes" in call.data:
+                matched_coordinator.room_config.early_start_max_minutes = call.data["early_start_max_minutes"]
+            if "window_open_timeout" in call.data:
+                matched_coordinator.room_config.window_open_timeout = call.data["window_open_timeout"]
+            if "window_close_timeout" in call.data:
+                matched_coordinator.room_config.window_close_timeout = call.data["window_close_timeout"]
+            if "dont_heat_below_outdoor" in call.data:
+                matched_coordinator.room_config.dont_heat_below_outdoor = call.data["dont_heat_below_outdoor"]
+            if "min_heating_rate" in call.data:
+                matched_coordinator.room_config.min_heating_rate = call.data["min_heating_rate"]
+            if "max_heating_rate" in call.data:
+                matched_coordinator.room_config.max_heating_rate = call.data["max_heating_rate"]
+            if CONF_ADJACENT_ROOMS in call.data:
+                matched_coordinator.room_config.adjacent_rooms = call.data[CONF_ADJACENT_ROOMS]
+            matched_coordinator.async_update_listeners()
+
         _LOGGER.info("Room options updated via service for %s: %s", room_entry.title, call.data)
 
     hass.services.async_register(

@@ -241,6 +241,7 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             attrs["min_heating_rate"] = getattr(cfg, "min_heating_rate", opts.get("min_heating_rate", 0.5))
             attrs["max_heating_rate"] = getattr(cfg, "max_heating_rate", opts.get("max_heating_rate", 3.0))
             attrs["dont_heat_below_outdoor"] = getattr(cfg, "dont_heat_below_outdoor", opts.get("dont_heat_below_outdoor"))
+            attrs["adjacent_rooms"] = getattr(cfg, "adjacent_rooms", opts.get("adjacent_rooms", []))
 
         return attrs
 

@@ -18,8 +18,15 @@ from .const import (
     CONF_DONT_HEAT_BELOW_OUTDOOR,
     CONF_FROST_PROTECTION_TEMP,
     CONF_GLOBAL_DONT_HEAT_BELOW,
+    CONF_GLOBAL_OFFSET_DURATION_HOURS,
+    CONF_GLOBAL_OFFSET_MODE,
+    CONF_GLOBAL_OFFSET_STEP,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
+    CONF_PERSON_ENTITIES,
     CONF_WINDOW_CLOSE_TIMEOUT,
+    CONF_WINDOW_HOUSE_SETBACK_DELTA,
+    CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
+    CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
     CONF_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     ICON_MODE,
@@ -125,6 +132,19 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
                 "boiler_sensor_available": getattr(self.coordinator, "boiler_sensor_available", True),
                 "boiler_active": getattr(self.coordinator, "boiler_active", False),
                 "homeoffice_tomorrow": getattr(self.coordinator, "_homeoffice_tomorrow", False),
+                CONF_PERSON_ENTITIES: getattr(self.coordinator, "person_entities", cfg.get(CONF_PERSON_ENTITIES, [])),
+                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: getattr(self.coordinator, "window_neighbor_setback_enabled", True),
+                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: getattr(self.coordinator, "window_neighbor_setback_delta", 1.5),
+                CONF_WINDOW_HOUSE_SETBACK_DELTA: getattr(self.coordinator, "window_house_setback_delta", 1.0),
+                CONF_GLOBAL_OFFSET_STEP: getattr(self.coordinator, "global_offset_step", 1.5),
+                CONF_GLOBAL_OFFSET_MODE: getattr(self.coordinator, "global_offset_mode", "next_block"),
+                CONF_GLOBAL_OFFSET_DURATION_HOURS: getattr(self.coordinator, "global_offset_duration_hours", 3.0),
+                "global_offset_temp": getattr(self.coordinator, "global_offset_temp", 0.0),
+                "global_offset_until": (
+                    getattr(self.coordinator, "global_offset_until", None).isoformat()
+                    if getattr(self.coordinator, "global_offset_until", None)
+                    else None
+                ),
             }
         return {}
 
