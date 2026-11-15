@@ -14,6 +14,7 @@ from .const import (
     CONF_ADJACENT_ROOMS,
     CONF_AWAY_TEMPERATURE,
     CONF_BOILER_TEMP_SENSOR,
+    CONF_DHW_TEMP_SENSOR,
     CONF_COUPLING_STRENGTH,
     CONF_DEBUG_CALIBRATION,
     CONF_DEBUG_CARDS,
@@ -318,6 +319,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 CONF_OUTDOOR_SENSOR,
                 CONF_PERSON_ENTITIES,
                 CONF_BOILER_TEMP_SENSOR,
+                CONF_DHW_TEMP_SENSOR,
             ]:
                 value = user_input.get(key)
                 if value in ("", [], None):
@@ -407,6 +409,7 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
         current_weather = current_data.get(CONF_WEATHER_ENTITY, "")
         current_outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR, "")
         current_boiler_sensor = current_data.get(CONF_BOILER_TEMP_SENSOR, "")
+        current_dhw_sensor = current_data.get(CONF_DHW_TEMP_SENSOR, "")
         current_persons = current_data.get(CONF_PERSON_ENTITIES, [])
         current_location_mode = current_data.get(CONF_LOCATION_MODE_ENABLED, False)
         current_override_timeout = current_data.get(
@@ -484,6 +487,18 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             vol.Optional(
                 CONF_BOILER_TEMP_SENSOR,
                 description={"suggested_value": current_boiler_sensor},
+            )
+        ] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor",
+                device_class="temperature",
+            )
+        )
+
+        schema_dict[
+            vol.Optional(
+                CONF_DHW_TEMP_SENSOR,
+                description={"suggested_value": current_dhw_sensor},
             )
         ] = selector.EntitySelector(
             selector.EntitySelectorConfig(

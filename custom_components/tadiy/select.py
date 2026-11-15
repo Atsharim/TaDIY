@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
     CONF_BOILER_TEMP_SENSOR,
+    CONF_DHW_TEMP_SENSOR,
     CONF_BOOST_DURATION,
     CONF_BOOST_TEMPERATURE,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
@@ -131,6 +132,9 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
                 "boiler_temperature": getattr(self.coordinator, "boiler_temperature", None),
                 "boiler_sensor_available": getattr(self.coordinator, "boiler_sensor_available", True),
                 "boiler_active": getattr(self.coordinator, "boiler_active", False),
+                CONF_DHW_TEMP_SENSOR: getattr(self.coordinator, "dhw_temp_sensor", cfg.get(CONF_DHW_TEMP_SENSOR)),
+                "dhw_temperature": getattr(self.coordinator, "dhw_temperature", None),
+                "dhw_sensor_available": getattr(self.coordinator, "dhw_sensor_available", True),
                 "homeoffice_tomorrow": getattr(self.coordinator, "_homeoffice_tomorrow", False),
                 CONF_PERSON_ENTITIES: getattr(self.coordinator, "person_entities", cfg.get(CONF_PERSON_ENTITIES, [])),
                 CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: getattr(self.coordinator, "window_neighbor_setback_enabled", True),

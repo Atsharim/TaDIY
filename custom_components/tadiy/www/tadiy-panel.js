@@ -224,7 +224,11 @@ class TaDiyPanel extends HTMLElement {
       : null;
 
     if (configuredPersons) {
-      this._activePersons = personEntities.filter(p => configuredPersons.includes(p.entity_id) && p.state !== 'unavailable');
+      this._activePersons = personEntities.filter(p =>
+        configuredPersons.includes(p.entity_id) &&
+        p.state !== 'unavailable' &&
+        p.state !== 'unknown'
+      );
     } else {
       this._activePersons = personEntities.filter(p =>
         p.state !== 'unavailable' &&

@@ -75,6 +75,16 @@ class LocationManager:
         self._debug_fn = debug_callback
         self._away_since: datetime | None = None  # When everyone left
 
+    @property
+    def person_entities(self) -> list[str]:
+        """Return person entity IDs."""
+        return self.person_entity_ids
+
+    @person_entities.setter
+    def person_entities(self, value: list[str]) -> None:
+        """Set person entity IDs."""
+        self.person_entity_ids = list(value or [])
+
     def get_location_state(self) -> LocationState:
         """Get current location state."""
         return self._location_state

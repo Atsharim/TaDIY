@@ -18,6 +18,7 @@ from .const import (
     CONF_ADJACENT_ROOMS,
     CONF_AWAY_TEMPERATURE,
     CONF_BOILER_TEMP_SENSOR,
+    CONF_DHW_TEMP_SENSOR,
     CONF_COUPLING_STRENGTH,
     CONF_CUSTOM_MODES,
     CONF_DISABLE_VALVE_PROTECTION,
@@ -287,6 +288,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         self.boiler_sensor_available: bool = True
         self.boiler_active: bool = False
 
+        # Optional domestic hot water (DHW) / circulation temperature probe
+        self.dhw_temp_sensor = config_data.get(CONF_DHW_TEMP_SENSOR)
+        self.dhw_temperature: float | None = None
+        self.dhw_sensor_available: bool = True
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from coordinator."""
         try:
@@ -379,6 +385,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: self.window_neighbor_setback_enabled,
                 CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: self.window_neighbor_setback_delta,
                 CONF_WINDOW_HOUSE_SETBACK_DELTA: self.window_house_setback_delta,
+                CONF_DHW_TEMP_SENSOR: self.dhw_temp_sensor,
             }
 
             # Optional boiler supply flow temperature probe
@@ -407,6 +414,27 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 data_dict["boiler_sensor_available"] = self.boiler_sensor_available
                 data_dict["boiler_active"] = self.boiler_active
                 data_dict["boiler_temp_sensor_id"] = self.boiler_temp_sensor
+
+            # Optional DHW / circulation temperature probe
+            if self.dhw_temp_sensor:
+                sensor_state = self.hass.states.get(self.dhw_temp_sensor)
+                if (
+                    sensor_state
+                    and sensor_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, "")
+                ):
+                    try:
+                        self.dhw_temperature = round(float(sensor_state.state), 1)
+                        self.dhw_sensor_available = True
+                    except (ValueError, TypeError):
+                        self.dhw_sensor_available = False
+                elif sensor_state and sensor_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                    self.dhw_sensor_available = False
+                else:
+                    self.dhw_sensor_available = False
+
+                data_dict["dhw_temperature"] = self.dhw_temperature
+                data_dict["dhw_sensor_available"] = self.dhw_sensor_available
+                data_dict["dhw_temp_sensor_id"] = self.dhw_temp_sensor
 
             # Add location status if location mode enabled
             if self.location_mode_enabled:
@@ -442,6 +470,27 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
     def _update_global_settings(self) -> None:
         """Update global settings from config_data."""
+        # Synchronize dynamic hub attributes from config_data if present
+        if hasattr(self, "config_data") and isinstance(self.config_data, dict):
+            if CONF_PERSON_ENTITIES in self.config_data:
+                self.person_entities = list(self.config_data.get(CONF_PERSON_ENTITIES) or [])
+            if CONF_BOILER_TEMP_SENSOR in self.config_data:
+                self.boiler_temp_sensor = self.config_data.get(CONF_BOILER_TEMP_SENSOR) or None
+            if CONF_DHW_TEMP_SENSOR in self.config_data:
+                self.dhw_temp_sensor = self.config_data.get(CONF_DHW_TEMP_SENSOR) or None
+            if CONF_GLOBAL_OFFSET_STEP in self.config_data:
+                self.global_offset_step = float(self.config_data.get(CONF_GLOBAL_OFFSET_STEP, DEFAULT_GLOBAL_OFFSET_STEP))
+            if CONF_GLOBAL_OFFSET_MODE in self.config_data:
+                self.global_offset_mode = str(self.config_data.get(CONF_GLOBAL_OFFSET_MODE, DEFAULT_GLOBAL_OFFSET_MODE))
+            if CONF_GLOBAL_OFFSET_DURATION_HOURS in self.config_data:
+                self.global_offset_duration_hours = float(self.config_data.get(CONF_GLOBAL_OFFSET_DURATION_HOURS, DEFAULT_GLOBAL_OFFSET_DURATION_HOURS))
+            if CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED in self.config_data:
+                self.window_neighbor_setback_enabled = bool(self.config_data.get(CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED, DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED))
+            if CONF_WINDOW_NEIGHBOR_SETBACK_DELTA in self.config_data:
+                self.window_neighbor_setback_delta = float(self.config_data.get(CONF_WINDOW_NEIGHBOR_SETBACK_DELTA, DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA))
+            if CONF_WINDOW_HOUSE_SETBACK_DELTA in self.config_data:
+                self.window_house_setback_delta = float(self.config_data.get(CONF_WINDOW_HOUSE_SETBACK_DELTA, DEFAULT_WINDOW_HOUSE_SETBACK_DELTA))
+
         early_offset = self.config_data.get(
             CONF_EARLY_START_OFFSET,
             self.config_data.get(
@@ -526,9 +575,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 CONF_USE_WEATHER_PREDICTION: self.config_data.get(
                     CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
                 ),
-                # Fehleranalyse: AttributeError 'TaDIYHubCoordinator' object has no attribute 'person_entities'
-                # Beim Aufruf von _update_global_settings() in __init__ bzw. bei dynamischen Updates müssen
-                # neue Hub-Attribute per getattr abgesichert sein, falls _update_global_settings vor deren Initialisierung läuft.
+                CONF_BOILER_TEMP_SENSOR: getattr(self, "boiler_temp_sensor", None),
+                CONF_DHW_TEMP_SENSOR: getattr(self, "dhw_temp_sensor", None),
                 CONF_PERSON_ENTITIES: getattr(self, "person_entities", []),
                 CONF_GLOBAL_OFFSET_STEP: getattr(
                     self, "global_offset_step", DEFAULT_GLOBAL_OFFSET_STEP
@@ -560,7 +608,9 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         )
 
         if hasattr(self, "location_manager") and self.location_manager:
-            self.location_manager.person_entities = getattr(self, "person_entities", [])
+            persons = getattr(self, "person_entities", [])
+            self.location_manager.person_entity_ids = persons
+            self.location_manager.person_entities = persons
 
     def _find_hub_mode_entity_id(self) -> str | None:
         """Find the hub mode select entity ID dynamically.

@@ -1106,25 +1106,44 @@ async def async_register_services(
 
     async def handle_set_room_config(call: ServiceCall) -> None:
         """Update room configuration options dynamically."""
-        entity_id = call.data.get("entity_id")
+        entity_id = call.data.get("entity_id", "")
         room_entry = None
         matched_coordinator = None
+
+        # Pass 1: exact match by config entry ID
         for entry in hass.config_entries.async_entries(DOMAIN):
             if not entry.data.get("is_hub", False) and entry.data.get("entry_type") != "hub":
-                room_coord = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
-                if room_coord:
-                    climate_id = f"climate.{room_coord.room_config.name.lower().replace(' ', '_')}"
-                    if (
-                        climate_id == entity_id
-                        or entry.entry_id == entity_id
-                        or room_coord.room_config.name.lower() in entity_id.lower()
-                    ):
-                        room_entry = entry
-                        matched_coordinator = room_coord
-                        break
-                elif entry.title.lower() in entity_id.lower() or entry.entry_id == entity_id:
+                if entry.entry_id == entity_id:
                     room_entry = entry
+                    matched_coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
                     break
+
+        # Pass 2: match by state machine attributes if entity_id is a climate entity
+        if not room_entry and entity_id.startswith("climate."):
+            state = hass.states.get(entity_id)
+            if state and state.attributes.get("entry_id"):
+                matched_id = state.attributes.get("entry_id")
+                for entry in hass.config_entries.async_entries(DOMAIN):
+                    if entry.entry_id == matched_id:
+                        room_entry = entry
+                        matched_coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
+                        break
+
+        # Pass 3: match by coordinator room_config name
+        if not room_entry:
+            for entry in hass.config_entries.async_entries(DOMAIN):
+                if not entry.data.get("is_hub", False) and entry.data.get("entry_type") != "hub":
+                    room_coord = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
+                    if room_coord and hasattr(room_coord, "room_config"):
+                        c_name = room_coord.room_config.name.strip().lower()
+                        clean_target = entity_id.lower().replace("climate.", "").replace("tadiy_", "").replace("ta_", "").strip()
+                        if c_name == clean_target or c_name in clean_target:
+                            room_entry = entry
+                            matched_coordinator = room_coord
+                            break
+                    elif entry.title.lower() in entity_id.lower():
+                        room_entry = entry
+                        break
 
         if not room_entry:
             _LOGGER.error("Cannot set room config: Room entry not found for %s", entity_id)
@@ -1163,6 +1182,11 @@ async def async_register_services(
                 matched_coordinator.room_config.window_open_timeout = call.data["window_open_timeout"]
             if "window_close_timeout" in call.data:
                 matched_coordinator.room_config.window_close_timeout = call.data["window_close_timeout"]
+            if hasattr(matched_coordinator, "window_detector") and matched_coordinator.window_detector:
+                matched_coordinator.window_detector.update_timeouts(
+                    matched_coordinator.room_config.window_open_timeout,
+                    matched_coordinator.room_config.window_close_timeout,
+                )
             if "dont_heat_below_outdoor" in call.data:
                 matched_coordinator.room_config.dont_heat_below_outdoor = call.data["dont_heat_below_outdoor"]
             if "min_heating_rate" in call.data:
