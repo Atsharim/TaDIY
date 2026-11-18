@@ -90,9 +90,15 @@ class WindowDetector:
         return self._current_state.heating_should_stop if self._current_state else False
 
     def update_timeouts(
-        self, open_timeout_seconds: int, close_timeout_seconds: int
+        self,
+        open_timeout_seconds: int | None = None,
+        close_timeout_seconds: int | None = None,
     ) -> None:
         """Update open and close timeout durations dynamically."""
+        if open_timeout_seconds is None:
+            open_timeout_seconds = DEFAULT_WINDOW_OPEN_TIMEOUT
+        if close_timeout_seconds is None:
+            close_timeout_seconds = DEFAULT_WINDOW_CLOSE_TIMEOUT
         open_clamped = max(
             MIN_WINDOW_TIMEOUT, min(open_timeout_seconds, MAX_WINDOW_TIMEOUT)
         )

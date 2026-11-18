@@ -21,6 +21,10 @@ from .const import (
     CONF_COUPLING_STRENGTH,
     CONF_CUSTOM_MODES,
     CONF_DHW_TEMP_SENSOR,
+    CONF_DEFAULT_DISABLE_VALVE_PROTECTION,
+    CONF_DEFAULT_TRV_MAX_TEMP,
+    CONF_DEFAULT_TRV_MIN_TEMP,
+    CONF_DEFAULT_TRV_MODE,
     CONF_DISABLE_VALVE_PROTECTION,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
     CONF_EARLY_START_MAX,
@@ -53,6 +57,8 @@ from .const import (
     CONF_TARGET_TEMP_STEP,
     CONF_TRV_ENTITIES,
     CONF_TRV_HVAC_MODES,
+    CONF_TRV_MAX_TEMP,
+    CONF_TRV_MIN_TEMP,
     CONF_USE_HEATING_CURVE,
     CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
@@ -88,9 +94,11 @@ from .const import (
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
     DEFAULT_TARGET_TEMP_STEP,
+    DEFAULT_TRV_MAX_TEMP,
+    DEFAULT_TRV_MIN_TEMP,
+    DEFAULT_TRV_MODE,
     DEFAULT_USE_EARLY_START,
     DEFAULT_USE_HEATING_CURVE,
-    DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
     DEFAULT_USE_PID_CONTROL,
     DEFAULT_USE_ROOM_COUPLING,
     DEFAULT_USE_WEATHER_PREDICTION,
@@ -653,6 +661,45 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     self,
                     "window_house_setback_delta",
                     DEFAULT_WINDOW_HOUSE_SETBACK_DELTA,
+                ),
+                CONF_DEFAULT_TRV_MODE: self.config_data.get(
+                    CONF_DEFAULT_TRV_MODE, DEFAULT_TRV_MODE
+                ),
+                CONF_DEFAULT_TRV_MIN_TEMP: float(
+                    self.config_data.get(
+                        CONF_DEFAULT_TRV_MIN_TEMP,
+                        self.config_data.get(CONF_TRV_MIN_TEMP, DEFAULT_TRV_MIN_TEMP),
+                    )
+                ),
+                CONF_DEFAULT_TRV_MAX_TEMP: float(
+                    self.config_data.get(
+                        CONF_DEFAULT_TRV_MAX_TEMP,
+                        self.config_data.get(CONF_TRV_MAX_TEMP, DEFAULT_TRV_MAX_TEMP),
+                    )
+                ),
+                CONF_DEFAULT_DISABLE_VALVE_PROTECTION: bool(
+                    self.config_data.get(
+                        CONF_DEFAULT_DISABLE_VALVE_PROTECTION,
+                        self.config_data.get(CONF_DISABLE_VALVE_PROTECTION, False),
+                    )
+                ),
+                CONF_AWAY_TEMPERATURE: float(
+                    self.config_data.get(
+                        CONF_AWAY_TEMPERATURE, DEFAULT_AWAY_TEMPERATURE
+                    )
+                ),
+                CONF_HYSTERESIS: float(
+                    self.config_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
+                ),
+                CONF_TARGET_TEMP_STEP: float(
+                    self.config_data.get(
+                        CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
+                    )
+                ),
+                CONF_COUPLING_STRENGTH: float(
+                    self.config_data.get(
+                        CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH
+                    )
                 ),
             }
         )
@@ -1535,6 +1582,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         default_close_timeout = hub_settings.get(
             CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
         )
+        hub_trv_mode = hub_settings.get(CONF_DEFAULT_TRV_MODE, DEFAULT_TRV_MODE)
+        default_pid = hub_trv_mode == "sonoff_pid"
+        default_hvac_off = hub_trv_mode == "moes_hvac"
         return {
             "name": room_data.get(CONF_ROOM_NAME, "Unknown"),
             "trv_entity_ids": room_data.get(CONF_TRV_ENTITIES, []),
@@ -1572,12 +1622,20 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "early_start_offset": room_data.get("early_start_offset"),  # None = use hub
             "early_start_max": room_data.get("early_start_max"),  # None = use hub
             "override_timeout": room_data.get("override_timeout"),  # None = use hub
-            "hysteresis": room_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS),
-            "target_temp_step": room_data.get(
-                CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
+            "hysteresis": (
+                room_data[CONF_HYSTERESIS]
+                if room_data.get(CONF_HYSTERESIS) is not None
+                else hub_settings.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
             ),
-            "use_pid_control": room_data.get(
-                CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL
+            "target_temp_step": (
+                room_data[CONF_TARGET_TEMP_STEP]
+                if room_data.get(CONF_TARGET_TEMP_STEP) is not None
+                else hub_settings.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
+            ),
+            "use_pid_control": (
+                room_data[CONF_USE_PID_CONTROL]
+                if room_data.get(CONF_USE_PID_CONTROL) is not None
+                else default_pid
             ),
             "pid_kp": room_data.get(CONF_PID_KP, DEFAULT_PID_KP),
             "pid_ki": room_data.get(CONF_PID_KI, DEFAULT_PID_KI),
@@ -1593,8 +1651,10 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             "use_humidity_compensation": room_data.get(
                 "use_humidity_compensation", False
             ),
-            "use_hvac_off_for_low_temp": room_data.get(
-                CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP
+            "use_hvac_off_for_low_temp": (
+                room_data[CONF_USE_HVAC_OFF_FOR_LOW_TEMP]
+                if room_data.get(CONF_USE_HVAC_OFF_FOR_LOW_TEMP) is not None
+                else default_hvac_off
             ),
             "trv_hvac_modes": room_data.get(CONF_TRV_HVAC_MODES, None),
             "use_weather_prediction": room_data.get(
@@ -1607,11 +1667,30 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING
             ),
             "adjacent_rooms": room_data.get(CONF_ADJACENT_ROOMS, []),
-            "coupling_strength": room_data.get(
-                CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH
+            "coupling_strength": (
+                room_data[CONF_COUPLING_STRENGTH]
+                if room_data.get(CONF_COUPLING_STRENGTH) is not None
+                else hub_settings.get(CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH)
             ),
-            "disable_valve_protection": room_data.get(
-                CONF_DISABLE_VALVE_PROTECTION, False
+            "away_temperature": (
+                room_data[CONF_AWAY_TEMPERATURE]
+                if room_data.get(CONF_AWAY_TEMPERATURE) is not None
+                else hub_settings.get(CONF_AWAY_TEMPERATURE, DEFAULT_AWAY_TEMPERATURE)
+            ),
+            "trv_min_temp": (
+                room_data[CONF_TRV_MIN_TEMP]
+                if room_data.get(CONF_TRV_MIN_TEMP) is not None
+                else hub_settings.get(CONF_DEFAULT_TRV_MIN_TEMP, DEFAULT_TRV_MIN_TEMP)
+            ),
+            "trv_max_temp": (
+                room_data[CONF_TRV_MAX_TEMP]
+                if room_data.get(CONF_TRV_MAX_TEMP) is not None
+                else hub_settings.get(CONF_DEFAULT_TRV_MAX_TEMP, DEFAULT_TRV_MAX_TEMP)
+            ),
+            "disable_valve_protection": (
+                room_data[CONF_DISABLE_VALVE_PROTECTION]
+                if room_data.get(CONF_DISABLE_VALVE_PROTECTION) is not None
+                else hub_settings.get(CONF_DEFAULT_DISABLE_VALVE_PROTECTION, False)
             ),
         }
 

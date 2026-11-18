@@ -12,20 +12,44 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_AWAY_TEMPERATURE,
     CONF_BOILER_MIN_RUN_TIME,
     CONF_BOILER_TEMP_SENSOR,
     CONF_BOOST_DURATION,
     CONF_BOOST_TEMPERATURE,
+    CONF_COUPLING_STRENGTH,
     CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
+    CONF_DEFAULT_DISABLE_VALVE_PROTECTION,
+    CONF_DEFAULT_TRV_MAX_TEMP,
+    CONF_DEFAULT_TRV_MIN_TEMP,
+    CONF_DEFAULT_TRV_MODE,
     CONF_DHW_TEMP_SENSOR,
+    CONF_DISABLE_VALVE_PROTECTION,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
+    CONF_EARLY_START_MAX,
+    CONF_EARLY_START_OFFSET,
+    CONF_FRIDAY_WEEKEND_START_HOUR,
     CONF_FROST_PROTECTION_TEMP,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_OFFSET_DURATION_HOURS,
     CONF_GLOBAL_OFFSET_MODE,
     CONF_GLOBAL_OFFSET_STEP,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
+    CONF_HEATING_CURVE_SLOPE,
+    CONF_HOMEOFFICE_END_HOUR,
+    CONF_HOMEOFFICE_SINGLE_DAY,
+    CONF_HYSTERESIS,
     CONF_PERSON_ENTITIES,
+    CONF_TARGET_TEMP_STEP,
+    CONF_TRV_MAX_TEMP,
+    CONF_TRV_MIN_TEMP,
+    CONF_USE_HEATING_CURVE,
+    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+    CONF_USE_PID_CONTROL,
+    CONF_USE_WEATHER_PREDICTION,
+    CONF_VALVE_PROTECTION_DAY,
+    CONF_VALVE_PROTECTION_HOUR,
+    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
     CONF_WINDOW_CLOSE_TIMEOUT,
     CONF_WINDOW_HOUSE_SETBACK_DELTA,
     CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
@@ -188,6 +212,57 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
                     getattr(self.coordinator, "global_offset_until", None).isoformat()
                     if getattr(self.coordinator, "global_offset_until", None)
                     else None
+                ),
+                CONF_EARLY_START_OFFSET: cfg.get(CONF_EARLY_START_OFFSET, 15),
+                CONF_EARLY_START_MAX: cfg.get(CONF_EARLY_START_MAX, 120),
+                CONF_FRIDAY_WEEKEND_START_HOUR: cfg.get(
+                    CONF_FRIDAY_WEEKEND_START_HOUR, 16
+                ),
+                CONF_HOMEOFFICE_END_HOUR: cfg.get(CONF_HOMEOFFICE_END_HOUR, 17),
+                CONF_HOMEOFFICE_SINGLE_DAY: cfg.get(CONF_HOMEOFFICE_SINGLE_DAY, True),
+                CONF_VALVE_PROTECTION_DAY: cfg.get(CONF_VALVE_PROTECTION_DAY, 0),
+                CONF_VALVE_PROTECTION_HOUR: cfg.get(CONF_VALVE_PROTECTION_HOUR, 10),
+                CONF_VALVE_PROTECTION_INTERVAL_WEEKS: cfg.get(
+                    CONF_VALVE_PROTECTION_INTERVAL_WEEKS, 2
+                ),
+                CONF_USE_HEATING_CURVE: cfg.get(CONF_USE_HEATING_CURVE, False),
+                CONF_HEATING_CURVE_SLOPE: cfg.get(CONF_HEATING_CURVE_SLOPE, 0.5),
+                CONF_USE_WEATHER_PREDICTION: cfg.get(CONF_USE_WEATHER_PREDICTION, True),
+                CONF_AWAY_TEMPERATURE: cfg.get(CONF_AWAY_TEMPERATURE, 17.0),
+                CONF_HYSTERESIS: cfg.get(CONF_HYSTERESIS, 0.4),
+                "tolerance": cfg.get(CONF_HYSTERESIS, 0.4),
+                CONF_TARGET_TEMP_STEP: cfg.get(CONF_TARGET_TEMP_STEP, 0.5),
+                CONF_COUPLING_STRENGTH: cfg.get(CONF_COUPLING_STRENGTH, 0.5),
+                CONF_TRV_MIN_TEMP: cfg.get(CONF_TRV_MIN_TEMP, 5.0),
+                "default_trv_min_temp": cfg.get(
+                    CONF_DEFAULT_TRV_MIN_TEMP, cfg.get(CONF_TRV_MIN_TEMP, 5.0)
+                ),
+                CONF_TRV_MAX_TEMP: cfg.get(CONF_TRV_MAX_TEMP, 35.0),
+                "default_trv_max_temp": cfg.get(
+                    CONF_DEFAULT_TRV_MAX_TEMP, cfg.get(CONF_TRV_MAX_TEMP, 35.0)
+                ),
+                CONF_DISABLE_VALVE_PROTECTION: cfg.get(
+                    CONF_DISABLE_VALVE_PROTECTION, False
+                ),
+                "default_disable_valve_protection": cfg.get(
+                    CONF_DEFAULT_DISABLE_VALVE_PROTECTION,
+                    cfg.get(CONF_DISABLE_VALVE_PROTECTION, False),
+                ),
+                CONF_DEFAULT_TRV_MODE: cfg.get(
+                    CONF_DEFAULT_TRV_MODE,
+                    (
+                        "moes_hvac"
+                        if cfg.get(CONF_USE_HVAC_OFF_FOR_LOW_TEMP)
+                        else (
+                            "sonoff_pid"
+                            if cfg.get(CONF_USE_PID_CONTROL)
+                            else "standard"
+                        )
+                    ),
+                ),
+                CONF_USE_PID_CONTROL: cfg.get(CONF_USE_PID_CONTROL, False),
+                CONF_USE_HVAC_OFF_FOR_LOW_TEMP: cfg.get(
+                    CONF_USE_HVAC_OFF_FOR_LOW_TEMP, False
                 ),
             }
         return {}

@@ -17,7 +17,18 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, OVERRIDE_TIMEOUT_NEVER
+from .const import (
+    CONF_AWAY_TEMPERATURE,
+    CONF_COUPLING_STRENGTH,
+    CONF_DISABLE_VALVE_PROTECTION,
+    CONF_HYSTERESIS,
+    CONF_OVERRIDE_TIMEOUT,
+    CONF_TARGET_TEMP_STEP,
+    CONF_TRV_MAX_TEMP,
+    CONF_TRV_MIN_TEMP,
+    DOMAIN,
+    OVERRIDE_TIMEOUT_NEVER,
+)
 from .core.device_helpers import get_device_info
 
 _LOGGER = logging.getLogger(__name__)
@@ -272,6 +283,95 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
             attrs["adjacent_rooms"] = getattr(
                 cfg, "adjacent_rooms", opts.get("adjacent_rooms", [])
             )
+            attrs["target_temp_step"] = getattr(
+                cfg, "target_temp_step", opts.get("target_temp_step", 0.5)
+            )
+            attrs["use_hvac_off_for_low_temp"] = getattr(
+                cfg,
+                "use_hvac_off_for_low_temp",
+                opts.get("use_hvac_off_for_low_temp", False),
+            )
+            attrs["use_room_coupling"] = getattr(
+                cfg, "use_coupling", opts.get("use_room_coupling", False)
+            )
+            attrs["coupling_strength"] = getattr(
+                cfg, "coupling_strength", opts.get("coupling_strength", 0.5)
+            )
+            attrs["trv_min_temp"] = getattr(
+                cfg, "min_temp", opts.get("trv_min_temp", 5.0)
+            )
+            attrs["trv_max_temp"] = getattr(
+                cfg, "max_temp", opts.get("trv_max_temp", 30.0)
+            )
+            attrs["disable_valve_protection"] = getattr(
+                cfg,
+                "disable_valve_protection",
+                opts.get("disable_valve_protection", False),
+            )
+            attrs["override_timeout"] = getattr(
+                cfg, "override_timeout", opts.get("override_timeout", "default")
+            )
+            # Granular custom override values (None if inherited from Hub)
+            attrs["custom_target_temp_step"] = opts.get(CONF_TARGET_TEMP_STEP)
+            attrs["custom_tolerance"] = opts.get("tolerance", opts.get(CONF_HYSTERESIS))
+            attrs["custom_away_temperature"] = opts.get(CONF_AWAY_TEMPERATURE)
+            attrs["custom_override_timeout"] = opts.get(CONF_OVERRIDE_TIMEOUT)
+            attrs["custom_early_start_max_minutes"] = opts.get(
+                "early_start_max_minutes"
+            )
+            attrs["custom_window_open_timeout"] = opts.get("window_open_timeout")
+            attrs["custom_window_close_timeout"] = opts.get("window_close_timeout")
+            attrs["custom_min_heating_rate"] = opts.get("min_heating_rate")
+            attrs["custom_max_heating_rate"] = opts.get("max_heating_rate")
+            attrs["custom_dont_heat_below_outdoor"] = opts.get(
+                "dont_heat_below_outdoor"
+            )
+            attrs["custom_coupling_strength"] = opts.get(CONF_COUPLING_STRENGTH)
+            attrs["custom_trv_min_temp"] = opts.get(CONF_TRV_MIN_TEMP)
+            attrs["custom_trv_max_temp"] = opts.get(CONF_TRV_MAX_TEMP)
+            attrs["custom_disable_valve_protection"] = opts.get(
+                CONF_DISABLE_VALVE_PROTECTION
+            )
+            attrs["custom_trv_mode"] = opts.get("trv_mode")
+            attrs["has_custom_overrides"] = any(
+                opts.get(k) is not None
+                for k in [
+                    CONF_TARGET_TEMP_STEP,
+                    "tolerance",
+                    CONF_HYSTERESIS,
+                    CONF_AWAY_TEMPERATURE,
+                    CONF_OVERRIDE_TIMEOUT,
+                    "early_start_max_minutes",
+                    "window_open_timeout",
+                    "window_close_timeout",
+                    "min_heating_rate",
+                    "max_heating_rate",
+                    "dont_heat_below_outdoor",
+                    CONF_TRV_MIN_TEMP,
+                    CONF_TRV_MAX_TEMP,
+                    CONF_DISABLE_VALVE_PROTECTION,
+                    CONF_COUPLING_STRENGTH,
+                    "trv_mode",
+                ]
+            )
+
+            # PID settings exposure
+            from .core.control import PIDHeatingController
+
+            is_pid = isinstance(
+                getattr(self.coordinator, "heating_controller", None),
+                PIDHeatingController,
+            )
+            attrs["use_pid_control"] = is_pid
+            if is_pid and hasattr(self.coordinator.heating_controller, "config"):
+                pid_cfg = self.coordinator.heating_controller.config
+                attrs["pid_kp"] = getattr(pid_cfg, "kp", 0.6)
+                attrs["pid_ki"] = getattr(pid_cfg, "ki", 0.01)
+                attrs["pid_kd"] = getattr(pid_cfg, "kd", 0.1)
+            else:
+                attrs["pid_kp"] = opts.get("pid_kp", 0.6)
+                attrs["pid_ki"] = opts.get("pid_ki", 0.01)
+                attrs["pid_kd"] = opts.get("pid_kd", 0.1)
 
         return attrs
 

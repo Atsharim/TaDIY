@@ -412,6 +412,17 @@ CONF_TRV_MIN_TEMP: Final = "trv_min_temp"
 CONF_TRV_MAX_TEMP: Final = "trv_max_temp"
 DEFAULT_TRV_MIN_TEMP: Final = 5.0
 DEFAULT_TRV_MAX_TEMP: Final = 35.0
+CONF_DEFAULT_TRV_MIN_TEMP: Final = "default_trv_min_temp"
+CONF_DEFAULT_TRV_MAX_TEMP: Final = "default_trv_max_temp"
+CONF_DEFAULT_DISABLE_VALVE_PROTECTION: Final = "default_disable_valve_protection"
+
+# TRV control mode
+CONF_TRV_MODE: Final = "trv_mode"
+CONF_DEFAULT_TRV_MODE: Final = "default_trv_mode"
+TRV_MODE_STANDARD: Final = "standard"
+TRV_MODE_SONOFF_PID: Final = "sonoff_pid"
+TRV_MODE_MOES_HVAC: Final = "moes_hvac"
+DEFAULT_TRV_MODE: Final = "standard"
 
 # HVAC modes
 HVAC_MODE_OFF: Final = "off"

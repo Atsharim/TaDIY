@@ -26,15 +26,11 @@ from .const import (
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
     CONF_TRV_ENTITIES,
-    CONF_TRV_MAX_TEMP,
-    CONF_TRV_MIN_TEMP,
     CONF_WINDOW_SENSORS,
     DEFAULT_DONT_HEAT_BELOW,
     DEFAULT_EARLY_START_MAX,
     DEFAULT_EARLY_START_OFFSET,
     DEFAULT_LEARN_HEATING_RATE,
-    DEFAULT_TRV_MAX_TEMP,
-    DEFAULT_TRV_MIN_TEMP,
     DEFAULT_USE_EARLY_START,
     DEFAULT_WINDOW_CLOSE_TIMEOUT,
     DEFAULT_WINDOW_OPEN_TIMEOUT,
@@ -202,31 +198,6 @@ class TaDIYConfigFlow(ConfigFlow, domain=DOMAIN):
                     domain="binary_sensor",
                     device_class=["door", "window", "opening"],
                     multiple=True,
-                )
-            )
-        )
-
-        # TRV Min/Max Temperature (per-room hardware limits)
-        schema_dict[vol.Optional(CONF_TRV_MIN_TEMP, default=DEFAULT_TRV_MIN_TEMP)] = (
-            selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=1.0,
-                    max=15.0,
-                    step=0.5,
-                    unit_of_measurement="°C",
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            )
-        )
-
-        schema_dict[vol.Optional(CONF_TRV_MAX_TEMP, default=DEFAULT_TRV_MAX_TEMP)] = (
-            selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=20.0,
-                    max=40.0,
-                    step=0.5,
-                    unit_of_measurement="°C",
-                    mode=selector.NumberSelectorMode.BOX,
                 )
             )
         )

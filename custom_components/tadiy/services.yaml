@@ -155,14 +155,133 @@ set_hub_config:
           unit_of_measurement: "s"
     global_override_timeout:
       name: Global Override Timeout
-      description: Default duration in minutes for manual overrides
+      description: Default duration or trigger for manual overrides
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Nie (manuelle Änderungen bleiben für immer)"
+              value: "never"
+            - label: "1 Stunde"
+              value: "1h"
+            - label: "2 Stunden"
+              value: "2h"
+            - label: "3 Stunden"
+              value: "3h"
+            - label: "4 Stunden"
+              value: "4h"
+            - label: "Bis zum nächsten Zeitplan-Block"
+              value: "next_block"
+            - label: "Bis zum nächsten Tag (Mitternacht)"
+              value: "next_day"
+    early_start_offset:
+      name: Early Start Offset
+      description: Additional pre-heat time buffer in minutes
       required: false
       selector:
         number:
-          min: 15
-          max: 1440
+          min: 0
+          max: 60
+          step: 5
+          unit_of_measurement: "min"
+    early_start_max:
+      name: Early Start Max
+      description: Maximum allowed pre-heat time across all rooms in minutes
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 360
           step: 15
           unit_of_measurement: "min"
+    friday_weekend_start_hour:
+      name: Friday Weekend Start Hour
+      description: Hour on Friday when weekend heating schedule begins
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 24
+          step: 1
+          unit_of_measurement: "h"
+    homeoffice_end_hour:
+      name: Homeoffice End Hour
+      description: Hour when homeoffice profile transitions back to normal
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 24
+          step: 1
+          unit_of_measurement: "h"
+    homeoffice_single_day:
+      name: Homeoffice Single Day
+      description: Reset homeoffice mode automatically at midnight
+      required: false
+      selector:
+        boolean:
+    valve_protection_day:
+      name: Valve Protection Day
+      description: Day of the week for anti-calcification exercise (0=Monday, 6=Sunday)
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Montag"
+              value: "0"
+            - label: "Dienstag"
+              value: "1"
+            - label: "Mittwoch"
+              value: "2"
+            - label: "Donnerstag"
+              value: "3"
+            - label: "Freitag"
+              value: "4"
+            - label: "Samstag"
+              value: "5"
+            - label: "Sonntag"
+              value: "6"
+    valve_protection_hour:
+      name: Valve Protection Hour
+      description: Hour of day for valve protection exercise (0-23)
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 23
+          step: 1
+          unit_of_measurement: "h"
+    valve_protection_interval_weeks:
+      name: Valve Protection Interval Weeks
+      description: Interval in weeks between valve protection cycles
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 4
+          step: 1
+          unit_of_measurement: "w"
+    use_heating_curve:
+      name: Use Heating Curve
+      description: Enable outdoor weather compensation curve
+      required: false
+      selector:
+        boolean:
+    heating_curve_slope:
+      name: Heating Curve Slope
+      description: Heating curve slope factor
+      required: false
+      selector:
+        number:
+          min: 0.2
+          max: 3.5
+          step: 0.1
+    use_weather_prediction:
+      name: Use Weather Prediction
+      description: Enable solar and temperature forecast adjustments
+      required: false
+      selector:
+        boolean:
     dont_heat_below_outdoor:
       name: Summer Switch-off Outdoor Temperature
       description: Do not heat when outdoor temperature is above this value
@@ -406,3 +525,143 @@ set_room_config:
           options: []
           multiple: true
           custom_value: true
+    hysteresis:
+      name: Hysteresis
+      description: Temperature hysteresis / deadband (°C)
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 2.0
+          step: 0.1
+          unit_of_measurement: "°C"
+    target_temp_step:
+      name: Target Temperature Step
+      description: Minimum step size for target temperatures (°C)
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 1.0
+          step: 0.1
+          unit_of_measurement: "°C"
+    use_pid_control:
+      name: Use PID Control
+      description: Enable PID temperature regulation algorithm
+      required: false
+      selector:
+        boolean:
+    pid_kp:
+      name: PID Proportional Gain (Kp)
+      description: Proportional coefficient
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 5.0
+          step: 0.1
+    pid_ki:
+      name: PID Integral Gain (Ki)
+      description: Integral coefficient
+      required: false
+      selector:
+        number:
+          min: 0.001
+          max: 0.1
+          step: 0.001
+    pid_kd:
+      name: PID Derivative Gain (Kd)
+      description: Derivative coefficient
+      required: false
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.01
+    use_hvac_off_for_low_temp:
+      name: Use HVAC Off For Low Temp
+      description: Use HVAC off mode instead of minimum setpoint (for MOES TRVs)
+      required: false
+      selector:
+        boolean:
+    use_room_coupling:
+      name: Use Room Coupling
+      description: Adjust setpoint dynamically when adjacent rooms are heating
+      required: false
+      selector:
+        boolean:
+    coupling_strength:
+      name: Coupling Strength
+      description: Strength of adjacent room thermal coupling factor (0.1 - 1.0)
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 1.0
+          step: 0.1
+    trv_min_temp:
+      name: TRV Min Temp
+      description: Minimum target temperature accepted by TRV hardware
+      required: false
+      selector:
+        number:
+          min: 1.0
+          max: 15.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    trv_max_temp:
+      name: TRV Max Temp
+      description: Maximum target temperature accepted by TRV hardware
+      required: false
+      selector:
+        number:
+          min: 20.0
+          max: 40.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    disable_valve_protection:
+      name: Disable Valve Protection
+      description: Exclude this room from the periodic anti-calcification exercise
+      required: false
+      selector:
+        boolean:
+    override_timeout:
+      name: Room Override Timeout
+      description: Manual temperature override timeout duration or trigger
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Hub-Einstellung verwenden"
+              value: "default"
+            - label: "Nie (manuelle Änderungen bleiben für immer)"
+              value: "never"
+            - label: "1 Stunde"
+              value: "1h"
+            - label: "2 Stunden"
+              value: "2h"
+            - label: "3 Stunden"
+              value: "3h"
+            - label: "4 Stunden"
+              value: "4h"
+            - label: "Bis zum nächsten Zeitplan-Block"
+              value: "next_block"
+            - label: "Bis zum nächsten Tag (Mitternacht)"
+              value: "next_day"
+    trv_mode:
+      name: TRV Mode
+      description: TRV valve control strategy (standard, sonoff_pid, moes_hvac, default)
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Vom Hub erben"
+              value: "default"
+            - label: "Standard"
+              value: "standard"
+            - label: "Sonoff (PID Regelung)"
+              value: "sonoff_pid"
+            - label: "Moes (HVAC Aus)"
+              value: "moes_hvac"
+            - label: "Immer Zeitplan verwenden"
+              value: "always"

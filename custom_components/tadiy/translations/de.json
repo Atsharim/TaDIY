@@ -13,23 +13,14 @@
           "trv_entities": "Thermostate (TRVs)",
           "main_temp_sensor": "Temperatursensor",
           "humidity_sensor": "Luftfeuchtigkeitssensor",
-          "window_sensors": "Fenstersensoren",
-          "outdoor_sensor": "Außentemperatursensor",
-          "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
-          "weather_entity": "Wetter-Entität",
-          "trv_min_temp": "TRV Mindesttemperatur",
-          "trv_max_temp": "TRV Höchsttemperatur"
+          "window_sensors": "Fenstersensoren"
         },
         "data_description": {
           "room_name": "Eindeutigen Namen für diesen Raum wählen.",
           "trv_entities": "Wähle ein oder mehr Klima-Entitäten (TRVs) für diesen Raum.",
           "main_temp_sensor": "Haupttemperatursensor für diesen Raum (optional).",
           "humidity_sensor": "Luftfeuchtigkeitssensor für diesen Raum (optional).",
-          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
-          "outdoor_sensor": "Außentemperatursensor für wetterabhängige Steuerung (optional).",
-          "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersage (optional, wird auf Hub-Ebene als Fallback verwendet).",
-          "trv_min_temp": "Mindesttemperatur die Ihr TRV unterstützt (Standard: 5°C).",
-          "trv_max_temp": "Höchsttemperatur die Ihr TRV unterstützt (Standard: 35°C)."
+          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional)."
         }
       }
     },
@@ -49,55 +40,20 @@
     "step": {
       "room_config": {
         "title": "Raum Optionen",
-        "description": "Grundlegende Raumeinstellungen konfigurieren. Wetter- und Early-Start-Einstellungen werden auf Hub-Ebene konfiguriert.",
+        "description": "Raum-Entitäten und Sensoren konfigurieren. Regelungsparameter (Hysterese, Modus, Kopplung etc.) werden im TaDIY-Panel konfiguriert.",
         "data": {
           "room_name": "Raumname",
           "trv_entities": "Thermostate (TRVs)",
           "main_temp_sensor": "Temperatursensor",
           "humidity_sensor": "Luftfeuchtigkeitssensor",
-          "window_sensors": "Fenstersensoren",
-          "outdoor_sensor": "Außentemperatursensor",
-          "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
-          "weather_entity": "Wetter-Entität",
-          "override_timeout": "Überschreibungs-Timeout",
-          "hysteresis": "Temperatur Hysterese",
-          "target_temp_step": "Zieltemperatur-Schrittgröße",
-          "use_pid_control": "PID Regelung aktivieren",
-          "pid_kp": "PID: Proportionalverstärkung (Kp)",
-          "pid_ki": "PID: Integralverstärkung (Ki)",
-          "pid_kd": "PID: Differenzialverstärkung (Kd)",
-          "use_hvac_off_for_low_temp": "HVAC Aus für niedrige Temp (Moes TRVs)",
-          "use_room_coupling": "Raum-Kopplung aktivieren",
-          "adjacent_rooms": "Benachbarte Räume",
-          "coupling_strength": "Kopplungsstärke",
-          "away_temperature": "Abwesenheitstemperatur",
-          "trv_min_temp": "TRV Mindesttemperatur",
-          "trv_max_temp": "TRV Höchsttemperatur",
-          "disable_valve_protection": "Ventilschutz deaktivieren"
+          "window_sensors": "Fenstersensoren"
         },
         "data_description": {
           "room_name": "Eindeutigen Namen für diesen Raum wählen.",
           "trv_entities": "Wähle ein oder mehr Klima-Entitäten (TRVs) für diesen Raum.",
           "main_temp_sensor": "Haupttemperatursensor für diesen Raum (optional).",
           "humidity_sensor": "Luftfeuchtigkeitssensor für diesen Raum (optional).",
-          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional).",
-          "outdoor_sensor": "Außentemperatursensor (optional).",
-          "weather_entity": "Wetter-Entität für diesen Raum (optional).",
-          "override_timeout": "Wie lange manuelle TRV-Änderungen Zeitpläne überschreiben (leer = Hub-Einstellung verwenden).",
-          "hysteresis": "Temperatur-Totzone zur Vermeidung schneller An/Aus-Zyklen.",
-          "target_temp_step": "Mindesttemperaturänderung bevor ein neuer Befehl an das TRV gesendet wird.",
-          "use_pid_control": "PID-Regler für sanftere Temperaturregelung aktivieren.",
-          "use_hvac_off_for_low_temp": "Für Moes TRVs aktivieren, die keine niedrigen Temperaturen unterstützen.",
-          "use_room_coupling": "Wärmeübertragung zwischen benachbarten Räumen berücksichtigen.",
-          "adjacent_rooms": "Räume auswählen, die Wände mit diesem Raum teilen.",
-          "coupling_strength": "Anpassung für Nachbar-Heizung (0.1=subtil, 1.0=stark).",
-          "pid_kp": "Proportional: Reagiert auf aktuelle Abweichung. Höher = schneller aber kann überschwingen.",
-          "pid_ki": "Integral: Beseitigt stationäre Abweichung. Höher = schneller aber kann oszillieren.",
-          "pid_kd": "Differential: Dämpft Oszillationen. Höher = sanfter aber langsamer.",
-          "away_temperature": "Zieltemperatur wenn niemand zu Hause ist (pro Raum).",
-          "trv_min_temp": "Mindesttemperatur die Ihr TRV unterstützt (Standard: 5°C).",
-          "trv_max_temp": "Höchsttemperatur die Ihr TRV unterstützt (Standard: 35°C).",
-          "disable_valve_protection": "Ventilschutz für diesen Raum deaktivieren (z. B. Schlafzimmer), um nächtliche Störgeräusche zu vermeiden."
+          "window_sensors": "Binärsensoren zur Erkennung offener Fenster/Türen (optional)."
         }
       },
       "add_mode": {
@@ -122,47 +78,22 @@
         "description": "{modes_info}"
       },
       "panel_settings": {
-        "title": "Hub Configuration",
-        "description": "Hub-Konfiguration:\n\n• Panel: TaDIY Zeitpläne in Seitenleiste anzeigen\n• Wetter-Entität: Wetter-Entität für Außentemperatur und Vorhersage\n• Personen-Entitäten: Personenverfolgung für ortsbasierte Heizung\n• Ortsmodus: Automatische Heizungsreduzierung wenn niemand zu Hause ist\n• Override Timeout: Wie lange manuelle TRV-Änderungen Zeitpläne überschreiben\n• Fenster-Timeouts: Wie lange vor/nach Fenster öffnen/schließen gewartet wird\n• Early Start: Vorheiz-Einstellungen\n• Heizkurve: Zieltemperatur basierend auf Außentemperatur anpassen\n• Wettervorhersage: Vorheizen vor Kaltfronten, Reduzierung vor Warmfronten",
+        "title": "Hub-Konfiguration",
+        "description": "Hub-Entitäten konfigurieren (Wetter, Außentemperatur, Vorlauf-/Heißwasser und Personen-Tracking). Regelungsparameter (Heizkurve, Timeouts, Vorheizen, Ventilschutz) werden im TaDIY-Panel konfiguriert.",
         "data": {
           "show_panel": "Zeitplan-Panel in Seitenleiste anzeigen",
           "weather_entity": "Wetter-Entität",
           "outdoor_sensor": "Außentemperatursensor",
           "boiler_temp_sensor": "Vorlauftemperatursensor (Heißwasser)",
-          "person_entities": "Personen-Entitäten",
-          "location_mode_enabled": "Ortsbasierte Heizung aktivieren (Abwesenheitsmodus)",
-          "global_override_timeout": "Standard-Überschreibungs-Timeout",
-          "early_start_offset": "Early Start Offset (min)",
-          "early_start_max": "Max Early Start Dauer (min)",
-          "use_heating_curve": "Heizkurve aktivieren (Wetterausgleich)",
-          "heating_curve_slope": "Heizkurven-Steigung",
-          "use_weather_prediction": "Wettervorhersage aktivieren",
-          "global_window_open_timeout": "Fenster-Offen-Timeout (Sekunden)",
-          "global_window_close_timeout": "Fenster-Schließ-Timeout (Sekunden)",
-          "friday_weekend_start_hour": "Freitag-Wochenende-Startstunde",
-          "homeoffice_end_hour": "Homeoffice-Feierabend-Stunde",
-          "homeoffice_single_day": "Homeoffice eintägig (autom. Rückfall auf Normal um Mitternacht)",
-          "valve_protection_day": "Ventilschutz-Wochentag",
-          "valve_protection_hour": "Ventilschutz-Uhrzeit",
-          "valve_protection_interval_weeks": "Ventilschutz-Intervall (Wochen)"
+          "dhw_temp_sensor": "Warmwasserspeicher-Temperatursensor",
+          "person_entities": "Personen-Entitäten"
         },
         "data_description": {
           "weather_entity": "Wetter-Entität für Außentemperatur und Vorhersagedaten.",
           "outdoor_sensor": "Globaler Außentemperatursensor, der als Fallback verwendet wird, wenn Räume keinen eigenen Außensensor haben.",
-          "boiler_temp_sensor": "Optionaler Temperaturfühler an der Heißwasser-Vorlaufleitung zur Erfassung der Kesselwärme und Zirkulation.",
-          "person_entities": "Personen-Entitäten für Anwesenheitserkennung und Abwesenheitsmodus.",
-          "early_start_offset": "Zusätzliche Pufferminuten für früheren Heizstart.",
-          "early_start_max": "Maximale Vorheiz-Dauer in Minuten.",
-          "heating_curve_slope": "Höherer Wert = stärkere Zieltemperatur-Anpassung bei niedrigen Außentemperaturen.",
-          "use_weather_prediction": "Vorheizen vor Kaltfronten, Heizung reduzieren vor Warmfronten.",
-          "global_window_open_timeout": "Wartezeit bevor die Heizung bei geöffnetem Fenster stoppt.",
-          "global_window_close_timeout": "Abkühlzeit bevor die Heizung nach Fensterschließung wieder startet.",
-          "friday_weekend_start_hour": "Uhrzeit am Freitag, ab der vom Wochentags- auf den Wochenend-Zeitplan gewechselt wird (24 = Mitternacht/deaktiviert).",
-          "homeoffice_end_hour": "Uhrzeit am Feierabend (z. B. 17), ab der vom Homeoffice-Plan wieder auf den regulären Abend-Wochentagsplan geschaltet wird (24 = deaktiviert).",
-          "homeoffice_single_day": "Wenn aktiv, wird der Modus Homeoffice um Mitternacht automatisch wieder auf Normalmodus zurückgesetzt.",
-          "valve_protection_day": "Wochentag, an dem die Entkalkungsfahrt (Ventilschutz) durchgeführt wird.",
-          "valve_protection_hour": "Uhrzeit (Stunde 0-23), zu der die Entkalkungsfahrt durchgeführt wird.",
-          "valve_protection_interval_weeks": "Intervall in Wochen für den Ventilschutz (z. B. alle 2 Wochen, um Batterien zu schonen)."
+          "boiler_temp_sensor": "Optionaler Temperaturfühler an der Vorlaufleitung zur Erfassung der Kesselwärme und Zirkulation.",
+          "dhw_temp_sensor": "Optionaler Temperaturfühler am Warmwasserspeicher (Brauchwasser / DHW).",
+          "person_entities": "Personen-Entitäten für Anwesenheitserkennung und Abwesenheitsmodus."
         }
       },
       "init_hub": {

@@ -18,6 +18,7 @@ class TaDiyPanel extends HTMLElement {
     this._selectedSettingsRoom = null;
     this._hasOpenDropdown = false;
     this._openDetails = new Set();
+    this._isFormDirty = false;
   }
 
   set hass(hass) {
@@ -43,6 +44,24 @@ class TaDiyPanel extends HTMLElement {
         scheduleCard.hass = newHass;
       }
       return false;
+    }
+
+    // Never re-render if user has focus inside an input, select or textarea
+    const activeEl = this.shadowRoot?.activeElement;
+    if (activeEl && ['INPUT', 'SELECT', 'TEXTAREA'].includes(activeEl.tagName)) {
+      return false;
+    }
+
+    // If form has unsaved modifications, prevent re-rendering to protect user input
+    if (this._isFormDirty) {
+      return false;
+    }
+
+    // On system tab, do not rebuild DOM on frequent room temperature changes
+    if (this._activeTab === 'system') {
+      const oldHubMode = Object.values(oldHass.states).find(e => e.entity_id.startsWith('select.') && e.entity_id.includes('hub_mode'))?.state;
+      const newHubMode = Object.values(newHass.states).find(e => e.entity_id.startsWith('select.') && e.entity_id.includes('hub_mode'))?.state;
+      return oldHubMode !== newHubMode;
     }
 
     const relevantOld = Object.keys(oldHass.states).filter(id =>
@@ -158,6 +177,34 @@ class TaDiyPanel extends HTMLElement {
           max_heating_rate: entity.attributes.max_heating_rate !== undefined ? entity.attributes.max_heating_rate : 3.0,
           dont_heat_below_outdoor: entity.attributes.dont_heat_below_outdoor !== undefined ? entity.attributes.dont_heat_below_outdoor : null,
           adjacent_rooms: entity.attributes.adjacent_rooms || [],
+          target_temp_step: entity.attributes.target_temp_step !== undefined ? entity.attributes.target_temp_step : 0.5,
+          use_hvac_off_for_low_temp: !!entity.attributes.use_hvac_off_for_low_temp,
+          use_room_coupling: !!entity.attributes.use_room_coupling,
+          coupling_strength: entity.attributes.coupling_strength !== undefined ? entity.attributes.coupling_strength : 0.5,
+          trv_min_temp: entity.attributes.trv_min_temp !== undefined ? entity.attributes.trv_min_temp : 5.0,
+          trv_max_temp: entity.attributes.trv_max_temp !== undefined ? entity.attributes.trv_max_temp : 30.0,
+          custom_target_temp_step: entity.attributes.custom_target_temp_step,
+          custom_tolerance: entity.attributes.custom_tolerance,
+          custom_away_temperature: entity.attributes.custom_away_temperature,
+          custom_override_timeout: entity.attributes.custom_override_timeout,
+          custom_early_start_max_minutes: entity.attributes.custom_early_start_max_minutes,
+          custom_window_open_timeout: entity.attributes.custom_window_open_timeout,
+          custom_window_close_timeout: entity.attributes.custom_window_close_timeout,
+          custom_min_heating_rate: entity.attributes.custom_min_heating_rate,
+          custom_max_heating_rate: entity.attributes.custom_max_heating_rate,
+          custom_dont_heat_below_outdoor: entity.attributes.custom_dont_heat_below_outdoor,
+          custom_coupling_strength: entity.attributes.custom_coupling_strength,
+          custom_trv_min_temp: entity.attributes.custom_trv_min_temp,
+          custom_trv_max_temp: entity.attributes.custom_trv_max_temp,
+          custom_disable_valve_protection: entity.attributes.custom_disable_valve_protection,
+          custom_trv_mode: entity.attributes.custom_trv_mode,
+          disable_valve_protection: !!entity.attributes.disable_valve_protection,
+          override_timeout: entity.attributes.override_timeout || 'default',
+          use_pid_control: !!entity.attributes.use_pid_control,
+          pid_kp: entity.attributes.pid_kp !== undefined ? entity.attributes.pid_kp : 0.6,
+          pid_ki: entity.attributes.pid_ki !== undefined ? entity.attributes.pid_ki : 0.01,
+          pid_kd: entity.attributes.pid_kd !== undefined ? entity.attributes.pid_kd : 0.1,
+          has_custom_overrides: !!entity.attributes.has_custom_overrides,
           current_temp: entity.attributes.current_temperature,
           target_temp: entity.attributes.temperature,
           hvac_action: entity.attributes.hvac_action,
@@ -840,30 +887,43 @@ class TaDiyPanel extends HTMLElement {
         }
         .settings-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-          gap: 12px;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 16px;
           margin-top: 14px;
+        }
+        @media (max-width: 600px) {
+          .settings-grid {
+            grid-template-columns: 1fr;
+          }
         }
         .setting-item {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 6px;
         }
         .setting-label {
-          font-size: 11px;
+          font-size: 12px;
           font-weight: 600;
           color: var(--secondary-text-color, #64748b);
+          line-height: 1.3;
         }
         .setting-input {
-          padding: 8px 10px;
+          padding: 9px 12px;
           border: 1px solid var(--divider-color, #cbd5e1);
-          border-radius: 6px;
+          border-radius: 8px;
           background: var(--card-background-color, #fff);
           color: var(--primary-text-color, #0f172a);
           font-size: 13px;
           font-weight: 600;
           box-sizing: border-box;
           outline: none;
+          transition: border-color 0.15s, background-color 0.15s;
+        }
+        .setting-input:disabled {
+          background: var(--secondary-background-color, #f1f5f9);
+          color: var(--secondary-text-color, #94a3b8);
+          cursor: not-allowed;
+          border-style: dashed;
         }
         .setting-input:focus {
           border-color: var(--primary-color, #0284c7);
@@ -1752,6 +1812,10 @@ class TaDiyPanel extends HTMLElement {
     const winOpenTimeout = hubAttrs.window_open_timeout !== undefined ? hubAttrs.window_open_timeout : 30;
     const winCloseTimeout = hubAttrs.window_close_timeout !== undefined ? hubAttrs.window_close_timeout : 60;
     const dontHeatBelow = (hubAttrs.dont_heat_below_outdoor !== undefined && hubAttrs.dont_heat_below_outdoor !== null) ? hubAttrs.dont_heat_below_outdoor : '';
+    const hubTrvMode = hubAttrs.default_trv_mode || (hubAttrs.use_hvac_off_for_low_temp ? 'moes_hvac' : (hubAttrs.use_pid_control ? 'sonoff_pid' : 'standard'));
+    const hubTrvModeLabel = hubTrvMode === 'moes_hvac' ? 'Moes / HVAC-Aus' : (hubTrvMode === 'sonoff_pid' ? 'Sonoff PID' : 'Standard');
+    const hubVpDisabled = hubAttrs.default_disable_valve_protection ?? hubAttrs.disable_valve_protection;
+    const hubVpLabel = hubVpDisabled ? 'Deaktiviert' : 'Aktiv';
 
     const boilerTemp = this._boilerTemp !== undefined && this._boilerTemp !== null ? this._boilerTemp : hubAttrs.boiler_temperature;
     const boilerActive = this._boilerActive !== undefined ? this._boilerActive : hubAttrs.boiler_active;
@@ -1830,6 +1894,49 @@ class TaDiyPanel extends HTMLElement {
         </div>
 
         <div class="system-card">
+          <h3>🔥 Kessel- & Heißwasser-Vorlauf</h3>
+          <table class="system-table">
+            <colgroup>
+              <col style="width: 44%;">
+              <col style="width: 56%;">
+            </colgroup>
+            <tr>
+              <td>Wärmeanforderung gesamt</td>
+              <td><strong>${heatingCount} Räume</strong></td>
+            </tr>
+            <tr>
+              <td>Kessel-Status</td>
+              <td><strong>${heatingCount > 0 ? '🔥 EIN (Heizbedarf)' : '🟢 STANDBY (Kein Bedarf)'}</strong></td>
+            </tr>
+            <tr>
+              <td>Vorlauftemperatur</td>
+              <td><strong>${boilerTemp !== undefined && boilerTemp !== null ? Number(boilerTemp).toFixed(1) + ' °C' : 'Nicht konfiguriert'}</strong></td>
+            </tr>
+            <tr>
+              <td>Heißwasser / Zirkulation</td>
+              <td><strong>${boilerActive ? '🔥 Aktiv / Fließend (>= 45°C)' : (boilerTemp !== null && boilerTemp !== undefined ? '🟢 Standby / Kalt (< 45°C)' : '---')}</strong></td>
+            </tr>
+            <tr>
+              <td>Fühler-Zustand</td>
+              <td>
+                ${boilerSensorAvailable ? '🟢 Online' : '⚠️ Offline / Fallback gepuffert'}
+                <div style="font-size: 11px; color: var(--secondary-text-color, #64748b); word-break: break-all; margin-top: 3px;">
+                  (${boilerEntity})
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td>Brennerschutz-Mindestlaufzeit</td>
+              <td>Aktiv (300 Sekunden Mindestlaufzeit)</td>
+            </tr>
+            <tr>
+              <td>Zyklus-Sperre bei Absenkung</td>
+              <td>Sofortige Freigabe bei Sollwertsenkung (K-01)</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="system-card" style="grid-column: 1 / -1;">
           <h3>⚙️ Hub-Einstellungen</h3>
           <p style="font-size: 13px; color: var(--secondary-text-color);">
             Zentrale Parameter für Frostschutz, Boost, Fensterüberwachung und Schnell-Offset:
@@ -1900,48 +2007,122 @@ class TaDiyPanel extends HTMLElement {
               <span class="setting-label">⏳ Offset-Dauer (Stunden)</span>
               <input type="number" class="setting-input" id="setting-offset-duration" value="${hubAttrs.global_offset_duration_hours ?? 3.0}" step="0.5" min="0.5" max="24.0">
             </div>
-            <div class="setting-item" style="grid-column: 1 / -1;">
-              <span class="setting-label">🔥 Kessel-Vorlauftemperaturfühler</span>
-              <input type="text" class="setting-input" id="filter-boiler-sensor" placeholder="🔍 Sensor suchen / filtern (z.B. kessel, vorlauf)..." style="font-size: 12px; padding: 6px 10px; margin-bottom: 4px;">
-              <select class="setting-input" id="setting-boiler-sensor">
-                <option value="">-- Nicht konfiguriert / Deaktiviert --</option>
-                ${boilerSensorOptions.map(s => `
-                  <option value="${s.entity_id}" ${s.entity_id === boilerEntity ? 'selected' : ''}>
-                    ${s.attributes.friendly_name ? `${s.attributes.friendly_name} (${s.entity_id})` : s.entity_id}
-                  </option>
-                `).join('')}
+            <div class="setting-item">
+              <span class="setting-label">⏱️ Standard-Überschreibung</span>
+              <select class="setting-input" id="setting-override-timeout">
+                <option value="next_block" ${(hubAttrs.global_override_timeout || 'next_block') === 'next_block' ? 'selected' : ''}>Bis zum nächsten Block</option>
+                <option value="next_day" ${hubAttrs.global_override_timeout === 'next_day' ? 'selected' : ''}>Bis zum nächsten Tag</option>
+                <option value="1h" ${hubAttrs.global_override_timeout === '1h' ? 'selected' : ''}>1 Stunde</option>
+                <option value="2h" ${hubAttrs.global_override_timeout === '2h' ? 'selected' : ''}>2 Stunden</option>
+                <option value="3h" ${hubAttrs.global_override_timeout === '3h' ? 'selected' : ''}>3 Stunden</option>
+                <option value="4h" ${hubAttrs.global_override_timeout === '4h' ? 'selected' : ''}>4 Stunden</option>
+                <option value="never" ${hubAttrs.global_override_timeout === 'never' ? 'selected' : ''}>Nie (dauerhaft)</option>
               </select>
             </div>
-            <div class="setting-item" style="grid-column: 1 / -1;">
-              <span class="setting-label">🚰 Warmwasser-Zirkulationsfühler</span>
-              <input type="text" class="setting-input" id="filter-dhw-sensor" placeholder="🔍 Sensor suchen / filtern (z.B. warmwasser, zirkulation)..." style="font-size: 12px; padding: 6px 10px; margin-bottom: 4px;">
-              <select class="setting-input" id="setting-dhw-sensor">
-                <option value="">-- Nicht konfiguriert / Deaktiviert --</option>
-                ${dhwSensorOptions.map(s => `
-                  <option value="${s.entity_id}" ${s.entity_id === currentDhw ? 'selected' : ''}>
-                    ${s.attributes.friendly_name ? `${s.attributes.friendly_name} (${s.entity_id})` : s.entity_id}
-                  </option>
-                `).join('')}
+            <div class="setting-item">
+              <span class="setting-label">⏳ Vorheiz-Puffer (Min.)</span>
+              <input type="number" class="setting-input" id="setting-early-start-offset" value="${hubAttrs.early_start_offset ?? 15}" step="5" min="0" max="60">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">⏳ Max. Vorheizzeit Hub (Min.)</span>
+              <input type="number" class="setting-input" id="setting-early-start-max" value="${hubAttrs.early_start_max ?? 120}" step="15" min="0" max="360">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">📅 Freitag-Wochenende ab (Uhr)</span>
+              <input type="number" class="setting-input" id="setting-friday-start" value="${hubAttrs.friday_weekend_start_hour ?? 16}" step="1" min="0" max="24">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">💼 Homeoffice Feierabend (Uhr)</span>
+              <input type="number" class="setting-input" id="setting-homeoffice-end" value="${hubAttrs.homeoffice_end_hour ?? 17}" step="1" min="0" max="24">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">💼 Homeoffice nur Einzeltag</span>
+              <select class="setting-input" id="setting-homeoffice-single-day">
+                <option value="true" ${hubAttrs.homeoffice_single_day !== false ? 'selected' : ''}>Ja (Reset um Mitternacht)</option>
+                <option value="false" ${hubAttrs.homeoffice_single_day === false ? 'selected' : ''}>Nein (Dauerhaft bis Deaktivierung)</option>
               </select>
             </div>
-            <div class="setting-item" style="grid-column: 1 / -1;">
-              <span class="setting-label">👥 Zählende Personen (Anwesenheit)</span>
-              <input type="text" class="setting-input" id="filter-persons" placeholder="🔍 Personen filtern..." style="font-size: 12px; padding: 6px 10px; margin-bottom: 4px;">
-              <div class="person-checkbox-list" id="person-checkbox-list">
-                ${allPersonEntities.map(p => {
-                  const isSelected = configuredPersons
-                    ? configuredPersons.includes(p.entity_id)
-                    : (!p.entity_id.includes('hassio') && !p.entity_id.includes('supervisor'));
-                  const label = p.attributes.friendly_name || p.entity_id.replace('person.', '');
-                  return `
-                    <label class="person-checkbox-item">
-                      <input type="checkbox" class="setting-person-checkbox" value="${p.entity_id}" ${isSelected ? 'checked' : ''}>
-                      <span>👤 ${label} <small style="color: var(--secondary-text-color);">(${p.entity_id})</small></span>
-                    </label>
-                  `;
-                }).join('')}
-                ${allPersonEntities.length === 0 ? '<div style="font-size: 12px; color: var(--secondary-text-color);">Keine person.* Entitäten in Home Assistant gefunden.</div>' : ''}
-              </div>
+            <div class="setting-item">
+              <span class="setting-label">🛡️ Ventilschutz Wochentag</span>
+              <select class="setting-input" id="setting-vp-day">
+                <option value="0" ${(hubAttrs.valve_protection_day ?? 0) == 0 ? 'selected' : ''}>Montag</option>
+                <option value="1" ${(hubAttrs.valve_protection_day ?? 0) == 1 ? 'selected' : ''}>Dienstag</option>
+                <option value="2" ${(hubAttrs.valve_protection_day ?? 0) == 2 ? 'selected' : ''}>Mittwoch</option>
+                <option value="3" ${(hubAttrs.valve_protection_day ?? 0) == 3 ? 'selected' : ''}>Donnerstag</option>
+                <option value="4" ${(hubAttrs.valve_protection_day ?? 0) == 4 ? 'selected' : ''}>Freitag</option>
+                <option value="5" ${(hubAttrs.valve_protection_day ?? 0) == 5 ? 'selected' : ''}>Samstag</option>
+                <option value="6" ${(hubAttrs.valve_protection_day ?? 0) == 6 ? 'selected' : ''}>Sonntag</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🛡️ Ventilschutz Uhrzeit (Uhr)</span>
+              <input type="number" class="setting-input" id="setting-vp-hour" value="${hubAttrs.valve_protection_hour ?? 10}" step="1" min="0" max="23">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🛡️ Ventilschutz Intervall (Wochen)</span>
+              <select class="setting-input" id="setting-vp-interval">
+                <option value="1" ${(hubAttrs.valve_protection_interval_weeks ?? 2) == 1 ? 'selected' : ''}>Jede Woche</option>
+                <option value="2" ${(hubAttrs.valve_protection_interval_weeks ?? 2) == 2 ? 'selected' : ''}>Alle 2 Wochen</option>
+                <option value="3" ${(hubAttrs.valve_protection_interval_weeks ?? 2) == 3 ? 'selected' : ''}>Alle 3 Wochen</option>
+                <option value="4" ${(hubAttrs.valve_protection_interval_weeks ?? 2) == 4 ? 'selected' : ''}>Alle 4 Wochen</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">📈 Heizkurve aktivieren</span>
+              <select class="setting-input" id="setting-use-heating-curve">
+                <option value="false" ${!hubAttrs.use_heating_curve ? 'selected' : ''}>Deaktiviert</option>
+                <option value="true" ${hubAttrs.use_heating_curve ? 'selected' : ''}>Aktiviert</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">📈 Heizkurven-Steigung</span>
+              <input type="number" class="setting-input" id="setting-heating-curve-slope" value="${hubAttrs.heating_curve_slope ?? 0.5}" step="0.1" min="0.2" max="3.5">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">☀️ Wettervorhersage-Anpassung</span>
+              <select class="setting-input" id="setting-use-weather-prediction">
+                <option value="true" ${hubAttrs.use_weather_prediction !== false ? 'selected' : ''}>Aktiviert</option>
+                <option value="false" ${hubAttrs.use_weather_prediction === false ? 'selected' : ''}>Deaktiviert</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🎛️ Standard TRV-Steuerungsmodus</span>
+              <select class="setting-input" id="setting-default-trv-mode">
+                <option value="standard" ${hubTrvMode === 'standard' ? 'selected' : ''}>Standard (Reine Hysterese-Regelung)</option>
+                <option value="sonoff_pid" ${hubTrvMode === 'sonoff_pid' ? 'selected' : ''}>Sonoff / Präzision (Kontinuierlich PID)</option>
+                <option value="moes_hvac" ${hubTrvMode === 'moes_hvac' ? 'selected' : ''}>Moes / Tuya (Zweipunkt mit HVAC-Aus)</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🌡️ Standard TRV Min-Temp (°C)</span>
+              <input type="number" class="setting-input" id="setting-default-trv-min" value="${hubAttrs.default_trv_min_temp ?? hubAttrs.trv_min_temp ?? 5.0}" step="0.5" min="1.0" max="15.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🌡️ Standard TRV Max-Temp (°C)</span>
+              <input type="number" class="setting-input" id="setting-default-trv-max" value="${hubAttrs.default_trv_max_temp ?? hubAttrs.trv_max_temp ?? 35.0}" step="0.5" min="20.0" max="40.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🛡️ Standard Ventilschutz</span>
+              <select class="setting-input" id="setting-default-disable-vp">
+                <option value="false" ${!hubVpDisabled ? 'selected' : ''}>Aktiv (Regelmäßige Fahrt)</option>
+                <option value="true" ${hubVpDisabled ? 'selected' : ''}>Deaktiviert</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🚶 Standard Abwesenheits-Temp (°C)</span>
+              <input type="number" class="setting-input" id="setting-away-temp" value="${hubAttrs.away_temperature ?? 17.0}" step="0.5" min="10" max="22">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🎯 Standard Hysterese (°C)</span>
+              <input type="number" class="setting-input" id="setting-tolerance" value="${hubAttrs.tolerance ?? hubAttrs.hysteresis ?? 0.4}" step="0.1" min="0.1" max="2.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">📏 Standard Zieltemp-Schrittweite (°C)</span>
+              <input type="number" class="setting-input" id="setting-target-step" value="${hubAttrs.target_temp_step ?? 0.5}" step="0.1" min="0.1" max="1.0">
+            </div>
+            <div class="setting-item">
+              <span class="setting-label">🚪 Standard Kopplungsstärke (0.1 - 1.0)</span>
+              <input type="number" class="setting-input" id="setting-default-coupling-strength" value="${hubAttrs.coupling_strength ?? 0.5}" step="0.1" min="0.1" max="1.0">
             </div>
           </div>
           <button type="button" class="btn-save-settings" data-action="save-hub-settings">
@@ -1949,14 +2130,14 @@ class TaDiyPanel extends HTMLElement {
           </button>
         </div>
 
-        <div class="system-card">
+        <div class="system-card" style="grid-column: 1 / -1;">
           <h3>🚪 Raum-Einstellungen</h3>
           <p style="font-size: 13px; color: var(--secondary-text-color);">
             Spezifische Regelungsparameter, Hysterese, Vorheizzeiten und Nachbarräume je Raum:
           </p>
-          <div style="margin-bottom: 14px;">
-            <label style="font-size: 12px; font-weight: 600; color: var(--secondary-text-color);">Raum auswählen:</label>
-            <select class="setting-input" id="room-settings-selector" style="width: 100%; margin-top: 4px; padding: 8px;">
+          <div style="margin-bottom: 16px; max-width: 480px;">
+            <label style="font-size: 13px; font-weight: 600; color: var(--secondary-text-color);">Raum auswählen:</label>
+            <select class="setting-input" id="room-settings-selector" style="width: 100%; margin-top: 6px; padding: 10px; font-size: 14px;">
               ${this._rooms.map(r => `
                 <option value="${r.entity_id}" ${r.entity_id === this._selectedSettingsRoom ? 'selected' : ''}>
                   ${r.name} (${r.entity_id})
@@ -1969,36 +2150,131 @@ class TaDiyPanel extends HTMLElement {
             const currentRoom = this._rooms.find(r => r.entity_id === this._selectedSettingsRoom) || this._rooms[0] || {};
             const otherRooms = this._rooms.filter(r => r.entity_id !== currentRoom.entity_id);
             const currentAdj = Array.isArray(currentRoom.adjacent_rooms) ? currentRoom.adjacent_rooms : [];
+            const roomTrvMode = (currentRoom.custom_trv_mode !== undefined && currentRoom.custom_trv_mode !== null && currentRoom.custom_trv_mode !== '') ? currentRoom.custom_trv_mode : 'default';
+            const roomVp = (currentRoom.custom_disable_valve_protection !== undefined && currentRoom.custom_disable_valve_protection !== null && currentRoom.custom_disable_valve_protection !== '') ? String(currentRoom.custom_disable_valve_protection) : 'default';
+            const hasOverrides = !!currentRoom.has_custom_overrides;
             return `
               <div class="settings-grid">
+                <div style="grid-column: 1 / -1; margin: 4px 0 6px 0; padding: 12px 16px; background: rgba(2, 132, 199, 0.06); border-left: 4px solid var(--primary-color, #0284c7); border-radius: 4px 8px 8px 4px; font-size: 13px; color: var(--primary-text-color);">
+                  <strong>💡 Granulare Hub-Vererbung:</strong> Felder ohne eigenen Eintrag (leer) bzw. auf «Vom Hub erben» nutzen automatisch den globalen Hub-Standardwert (im Platzhalter ersichtlich). Nur die Parameter ausfüllen, die für diesen Raum individuell abweichen sollen.
+                </div>
+
+                <div class="setting-item" style="grid-column: 1 / -1;">
+                  <span class="setting-label">🎛️ TRV-Steuerungsmodus</span>
+                  <select class="setting-input" id="room-setting-trv-mode">
+                    <option value="default" ${roomTrvMode === 'default' ? 'selected' : ''}>Vom Hub erben (${hubTrvModeLabel})</option>
+                    <option value="standard" ${roomTrvMode === 'standard' ? 'selected' : ''}>Standard (Reine Hysterese-Regelung)</option>
+                    <option value="sonoff_pid" ${roomTrvMode === 'sonoff_pid' ? 'selected' : ''}>Sonoff / Präzision (Kontinuierlich moduliert per PID)</option>
+                    <option value="moes_hvac" ${roomTrvMode === 'moes_hvac' ? 'selected' : ''}>Moes / Tuya (Zweipunkt mit hartem HVAC-Aus bei niedriger Temperatur)</option>
+                  </select>
+                </div>
                 <div class="setting-item">
-                  <span class="setting-label">🚶 Abwesenheits-Temp (°C)</span>
-                  <input type="number" class="setting-input" id="room-setting-away" value="${currentRoom.away_temperature ?? 15.0}" step="0.5" min="10" max="22">
+                  <span class="setting-label">🌡️ TRV Hardware Min-Temp (°C)</span>
+                  <input type="number" class="setting-input" id="room-setting-trv-min" value="${(currentRoom.custom_trv_min_temp !== undefined && currentRoom.custom_trv_min_temp !== null) ? currentRoom.custom_trv_min_temp : ''}" placeholder="Vom Hub (${hubAttrs.default_trv_min_temp ?? 5.0} °C)" step="0.5" min="1.0" max="15.0">
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">🌡️ TRV Hardware Max-Temp (°C)</span>
+                  <input type="number" class="setting-input" id="room-setting-trv-max" value="${(currentRoom.custom_trv_max_temp !== undefined && currentRoom.custom_trv_max_temp !== null) ? currentRoom.custom_trv_max_temp : ''}" placeholder="Vom Hub (${hubAttrs.default_trv_max_temp ?? 35.0} °C)" step="0.5" min="20.0" max="40.0">
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">🛡️ Ventilschutz für diesen Raum</span>
+                  <select class="setting-input" id="room-setting-disable-vp">
+                    <option value="default" ${roomVp === 'default' ? 'selected' : ''}>Vom Hub erben (${hubVpLabel})</option>
+                    <option value="false" ${roomVp === 'false' ? 'selected' : ''}>Aktiv (Teilnehmen)</option>
+                    <option value="true" ${roomVp === 'true' ? 'selected' : ''}>Deaktiviert (Ausschließen)</option>
+                  </select>
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">🚪 Raumkopplung aktivieren</span>
+                  <select class="setting-input" id="room-setting-coupling-enabled">
+                    <option value="false" ${!currentRoom.use_room_coupling ? 'selected' : ''}>Inaktiv</option>
+                    <option value="true" ${currentRoom.use_room_coupling ? 'selected' : ''}>Aktiviert</option>
+                  </select>
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">🚪 Kopplungsstärke (0.1 - 1.0)</span>
+                  <input type="number" class="setting-input" id="room-setting-coupling-strength" value="${(currentRoom.custom_coupling_strength !== undefined && currentRoom.custom_coupling_strength !== null) ? currentRoom.custom_coupling_strength : ''}" placeholder="Vom Hub (${hubAttrs.coupling_strength ?? 0.5})" step="0.1" min="0.1" max="1.0">
+                </div>
+
+                <div class="setting-item">
+                  <span class="setting-label">📏 Zieltemp-Schrittweite (°C)</span>
+                  <input type="number" class="setting-input" id="room-setting-target-step" value="${currentRoom.custom_target_temp_step ?? ''}" step="0.1" min="0.1" max="1.0" placeholder="Vom Hub (${hubAttrs.target_temp_step ?? 0.5} °C)">
                 </div>
                 <div class="setting-item">
                   <span class="setting-label">🎯 Regelungstoleranz / Hysterese (°C)</span>
-                  <input type="number" class="setting-input" id="room-setting-tolerance" value="${currentRoom.tolerance ?? 0.5}" step="0.1" min="0.2" max="1.5">
+                  <input type="number" class="setting-input" id="room-setting-tolerance" value="${currentRoom.custom_tolerance ?? ''}" step="0.1" min="0.1" max="2.0" placeholder="Vom Hub (${hubAttrs.tolerance ?? 0.4} °C)">
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">🚶 Abwesenheits-Temp (°C)</span>
+                  <input type="number" class="setting-input" id="room-setting-away" value="${currentRoom.custom_away_temperature ?? ''}" step="0.5" min="10" max="22" placeholder="Vom Hub (${hubAttrs.away_temperature ?? 17.0} °C)">
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">⏱️ Manuelle Überschreibung</span>
+                  <select class="setting-input" id="room-setting-override-timeout">
+                    <option value="default" ${(currentRoom.custom_override_timeout === undefined || currentRoom.custom_override_timeout === null || currentRoom.custom_override_timeout === 'default') ? 'selected' : ''}>Vom Hub erben (${hubAttrs.global_override_timeout || '120 Min.'})</option>
+                    <option value="next_block" ${currentRoom.custom_override_timeout === 'next_block' ? 'selected' : ''}>Bis zum nächsten Block</option>
+                    <option value="next_day" ${currentRoom.custom_override_timeout === 'next_day' ? 'selected' : ''}>Bis zum nächsten Tag</option>
+                    <option value="1h" ${currentRoom.custom_override_timeout === '1h' ? 'selected' : ''}>1 Stunde</option>
+                    <option value="2h" ${currentRoom.custom_override_timeout === '2h' ? 'selected' : ''}>2 Stunden</option>
+                    <option value="3h" ${currentRoom.custom_override_timeout === '3h' ? 'selected' : ''}>3 Stunden</option>
+                    <option value="4h" ${currentRoom.custom_override_timeout === '4h' ? 'selected' : ''}>4 Stunden</option>
+                    <option value="always" ${currentRoom.custom_override_timeout === 'always' ? 'selected' : ''}>Immer Zeitplan (keine manuelle Änderung)</option>
+                    <option value="never" ${currentRoom.custom_override_timeout === 'never' ? 'selected' : ''}>Nie (dauerhaft)</option>
+                  </select>
                 </div>
                 <div class="setting-item">
                   <span class="setting-label">⏳ Max. Vorheizzeit (Minuten)</span>
-                  <input type="number" class="setting-input" id="room-setting-early-start" value="${currentRoom.early_start_max_minutes ?? 120}" step="15" min="0" max="240">
+                  <input type="number" class="setting-input" id="room-setting-early-start" value="${currentRoom.custom_early_start_max_minutes ?? ''}" step="15" min="0" max="240" placeholder="Vom Hub (${hubAttrs.early_start_max ?? 120} Min.)">
                 </div>
                 <div class="setting-item">
                   <span class="setting-label"><ha-icon icon="mdi:window-open-variant" style="--mdc-icon-size: 14px;"></ha-icon> Fenster-Offen Timeout (s)</span>
-                  <input type="number" class="setting-input" id="room-setting-win-open" value="${currentRoom.window_open_timeout ?? 30}" step="5" min="5" max="300">
+                  <input type="number" class="setting-input" id="room-setting-win-open" value="${currentRoom.custom_window_open_timeout ?? ''}" step="5" min="5" max="300" placeholder="Vom Hub (${winOpenTimeout} s)">
+                </div>
+                <div class="setting-item">
+                  <span class="setting-label">🔄 Fenster-Schließen Abklingzeit (s)</span>
+                  <input type="number" class="setting-input" id="room-setting-win-close" value="${currentRoom.custom_window_close_timeout ?? ''}" step="5" min="5" max="300" placeholder="Vom Hub (${winCloseTimeout} s)">
                 </div>
                 <div class="setting-item">
                   <span class="setting-label">📈 Min. Heizrate (°C/h)</span>
-                  <input type="number" class="setting-input" id="room-setting-min-rate" value="${currentRoom.min_heating_rate ?? 0.5}" step="0.1" min="0.1" max="5.0">
+                  <input type="number" class="setting-input" id="room-setting-min-rate" value="${currentRoom.custom_min_heating_rate ?? ''}" step="0.1" min="0.1" max="5.0" placeholder="Standard (0,5 °C/h)">
                 </div>
                 <div class="setting-item">
                   <span class="setting-label">📉 Max. Heizrate (°C/h)</span>
-                  <input type="number" class="setting-input" id="room-setting-max-rate" value="${currentRoom.max_heating_rate ?? 3.0}" step="0.1" min="0.5" max="10.0">
+                  <input type="number" class="setting-input" id="room-setting-max-rate" value="${currentRoom.custom_max_heating_rate ?? ''}" step="0.1" min="0.5" max="10.0" placeholder="Standard (3,0 °C/h)">
                 </div>
                 <div class="setting-item">
                   <span class="setting-label">☀️ Sommerabschaltung (°C)</span>
-                  <input type="number" class="setting-input" id="room-setting-dont-heat" value="${currentRoom.dont_heat_below_outdoor ?? ''}" step="0.5" min="10" max="30" placeholder="Global (${dontHeatBelow !== '' ? dontHeatBelow + ' °C' : 'Deaktiviert'})">
+                  <input type="number" class="setting-input" id="room-setting-dont-heat" value="${currentRoom.custom_dont_heat_below_outdoor ?? ''}" step="0.5" min="10" max="30" placeholder="Vom Hub (${dontHeatBelow !== '' ? dontHeatBelow + ' °C' : 'Deaktiviert'})">
                 </div>
+
+                <details class="expert-settings" data-details-id="room-expert-pid" ${this._openDetails && this._openDetails.has('room-expert-pid') ? 'open' : ''} style="grid-column: 1 / -1; margin-top: 8px; padding: 14px 18px; background: var(--secondary-background-color, #f8fafc); border-radius: 10px; border: 1px dashed var(--divider-color, #cbd5e1);">
+                  <summary style="cursor: pointer; font-weight: 600; font-size: 13px; color: var(--primary-color); user-select: none;">
+                    ⚙️ Erweiterte PID-Parameter (Experten)
+                  </summary>
+                  <p style="font-size: 12px; color: var(--secondary-text-color); margin: 8px 0 14px 0;">
+                    💡 Diese Parameter werden im laufenden Betrieb normalerweise automatisch durch das adaptive Lernmodell (PID Auto-Tuning) optimiert. Eine manuelle Anpassung ist nur für spezielle Testfälle erforderlich.
+                  </p>
+                  <div class="settings-grid" style="margin-top: 0;">
+                    <div class="setting-item">
+                      <span class="setting-label">PID: Kp (Proportional)</span>
+                      <input type="number" class="setting-input" id="room-setting-pid-kp" value="${currentRoom.pid_kp ?? 0.6}" step="0.1" min="0.1" max="5.0">
+                    </div>
+                    <div class="setting-item">
+                      <span class="setting-label">PID: Ki (Integral)</span>
+                      <input type="number" class="setting-input" id="room-setting-pid-ki" value="${currentRoom.pid_ki ?? 0.01}" step="0.001" min="0.001" max="0.1">
+                    </div>
+                    <div class="setting-item">
+                      <span class="setting-label">PID: Kd (Differenzial)</span>
+                      <input type="number" class="setting-input" id="room-setting-pid-kd" value="${currentRoom.pid_kd ?? 0.1}" step="0.01" min="0.0" max="1.0">
+                    </div>
+                    <div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; margin-top: 10px;">
+                      <button type="button" id="btn-reset-pid" style="display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; font-size: 12px; font-weight: 500; cursor: pointer; border-radius: 6px; border: 1px solid var(--divider-color, #cbd5e1); background: var(--card-background-color, #ffffff); color: var(--primary-text-color);">
+                        🔄 PID-Werte auf Standard zurücksetzen
+                      </button>
+                    </div>
+                  </div>
+                </details>
+
                 <div class="setting-item" style="grid-column: 1 / -1;">
                   <span class="setting-label">🚪 Nachbarräume (Fenster-Absenkung & Kopplung)</span>
                   <div class="person-checkbox-list">
@@ -2021,49 +2297,6 @@ class TaDiyPanel extends HTMLElement {
           <button type="button" class="btn-save-settings" data-action="save-room-settings" style="margin-top: 14px;">
             💾 Raum-Einstellungen speichern
           </button>
-        </div>
-
-        <div class="system-card">
-          <h3>🔥 Kessel- & Heißwasser-Vorlauf</h3>
-          <table class="system-table">
-            <colgroup>
-              <col style="width: 44%;">
-              <col style="width: 56%;">
-            </colgroup>
-            <tr>
-              <td>Wärmeanforderung gesamt</td>
-              <td><strong>${heatingCount} Räume</strong></td>
-            </tr>
-            <tr>
-              <td>Kessel-Status</td>
-              <td><strong>${heatingCount > 0 ? '🔥 EIN (Heizbedarf)' : '🟢 STANDBY (Kein Bedarf)'}</strong></td>
-            </tr>
-            <tr>
-              <td>Vorlauftemperatur</td>
-              <td><strong>${boilerTemp !== undefined && boilerTemp !== null ? Number(boilerTemp).toFixed(1) + ' °C' : 'Nicht konfiguriert'}</strong></td>
-            </tr>
-            <tr>
-              <td>Heißwasser / Zirkulation</td>
-              <td><strong>${boilerActive ? '🔥 Aktiv / Fließend (>= 45°C)' : (boilerTemp !== null && boilerTemp !== undefined ? '🟢 Standby / Kalt (< 45°C)' : '---')}</strong></td>
-            </tr>
-            <tr>
-              <td>Fühler-Zustand</td>
-              <td>
-                ${boilerSensorAvailable ? '🟢 Online' : '⚠️ Offline / Fallback gepuffert'}
-                <div style="font-size: 11px; color: var(--secondary-text-color, #64748b); word-break: break-all; margin-top: 3px;">
-                  (${boilerEntity})
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td>Brennerschutz-Mindestlaufzeit</td>
-              <td>Aktiv (300 Sekunden Mindestlaufzeit)</td>
-            </tr>
-            <tr>
-              <td>Zyklus-Sperre bei Absenkung</td>
-              <td>Sofortige Freigabe bei Sollwertsenkung (K-01)</td>
-            </tr>
-          </table>
         </div>
 
         <div class="system-card" style="grid-column: 1 / -1;">
@@ -2332,7 +2565,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.9';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.12';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -2358,8 +2591,20 @@ class TaDiyPanel extends HTMLElement {
         const newTab = tab.dataset.tab;
         if (newTab !== this._activeTab) {
           this._activeTab = newTab;
+          this._isFormDirty = false;
           this.render();
         }
+      });
+    });
+
+    // Form dirty tracking to prevent re-render while editing
+    this.shadowRoot.querySelectorAll('input, select, textarea').forEach(el => {
+      el.addEventListener('input', () => {
+        this._isFormDirty = true;
+      });
+      el.addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'room-settings-selector') return;
+        this._isFormDirty = true;
       });
     });
 
@@ -2639,8 +2884,18 @@ class TaDiyPanel extends HTMLElement {
         const offsetStepEl = this.shadowRoot.getElementById('setting-offset-step');
         const offsetModeEl = this.shadowRoot.getElementById('setting-offset-mode');
         const offsetDurEl = this.shadowRoot.getElementById('setting-offset-duration');
-        const boilerEl = this.shadowRoot.getElementById('setting-boiler-sensor');
-        const dhwEl = this.shadowRoot.getElementById('setting-dhw-sensor');
+        const overrideTimeoutEl = this.shadowRoot.getElementById('setting-override-timeout');
+        const earlyOffsetEl = this.shadowRoot.getElementById('setting-early-start-offset');
+        const earlyMaxEl = this.shadowRoot.getElementById('setting-early-start-max');
+        const fridayStartEl = this.shadowRoot.getElementById('setting-friday-start');
+        const hoEndEl = this.shadowRoot.getElementById('setting-homeoffice-end');
+        const hoSingleEl = this.shadowRoot.getElementById('setting-homeoffice-single-day');
+        const vpDayEl = this.shadowRoot.getElementById('setting-vp-day');
+        const vpHourEl = this.shadowRoot.getElementById('setting-vp-hour');
+        const vpIntEl = this.shadowRoot.getElementById('setting-vp-interval');
+        const useCurveEl = this.shadowRoot.getElementById('setting-use-heating-curve');
+        const slopeEl = this.shadowRoot.getElementById('setting-heating-curve-slope');
+        const useWeatherEl = this.shadowRoot.getElementById('setting-use-weather-prediction');
 
         const serviceData = {};
         if (frostEl && frostEl.value !== '') serviceData.frost_protection_temp = parseFloat(frostEl.value);
@@ -2659,16 +2914,41 @@ class TaDiyPanel extends HTMLElement {
         if (offsetStepEl && offsetStepEl.value !== '') serviceData.global_offset_step = parseFloat(offsetStepEl.value);
         if (offsetModeEl) serviceData.global_offset_mode = offsetModeEl.value;
         if (offsetDurEl && offsetDurEl.value !== '') serviceData.global_offset_duration_hours = parseFloat(offsetDurEl.value);
-        if (boilerEl) serviceData.boiler_temp_sensor = boilerEl.value;
-        if (dhwEl) serviceData.dhw_temp_sensor = dhwEl.value;
+        if (overrideTimeoutEl) serviceData.global_override_timeout = overrideTimeoutEl.value;
+        if (earlyOffsetEl && earlyOffsetEl.value !== '') serviceData.early_start_offset = parseInt(earlyOffsetEl.value);
+        if (earlyMaxEl && earlyMaxEl.value !== '') serviceData.early_start_max = parseInt(earlyMaxEl.value);
+        if (fridayStartEl && fridayStartEl.value !== '') serviceData.friday_weekend_start_hour = parseInt(fridayStartEl.value);
+        if (hoEndEl && hoEndEl.value !== '') serviceData.homeoffice_end_hour = parseInt(hoEndEl.value);
+        if (hoSingleEl) serviceData.homeoffice_single_day = hoSingleEl.value === 'true';
+        if (vpDayEl) serviceData.valve_protection_day = parseInt(vpDayEl.value);
+        if (vpHourEl && vpHourEl.value !== '') serviceData.valve_protection_hour = parseInt(vpHourEl.value);
+        if (vpIntEl) serviceData.valve_protection_interval_weeks = parseInt(vpIntEl.value);
+        if (useCurveEl) serviceData.use_heating_curve = useCurveEl.value === 'true';
+        if (slopeEl && slopeEl.value !== '') serviceData.heating_curve_slope = parseFloat(slopeEl.value);
+        if (useWeatherEl) serviceData.use_weather_prediction = useWeatherEl.value === 'true';
 
-        const checkedPersons = Array.from(this.shadowRoot.querySelectorAll('.setting-person-checkbox:checked'))
-          .map(cb => cb.value);
-        serviceData.person_entities = checkedPersons;
+        const defaultTrvModeEl = this.shadowRoot.getElementById('setting-default-trv-mode');
+        const defaultTrvMinEl = this.shadowRoot.getElementById('setting-default-trv-min');
+        const defaultTrvMaxEl = this.shadowRoot.getElementById('setting-default-trv-max');
+        const defaultDisableVpEl = this.shadowRoot.getElementById('setting-default-disable-vp');
+        const hubAwayTempEl = this.shadowRoot.getElementById('setting-away-temp');
+        const hubTolEl = this.shadowRoot.getElementById('setting-tolerance');
+        const hubTargetStepEl = this.shadowRoot.getElementById('setting-target-step');
+
+        if (defaultTrvModeEl) serviceData.default_trv_mode = defaultTrvModeEl.value;
+        if (defaultTrvMinEl && defaultTrvMinEl.value !== '') serviceData.default_trv_min_temp = parseFloat(defaultTrvMinEl.value);
+        if (defaultTrvMaxEl && defaultTrvMaxEl.value !== '') serviceData.default_trv_max_temp = parseFloat(defaultTrvMaxEl.value);
+        if (defaultDisableVpEl) serviceData.default_disable_valve_protection = defaultDisableVpEl.value === 'true';
+        if (hubAwayTempEl && hubAwayTempEl.value !== '') serviceData.away_temperature = parseFloat(hubAwayTempEl.value);
+        if (hubTolEl && hubTolEl.value !== '') serviceData.tolerance = parseFloat(hubTolEl.value);
+        if (hubTargetStepEl && hubTargetStepEl.value !== '') serviceData.target_temp_step = parseFloat(hubTargetStepEl.value);
+        const hubCouplingEl = this.shadowRoot.getElementById('setting-default-coupling-strength');
+        if (hubCouplingEl && hubCouplingEl.value !== '') serviceData.coupling_strength = parseFloat(hubCouplingEl.value);
 
         try {
           saveSettingsBtn.textContent = '⏳ Wird gespeichert...';
           await this._hass.callService('tadiy', 'set_hub_config', serviceData);
+          this._isFormDirty = false;
           saveSettingsBtn.textContent = '✅ Gespeichert!';
           setTimeout(() => {
             saveSettingsBtn.textContent = '💾 Hub-Einstellungen speichern';
@@ -2702,28 +2982,62 @@ class TaDiyPanel extends HTMLElement {
         const tolEl = this.shadowRoot.getElementById('room-setting-tolerance');
         const earlyEl = this.shadowRoot.getElementById('room-setting-early-start');
         const winEl = this.shadowRoot.getElementById('room-setting-win-open');
+        const winCloseEl = this.shadowRoot.getElementById('room-setting-win-close');
         const minRateEl = this.shadowRoot.getElementById('room-setting-min-rate');
         const maxRateEl = this.shadowRoot.getElementById('room-setting-max-rate');
         const dontHeatEl = this.shadowRoot.getElementById('room-setting-dont-heat');
+        const modeEl = this.shadowRoot.getElementById('room-setting-trv-mode');
+        const targetStepEl = this.shadowRoot.getElementById('room-setting-target-step');
+        const overrideTimeoutEl = this.shadowRoot.getElementById('room-setting-override-timeout');
+        const trvMinEl = this.shadowRoot.getElementById('room-setting-trv-min');
+        const trvMaxEl = this.shadowRoot.getElementById('room-setting-trv-max');
+        const couplingEnabledEl = this.shadowRoot.getElementById('room-setting-coupling-enabled');
+        const couplingStrengthEl = this.shadowRoot.getElementById('room-setting-coupling-strength');
+        const disableVpEl = this.shadowRoot.getElementById('room-setting-disable-vp');
+        const pidKpEl = this.shadowRoot.getElementById('room-setting-pid-kp');
+        const pidKiEl = this.shadowRoot.getElementById('room-setting-pid-ki');
+        const pidKdEl = this.shadowRoot.getElementById('room-setting-pid-kd');
 
         const checkedAdjRooms = Array.from(this.shadowRoot.querySelectorAll('.setting-adjacent-room-checkbox:checked'))
           .map(cb => cb.value);
 
         const serviceData = { entity_id: roomId };
-        if (awayEl && awayEl.value !== '') serviceData.away_temperature = parseFloat(awayEl.value);
-        if (tolEl && tolEl.value !== '') serviceData.tolerance = parseFloat(tolEl.value);
-        if (earlyEl && earlyEl.value !== '') serviceData.early_start_max_minutes = parseInt(earlyEl.value);
-        if (winEl && winEl.value !== '') serviceData.window_open_timeout = parseInt(winEl.value);
-        if (minRateEl && minRateEl.value !== '') serviceData.min_heating_rate = parseFloat(minRateEl.value);
-        if (maxRateEl && maxRateEl.value !== '') serviceData.max_heating_rate = parseFloat(maxRateEl.value);
-        if (dontHeatEl) {
-          serviceData.dont_heat_below_outdoor = dontHeatEl.value !== '' ? parseFloat(dontHeatEl.value) : null;
+
+        // Granular overrides: empty string or 'default' = null (delete override, inherit from Hub)
+        serviceData.away_temperature = (awayEl && awayEl.value !== '') ? parseFloat(awayEl.value) : null;
+        serviceData.tolerance = (tolEl && tolEl.value !== '') ? parseFloat(tolEl.value) : null;
+        serviceData.early_start_max_minutes = (earlyEl && earlyEl.value !== '') ? parseInt(earlyEl.value) : null;
+        serviceData.window_open_timeout = (winEl && winEl.value !== '') ? parseInt(winEl.value) : null;
+        serviceData.window_close_timeout = (winCloseEl && winCloseEl.value !== '') ? parseInt(winCloseEl.value) : null;
+        serviceData.min_heating_rate = (minRateEl && minRateEl.value !== '') ? parseFloat(minRateEl.value) : null;
+        serviceData.max_heating_rate = (maxRateEl && maxRateEl.value !== '') ? parseFloat(maxRateEl.value) : null;
+        serviceData.dont_heat_below_outdoor = (dontHeatEl && dontHeatEl.value !== '') ? parseFloat(dontHeatEl.value) : null;
+        serviceData.target_temp_step = (targetStepEl && targetStepEl.value !== '') ? parseFloat(targetStepEl.value) : null;
+        serviceData.override_timeout = (overrideTimeoutEl && overrideTimeoutEl.value !== 'default') ? overrideTimeoutEl.value : null;
+
+        if (modeEl) {
+          if (modeEl.value === 'default') {
+            serviceData.trv_mode = null;
+          } else {
+            serviceData.trv_mode = modeEl.value;
+          }
         }
+        serviceData.trv_min_temp = (trvMinEl && trvMinEl.value !== '') ? parseFloat(trvMinEl.value) : null;
+        serviceData.trv_max_temp = (trvMaxEl && trvMaxEl.value !== '') ? parseFloat(trvMaxEl.value) : null;
+        if (couplingEnabledEl) serviceData.use_room_coupling = couplingEnabledEl.value === 'true';
+        serviceData.coupling_strength = (couplingStrengthEl && couplingStrengthEl.value !== '') ? parseFloat(couplingStrengthEl.value) : null;
+        if (disableVpEl) {
+          serviceData.disable_valve_protection = disableVpEl.value === 'default' ? null : (disableVpEl.value === 'true');
+        }
+        if (pidKpEl && pidKpEl.value !== '') serviceData.pid_kp = parseFloat(pidKpEl.value);
+        if (pidKiEl && pidKiEl.value !== '') serviceData.pid_ki = parseFloat(pidKiEl.value);
+        if (pidKdEl && pidKdEl.value !== '') serviceData.pid_kd = parseFloat(pidKdEl.value);
         serviceData.adjacent_rooms = checkedAdjRooms;
 
         try {
           saveRoomBtn.textContent = '⏳ Wird gespeichert...';
           await this._hass.callService('tadiy', 'set_room_config', serviceData);
+          this._isFormDirty = false;
           saveRoomBtn.textContent = '✅ Gespeichert!';
           setTimeout(() => {
             saveRoomBtn.textContent = '💾 Raum-Einstellungen speichern';
@@ -2734,6 +3048,22 @@ class TaDiyPanel extends HTMLElement {
           setTimeout(() => {
             saveRoomBtn.textContent = '💾 Raum-Einstellungen speichern';
           }, 3000);
+        }
+      });
+    }
+
+    // Reset PID values button
+    const resetPidBtn = this.shadowRoot.getElementById('btn-reset-pid');
+    if (resetPidBtn) {
+      resetPidBtn.addEventListener('click', () => {
+        if (confirm('Möchtest du die PID-Werte für diesen Raum wirklich auf die Standardwerte zurücksetzen? (Kp=0.6, Ki=0.01, Kd=0.1)')) {
+          const kpEl = this.shadowRoot.getElementById('room-setting-pid-kp');
+          const kiEl = this.shadowRoot.getElementById('room-setting-pid-ki');
+          const kdEl = this.shadowRoot.getElementById('room-setting-pid-kd');
+          if (kpEl) kpEl.value = '0.6';
+          if (kiEl) kiEl.value = '0.01';
+          if (kdEl) kdEl.value = '0.1';
+          this._isFormDirty = true;
         }
       });
     }

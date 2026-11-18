@@ -32,6 +32,7 @@ from .const import (
     CONF_BOILER_TEMP_SENSOR,
     CONF_BOOST_DURATION,
     CONF_BOOST_TEMPERATURE,
+    CONF_COUPLING_STRENGTH,
     CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
     CONF_DEBUG_CALIBRATION,
     CONF_DEBUG_CARDS,
@@ -46,24 +47,63 @@ from .const import (
     CONF_DEBUG_UI,
     CONF_DEBUG_VERBOSE,
     CONF_DHW_TEMP_SENSOR,
+    CONF_DEFAULT_DISABLE_VALVE_PROTECTION,
+    CONF_DEFAULT_TRV_MAX_TEMP,
+    CONF_DEFAULT_TRV_MIN_TEMP,
+    CONF_DEFAULT_TRV_MODE,
+    CONF_DISABLE_VALVE_PROTECTION,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
+    CONF_EARLY_START_MAX,
+    CONF_EARLY_START_OFFSET,
+    CONF_FRIDAY_WEEKEND_START_HOUR,
     CONF_FROST_PROTECTION_TEMP,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_OFFSET_DURATION_HOURS,
     CONF_GLOBAL_OFFSET_MODE,
     CONF_GLOBAL_OFFSET_STEP,
     CONF_GLOBAL_OVERRIDE_TIMEOUT,
+    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
+    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
+    CONF_HEATING_CURVE_SLOPE,
+    CONF_HOMEOFFICE_END_HOUR,
+    CONF_HOMEOFFICE_SINGLE_DAY,
     CONF_HUB,
+    CONF_HYSTERESIS,
+    CONF_OVERRIDE_TIMEOUT,
     CONF_PERSON_ENTITIES,
+    CONF_PID_KD,
+    CONF_PID_KI,
+    CONF_PID_KP,
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
+    CONF_TARGET_TEMP_STEP,
+    CONF_TRV_MAX_TEMP,
+    CONF_TRV_MIN_TEMP,
+    CONF_USE_HEATING_CURVE,
+    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+    CONF_USE_PID_CONTROL,
+    CONF_USE_ROOM_COUPLING,
+    CONF_USE_WEATHER_PREDICTION,
+    CONF_VALVE_PROTECTION_DAY,
+    CONF_VALVE_PROTECTION_HOUR,
+    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
     CONF_WINDOW_CLOSE_TIMEOUT,
     CONF_WINDOW_HOUSE_SETBACK_DELTA,
     CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
     CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
     CONF_WINDOW_OPEN_TIMEOUT,
+    DEFAULT_AWAY_TEMPERATURE,
     DEFAULT_BOOST_DURATION,
     DEFAULT_BOOST_TEMPERATURE,
+    DEFAULT_COUPLING_STRENGTH,
+    DEFAULT_HYSTERESIS,
+    DEFAULT_TARGET_TEMP_STEP,
+    DEFAULT_TRV_MAX_TEMP,
+    DEFAULT_TRV_MIN_TEMP,
+    DEFAULT_TRV_MODE,
+    DEFAULT_WINDOW_CLOSE_TIMEOUT,
+    DEFAULT_WINDOW_OPEN_TIMEOUT,
+    CONF_TRV_MODE,
     DOMAIN,
     MAX_BOOST_DURATION,
     MAX_BOOST_TEMP,
@@ -981,17 +1021,20 @@ async def async_register_services(
     # Hub configuration service (allows adjusting Hub settings directly from UI panel)
     SERVICE_SET_HUB_CONFIG_SCHEMA = vol.Schema(
         {
+            vol.Optional("entry_id"): cv.string,
             vol.Optional(CONF_FROST_PROTECTION_TEMP): vol.Coerce(float),
             vol.Optional(CONF_BOOST_TEMPERATURE): vol.Coerce(float),
             vol.Optional(CONF_BOOST_DURATION): cv.positive_int,
             vol.Optional(CONF_WINDOW_OPEN_TIMEOUT): cv.positive_int,
             vol.Optional(CONF_WINDOW_CLOSE_TIMEOUT): cv.positive_int,
-            vol.Optional(CONF_GLOBAL_OVERRIDE_TIMEOUT): cv.positive_int,
+            vol.Optional(CONF_GLOBAL_OVERRIDE_TIMEOUT): vol.Any(
+                cv.string, cv.positive_int
+            ),
             vol.Optional(CONF_DONT_HEAT_BELOW_OUTDOOR): vol.Any(
                 None, vol.Coerce(float)
             ),
-            vol.Optional(CONF_BOILER_TEMP_SENSOR): cv.string,
-            vol.Optional(CONF_DHW_TEMP_SENSOR): cv.string,
+            vol.Optional(CONF_BOILER_TEMP_SENSOR): vol.Any(None, cv.string),
+            vol.Optional(CONF_DHW_TEMP_SENSOR): vol.Any(None, cv.string),
             vol.Optional(CONF_BOILER_MIN_RUN_TIME): cv.positive_int,
             vol.Optional(CONF_CYCLE_LOCK_ON_SETPOINT_DROP): cv.boolean,
             vol.Optional(CONF_PERSON_ENTITIES): vol.All(cv.ensure_list, [cv.string]),
@@ -1001,6 +1044,32 @@ async def async_register_services(
             vol.Optional(CONF_GLOBAL_OFFSET_STEP): vol.Coerce(float),
             vol.Optional(CONF_GLOBAL_OFFSET_MODE): cv.string,
             vol.Optional(CONF_GLOBAL_OFFSET_DURATION_HOURS): vol.Coerce(float),
+            vol.Optional(CONF_EARLY_START_OFFSET): cv.positive_int,
+            vol.Optional(CONF_EARLY_START_MAX): cv.positive_int,
+            vol.Optional(CONF_FRIDAY_WEEKEND_START_HOUR): cv.positive_int,
+            vol.Optional(CONF_HOMEOFFICE_END_HOUR): cv.positive_int,
+            vol.Optional(CONF_HOMEOFFICE_SINGLE_DAY): cv.boolean,
+            vol.Optional(CONF_VALVE_PROTECTION_DAY): vol.Coerce(int),
+            vol.Optional(CONF_VALVE_PROTECTION_HOUR): vol.Coerce(int),
+            vol.Optional(CONF_VALVE_PROTECTION_INTERVAL_WEEKS): vol.Coerce(int),
+            vol.Optional(CONF_USE_HEATING_CURVE): cv.boolean,
+            vol.Optional(CONF_HEATING_CURVE_SLOPE): vol.Coerce(float),
+            vol.Optional(CONF_USE_WEATHER_PREDICTION): cv.boolean,
+            vol.Optional(CONF_AWAY_TEMPERATURE): vol.Coerce(float),
+            vol.Optional(CONF_COUPLING_STRENGTH): vol.Coerce(float),
+            vol.Optional(CONF_HYSTERESIS): vol.Coerce(float),
+            vol.Optional("tolerance"): vol.Coerce(float),
+            vol.Optional(CONF_TARGET_TEMP_STEP): vol.Coerce(float),
+            vol.Optional(CONF_TRV_MIN_TEMP): vol.Coerce(float),
+            vol.Optional(CONF_DEFAULT_TRV_MIN_TEMP): vol.Coerce(float),
+            vol.Optional(CONF_TRV_MAX_TEMP): vol.Coerce(float),
+            vol.Optional(CONF_DEFAULT_TRV_MAX_TEMP): vol.Coerce(float),
+            vol.Optional(CONF_DISABLE_VALVE_PROTECTION): cv.boolean,
+            vol.Optional(CONF_DEFAULT_DISABLE_VALVE_PROTECTION): cv.boolean,
+            vol.Optional(CONF_DEFAULT_TRV_MODE): cv.string,
+            vol.Optional("default_trv_mode"): cv.string,
+            vol.Optional(CONF_USE_PID_CONTROL): cv.boolean,
+            vol.Optional(CONF_USE_HVAC_OFF_FOR_LOW_TEMP): cv.boolean,
         }
     )
 
@@ -1035,6 +1104,30 @@ async def async_register_services(
             CONF_GLOBAL_OFFSET_STEP,
             CONF_GLOBAL_OFFSET_MODE,
             CONF_GLOBAL_OFFSET_DURATION_HOURS,
+            CONF_EARLY_START_OFFSET,
+            CONF_EARLY_START_MAX,
+            CONF_FRIDAY_WEEKEND_START_HOUR,
+            CONF_HOMEOFFICE_END_HOUR,
+            CONF_HOMEOFFICE_SINGLE_DAY,
+            CONF_VALVE_PROTECTION_DAY,
+            CONF_VALVE_PROTECTION_HOUR,
+            CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
+            CONF_USE_HEATING_CURVE,
+            CONF_HEATING_CURVE_SLOPE,
+            CONF_USE_WEATHER_PREDICTION,
+            CONF_AWAY_TEMPERATURE,
+            CONF_COUPLING_STRENGTH,
+            CONF_HYSTERESIS,
+            CONF_TARGET_TEMP_STEP,
+            CONF_TRV_MIN_TEMP,
+            CONF_DEFAULT_TRV_MIN_TEMP,
+            CONF_TRV_MAX_TEMP,
+            CONF_DEFAULT_TRV_MAX_TEMP,
+            CONF_DISABLE_VALVE_PROTECTION,
+            CONF_DEFAULT_DISABLE_VALVE_PROTECTION,
+            CONF_DEFAULT_TRV_MODE,
+            CONF_USE_PID_CONTROL,
+            CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
         ]:
             if key in call.data:
                 val = call.data[key]
@@ -1046,6 +1139,35 @@ async def async_register_services(
                     new_options[key] = val
                     if key == CONF_DONT_HEAT_BELOW_OUTDOOR:
                         new_options[CONF_GLOBAL_DONT_HEAT_BELOW] = val
+
+        # Handle aliases
+        if "tolerance" in call.data:
+            new_options[CONF_HYSTERESIS] = call.data["tolerance"]
+        if "default_trv_mode" in call.data:
+            mode = call.data["default_trv_mode"]
+            new_options[CONF_DEFAULT_TRV_MODE] = mode
+            if mode == "sonoff_pid":
+                new_options[CONF_USE_PID_CONTROL] = True
+                new_options[CONF_USE_HVAC_OFF_FOR_LOW_TEMP] = False
+            elif mode == "moes_hvac":
+                new_options[CONF_USE_PID_CONTROL] = False
+                new_options[CONF_USE_HVAC_OFF_FOR_LOW_TEMP] = True
+            else:
+                new_options[CONF_USE_PID_CONTROL] = False
+                new_options[CONF_USE_HVAC_OFF_FOR_LOW_TEMP] = False
+        if "default_trv_min_temp" in call.data:
+            new_options[CONF_TRV_MIN_TEMP] = call.data["default_trv_min_temp"]
+            new_options[CONF_DEFAULT_TRV_MIN_TEMP] = call.data["default_trv_min_temp"]
+        if "default_trv_max_temp" in call.data:
+            new_options[CONF_TRV_MAX_TEMP] = call.data["default_trv_max_temp"]
+            new_options[CONF_DEFAULT_TRV_MAX_TEMP] = call.data["default_trv_max_temp"]
+        if "default_disable_valve_protection" in call.data:
+            new_options[CONF_DISABLE_VALVE_PROTECTION] = call.data[
+                "default_disable_valve_protection"
+            ]
+            new_options[CONF_DEFAULT_DISABLE_VALVE_PROTECTION] = call.data[
+                "default_disable_valve_protection"
+            ]
 
         # Fehleranalyse: Aktualisiere sowohl data als auch options, um Konsistenz zwischen
         # OptionsFlow, Services und Neustarts zu gewährleisten.
@@ -1108,22 +1230,40 @@ async def async_register_services(
     # Room configuration service (allows adjusting Room settings directly from UI panel)
     SERVICE_SET_ROOM_CONFIG_SCHEMA = vol.Schema(
         {
-            vol.Required("entity_id"): cv.string,
-            vol.Optional(CONF_AWAY_TEMPERATURE): vol.Coerce(float),
-            vol.Optional("tolerance"): vol.Coerce(float),
-            vol.Optional("early_start_max_minutes"): cv.positive_int,
-            vol.Optional("window_open_timeout"): cv.positive_int,
-            vol.Optional("window_close_timeout"): cv.positive_int,
+            vol.Optional("entity_id"): cv.string,
+            vol.Optional("entry_id"): cv.string,
+            vol.Optional(CONF_TRV_MODE): vol.Any(None, cv.string),
+            vol.Optional(CONF_AWAY_TEMPERATURE): vol.Any(None, vol.Coerce(float)),
+            vol.Optional("tolerance"): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_HYSTERESIS): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_TARGET_TEMP_STEP): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_USE_PID_CONTROL): vol.Any(None, cv.boolean),
+            vol.Optional(CONF_PID_KP): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_PID_KI): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_PID_KD): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_USE_HVAC_OFF_FOR_LOW_TEMP): vol.Any(None, cv.boolean),
+            vol.Optional(CONF_USE_ROOM_COUPLING): cv.boolean,
+            vol.Optional(CONF_COUPLING_STRENGTH): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_TRV_MIN_TEMP): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_TRV_MAX_TEMP): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_DISABLE_VALVE_PROTECTION): vol.Any(None, cv.boolean),
+            vol.Optional(CONF_OVERRIDE_TIMEOUT): vol.Any(None, cv.string),
+            vol.Optional("early_start_max_minutes"): vol.Any(None, cv.positive_int),
+            vol.Optional("window_open_timeout"): vol.Any(None, cv.positive_int),
+            vol.Optional("window_close_timeout"): vol.Any(None, cv.positive_int),
             vol.Optional("dont_heat_below_outdoor"): vol.Any(None, vol.Coerce(float)),
-            vol.Optional("min_heating_rate"): vol.Coerce(float),
-            vol.Optional("max_heating_rate"): vol.Coerce(float),
+            vol.Optional("min_heating_rate"): vol.Any(None, vol.Coerce(float)),
+            vol.Optional("max_heating_rate"): vol.Any(None, vol.Coerce(float)),
             vol.Optional(CONF_ADJACENT_ROOMS): vol.All(cv.ensure_list, [cv.string]),
         }
     )
 
     async def handle_set_room_config(call: ServiceCall) -> None:
         """Update room configuration options dynamically."""
-        entity_id = call.data.get("entity_id", "")
+        entity_id = call.data.get("entity_id") or call.data.get("entry_id") or ""
+        if not entity_id:
+            _LOGGER.error("Cannot set room config: Missing entity_id or entry_id")
+            return
         room_entry = None
         matched_coordinator = None
 
@@ -1193,9 +1333,41 @@ async def async_register_services(
             return
 
         new_options = dict(room_entry.options)
+        if "trv_mode" in call.data:
+            t_mode = call.data["trv_mode"]
+            if t_mode in (None, "default"):
+                new_options.pop("trv_mode", None)
+                new_options.pop(CONF_USE_PID_CONTROL, None)
+                new_options.pop(CONF_USE_HVAC_OFF_FOR_LOW_TEMP, None)
+            elif t_mode == "sonoff_pid":
+                new_options["trv_mode"] = "sonoff_pid"
+                new_options[CONF_USE_PID_CONTROL] = True
+                new_options[CONF_USE_HVAC_OFF_FOR_LOW_TEMP] = False
+            elif t_mode == "moes_hvac":
+                new_options["trv_mode"] = "moes_hvac"
+                new_options[CONF_USE_PID_CONTROL] = False
+                new_options[CONF_USE_HVAC_OFF_FOR_LOW_TEMP] = True
+            elif t_mode == "standard":
+                new_options["trv_mode"] = "standard"
+                new_options[CONF_USE_PID_CONTROL] = False
+                new_options[CONF_USE_HVAC_OFF_FOR_LOW_TEMP] = False
+
         for key in [
             CONF_AWAY_TEMPERATURE,
             "tolerance",
+            CONF_HYSTERESIS,
+            CONF_TARGET_TEMP_STEP,
+            CONF_USE_PID_CONTROL,
+            CONF_PID_KP,
+            CONF_PID_KI,
+            CONF_PID_KD,
+            CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
+            CONF_USE_ROOM_COUPLING,
+            CONF_COUPLING_STRENGTH,
+            CONF_TRV_MIN_TEMP,
+            CONF_TRV_MAX_TEMP,
+            CONF_DISABLE_VALVE_PROTECTION,
+            CONF_OVERRIDE_TIMEOUT,
             "early_start_max_minutes",
             "window_open_timeout",
             "window_close_timeout",
@@ -1206,10 +1378,18 @@ async def async_register_services(
         ]:
             if key in call.data:
                 val = call.data[key]
-                if val is None:
+                if val is None or val == "default":
                     new_options.pop(key, None)
                 else:
                     new_options[key] = val
+
+        # Map tolerance to CONF_HYSTERESIS if provided
+        if "tolerance" in call.data:
+            if call.data["tolerance"] is None:
+                new_options.pop(CONF_HYSTERESIS, None)
+                new_options.pop("tolerance", None)
+            else:
+                new_options[CONF_HYSTERESIS] = call.data["tolerance"]
 
         # Fehleranalyse: Aktualisiere sowohl data als auch options, damit adjacent_rooms und
         # Raumeinstellungen auch bei ConfigEntry-Reload erhalten bleiben.
@@ -1219,24 +1399,166 @@ async def async_register_services(
 
         # Apply immediately to running room coordinator if available
         if matched_coordinator and hasattr(matched_coordinator, "room_config"):
+            hub_s = (
+                matched_coordinator.hub_coordinator.global_settings
+                if matched_coordinator.hub_coordinator
+                else {}
+            )
             if CONF_AWAY_TEMPERATURE in call.data:
-                matched_coordinator.room_config.away_temperature = call.data[
-                    CONF_AWAY_TEMPERATURE
+                v = call.data[CONF_AWAY_TEMPERATURE]
+                matched_coordinator.room_config.away_temperature = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_AWAY_TEMPERATURE, DEFAULT_AWAY_TEMPERATURE)
+                )
+            if "tolerance" in call.data or CONF_HYSTERESIS in call.data:
+                v = call.data.get("tolerance", call.data.get(CONF_HYSTERESIS))
+                eff_tol = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
+                )
+                matched_coordinator.room_config.tolerance = eff_tol
+                if hasattr(matched_coordinator, "heating_controller"):
+                    matched_coordinator.heating_controller.set_hysteresis(eff_tol)
+            if CONF_TARGET_TEMP_STEP in call.data:
+                v = call.data[CONF_TARGET_TEMP_STEP]
+                matched_coordinator.room_config.target_temp_step = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
+                )
+            if CONF_TRV_MIN_TEMP in call.data:
+                v = call.data[CONF_TRV_MIN_TEMP]
+                matched_coordinator.room_config.trv_min_temp = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_DEFAULT_TRV_MIN_TEMP, DEFAULT_TRV_MIN_TEMP)
+                )
+            if CONF_TRV_MAX_TEMP in call.data:
+                v = call.data[CONF_TRV_MAX_TEMP]
+                matched_coordinator.room_config.trv_max_temp = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_DEFAULT_TRV_MAX_TEMP, DEFAULT_TRV_MAX_TEMP)
+                )
+            if CONF_DISABLE_VALVE_PROTECTION in call.data:
+                v = call.data[CONF_DISABLE_VALVE_PROTECTION]
+                matched_coordinator.room_config.disable_valve_protection = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_DEFAULT_DISABLE_VALVE_PROTECTION, False)
+                )
+            if "trv_mode" in call.data:
+                from .core.control import (
+                    HeatingController,
+                    PIDConfig,
+                    PIDHeatingController,
+                )
+
+                t_mode = call.data["trv_mode"]
+                if t_mode in (None, "default"):
+                    hub_trv_mode = hub_s.get(CONF_DEFAULT_TRV_MODE, DEFAULT_TRV_MODE)
+                    use_pid = hub_trv_mode == "sonoff_pid"
+                    use_hvac_off = hub_trv_mode == "moes_hvac"
+                elif t_mode == "sonoff_pid":
+                    use_pid = True
+                    use_hvac_off = False
+                elif t_mode == "moes_hvac":
+                    use_pid = False
+                    use_hvac_off = True
+                else:
+                    use_pid = False
+                    use_hvac_off = False
+                matched_coordinator.room_config.use_hvac_off_for_low_temp = use_hvac_off
+                current_is_pid = isinstance(
+                    matched_coordinator.heating_controller, PIDHeatingController
+                )
+                if use_pid and not current_is_pid:
+                    matched_coordinator.heating_controller = PIDHeatingController(
+                        PIDConfig(kp=0.6, ki=0.01, kd=0.1)
+                    )
+                elif not use_pid and current_is_pid:
+                    matched_coordinator.heating_controller = HeatingController()
+            if CONF_USE_HVAC_OFF_FOR_LOW_TEMP in call.data:
+                matched_coordinator.room_config.use_hvac_off_for_low_temp = call.data[
+                    CONF_USE_HVAC_OFF_FOR_LOW_TEMP
                 ]
-            if "tolerance" in call.data:
-                matched_coordinator.room_config.tolerance = call.data["tolerance"]
+            if CONF_USE_ROOM_COUPLING in call.data:
+                matched_coordinator.room_config.use_coupling = call.data[
+                    CONF_USE_ROOM_COUPLING
+                ]
+            if CONF_COUPLING_STRENGTH in call.data:
+                v = call.data[CONF_COUPLING_STRENGTH]
+                matched_coordinator.room_config.coupling_strength = (
+                    v
+                    if v is not None
+                    else hub_s.get(CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH)
+                )
+            if CONF_OVERRIDE_TIMEOUT in call.data:
+                matched_coordinator.room_config.override_timeout = call.data[
+                    CONF_OVERRIDE_TIMEOUT
+                ]
+            if (
+                CONF_USE_PID_CONTROL in call.data
+                or CONF_PID_KP in call.data
+                or CONF_PID_KI in call.data
+                or CONF_PID_KD in call.data
+            ):
+                from .core.control import (
+                    HeatingController,
+                    PIDConfig,
+                    PIDHeatingController,
+                )
+
+                use_pid = call.data.get(
+                    CONF_USE_PID_CONTROL,
+                    new_options.get(CONF_USE_PID_CONTROL, False),
+                )
+                kp = call.data.get(CONF_PID_KP, new_options.get(CONF_PID_KP, 0.6))
+                ki = call.data.get(CONF_PID_KI, new_options.get(CONF_PID_KI, 0.01))
+                kd = call.data.get(CONF_PID_KD, new_options.get(CONF_PID_KD, 0.1))
+                current_is_pid = isinstance(
+                    matched_coordinator.heating_controller, PIDHeatingController
+                )
+                if use_pid and not current_is_pid:
+                    matched_coordinator.heating_controller = PIDHeatingController(
+                        PIDConfig(kp=kp, ki=ki, kd=kd)
+                    )
+                elif not use_pid and current_is_pid:
+                    matched_coordinator.heating_controller = HeatingController()
+                elif use_pid and current_is_pid:
+                    matched_coordinator.heating_controller.config.kp = kp
+                    matched_coordinator.heating_controller.config.ki = ki
+                    matched_coordinator.heating_controller.config.kd = kd
             if "early_start_max_minutes" in call.data:
                 matched_coordinator.room_config.early_start_max_minutes = call.data[
                     "early_start_max_minutes"
                 ]
             if "window_open_timeout" in call.data:
-                matched_coordinator.room_config.window_open_timeout = call.data[
-                    "window_open_timeout"
-                ]
+                val = call.data["window_open_timeout"]
+                if val is None or val == "default":
+                    hub_settings = (
+                        matched_coordinator.get_hub_settings()
+                        if hasattr(matched_coordinator, "get_hub_settings")
+                        else {}
+                    )
+                    val = hub_settings.get(
+                        CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
+                    )
+                matched_coordinator.room_config.window_open_timeout = val
             if "window_close_timeout" in call.data:
-                matched_coordinator.room_config.window_close_timeout = call.data[
-                    "window_close_timeout"
-                ]
+                val = call.data["window_close_timeout"]
+                if val is None or val == "default":
+                    hub_settings = (
+                        matched_coordinator.get_hub_settings()
+                        if hasattr(matched_coordinator, "get_hub_settings")
+                        else {}
+                    )
+                    val = hub_settings.get(
+                        CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
+                    )
+                matched_coordinator.room_config.window_close_timeout = val
             if (
                 hasattr(matched_coordinator, "window_detector")
                 and matched_coordinator.window_detector
@@ -1261,6 +1583,8 @@ async def async_register_services(
                 matched_coordinator.room_config.adjacent_rooms = call.data[
                     CONF_ADJACENT_ROOMS
                 ]
+            if hasattr(matched_coordinator, "async_save_feature_settings"):
+                await matched_coordinator.async_save_feature_settings()
             matched_coordinator.async_update_listeners()
 
         _LOGGER.info(

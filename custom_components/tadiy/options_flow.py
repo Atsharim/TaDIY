@@ -11,10 +11,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_ADJACENT_ROOMS,
-    CONF_AWAY_TEMPERATURE,
     CONF_BOILER_TEMP_SENSOR,
-    CONF_COUPLING_STRENGTH,
     CONF_DEBUG_CALIBRATION,
     CONF_DEBUG_CARDS,
     CONF_DEBUG_EARLY_START,
@@ -28,86 +25,30 @@ from .const import (
     CONF_DEBUG_UI,
     CONF_DEBUG_VERBOSE,
     CONF_DHW_TEMP_SENSOR,
-    CONF_DISABLE_VALVE_PROTECTION,
-    CONF_EARLY_START_MAX,
-    CONF_EARLY_START_OFFSET,
-    CONF_FRIDAY_WEEKEND_START_HOUR,
-    CONF_GLOBAL_OVERRIDE_TIMEOUT,
-    CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
-    CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HEATING_CURVE_SLOPE,
-    CONF_HOMEOFFICE_END_HOUR,
-    CONF_HOMEOFFICE_SINGLE_DAY,
     CONF_HUB,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
-    CONF_LOCATION_MODE_ENABLED,
     CONF_MAIN_TEMP_SENSOR,
     CONF_OUTDOOR_SENSOR,
-    CONF_OVERRIDE_TIMEOUT,
     CONF_PERSON_ENTITIES,
     CONF_PID_KD,
     CONF_PID_KI,
     CONF_PID_KP,
     CONF_ROOM_NAME,
-    CONF_SHOW_PANEL,
-    CONF_TARGET_TEMP_STEP,
     CONF_TRV_ENTITIES,
-    CONF_TRV_MAX_TEMP,
-    CONF_TRV_MIN_TEMP,
     CONF_USE_HEATING_CURVE,
-    CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
     CONF_USE_PID_CONTROL,
-    CONF_USE_ROOM_COUPLING,
-    CONF_USE_WEATHER_PREDICTION,
-    CONF_VALVE_PROTECTION_DAY,
-    CONF_VALVE_PROTECTION_HOUR,
-    CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
     CONF_WEATHER_ENTITY,
     CONF_WINDOW_SENSORS,
-    DEFAULT_AWAY_TEMPERATURE,
-    DEFAULT_COUPLING_STRENGTH,
-    DEFAULT_EARLY_START_MAX,
-    DEFAULT_EARLY_START_OFFSET,
-    DEFAULT_FRIDAY_WEEKEND_START_HOUR,
-    DEFAULT_GLOBAL_OVERRIDE_TIMEOUT,
     DEFAULT_HEATING_CURVE_SLOPE,
-    DEFAULT_HOMEOFFICE_END_HOUR,
-    DEFAULT_HOMEOFFICE_SINGLE_DAY,
     DEFAULT_HUB_MODES,
     DEFAULT_HYSTERESIS,
     DEFAULT_PID_KD,
     DEFAULT_PID_KI,
     DEFAULT_PID_KP,
-    DEFAULT_TARGET_TEMP_STEP,
-    DEFAULT_TRV_MAX_TEMP,
-    DEFAULT_TRV_MIN_TEMP,
-    DEFAULT_USE_HEATING_CURVE,
-    DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP,
-    DEFAULT_USE_PID_CONTROL,
-    DEFAULT_USE_ROOM_COUPLING,
-    DEFAULT_USE_WEATHER_PREDICTION,
-    DEFAULT_VALVE_PROTECTION_DAY,
-    DEFAULT_VALVE_PROTECTION_HOUR,
-    DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
-    DEFAULT_WINDOW_CLOSE_TIMEOUT,
-    DEFAULT_WINDOW_OPEN_TIMEOUT,
     DOMAIN,
     MAX_CUSTOM_MODES,
-    MAX_HEATING_CURVE_SLOPE,
-    MAX_HYSTERESIS,
-    MAX_TARGET_TEMP_STEP,
-    MIN_HEATING_CURVE_SLOPE,
-    MIN_HYSTERESIS,
-    MIN_TARGET_TEMP_STEP,
-    OVERRIDE_TIMEOUT_1H,
-    OVERRIDE_TIMEOUT_2H,
-    OVERRIDE_TIMEOUT_3H,
-    OVERRIDE_TIMEOUT_4H,
-    OVERRIDE_TIMEOUT_ALWAYS,
-    OVERRIDE_TIMEOUT_NEVER,
-    OVERRIDE_TIMEOUT_NEXT_BLOCK,
-    OVERRIDE_TIMEOUT_NEXT_DAY,
 )
 from .schedule_editor_flow import ScheduleEditorMixin
 
@@ -307,11 +248,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
     async def async_step_panel_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Configure hub-level settings including panel, weather, early start, and heating curve."""
+        """Configure hub-level entity pickers (weather, outdoor, boiler, dhw, persons)."""
         if user_input is not None:
-            # Update config entry with new settings
             new_data = dict(self.config_entry.data)
-            new_data[CONF_SHOW_PANEL] = user_input.get(CONF_SHOW_PANEL, True)
 
             # Remove empty optional fields
             for key in [
@@ -327,73 +266,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 else:
                     new_data[key] = value
 
-            # Location mode enabled
-            new_data[CONF_LOCATION_MODE_ENABLED] = user_input.get(
-                CONF_LOCATION_MODE_ENABLED, False
-            )
-
-            # Override timeout (Hub setting)
-            override_timeout = user_input.get(CONF_GLOBAL_OVERRIDE_TIMEOUT)
-            if override_timeout:
-                new_data[CONF_GLOBAL_OVERRIDE_TIMEOUT] = override_timeout
-            else:
-                new_data.pop(CONF_GLOBAL_OVERRIDE_TIMEOUT, None)
-
-            # Early Start settings (Hub-level)
-            early_start_offset = user_input.get(CONF_EARLY_START_OFFSET)
-            if early_start_offset is not None:
-                new_data[CONF_EARLY_START_OFFSET] = early_start_offset
-            early_start_max = user_input.get(CONF_EARLY_START_MAX)
-            if early_start_max is not None:
-                new_data[CONF_EARLY_START_MAX] = early_start_max
-
-            # Window timeout settings (Hub-level)
-            window_open_timeout = user_input.get(CONF_GLOBAL_WINDOW_OPEN_TIMEOUT)
-            if window_open_timeout is not None:
-                new_data[CONF_GLOBAL_WINDOW_OPEN_TIMEOUT] = int(window_open_timeout)
-            window_close_timeout = user_input.get(CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT)
-            if window_close_timeout is not None:
-                new_data[CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT] = int(window_close_timeout)
-
-            # Friday Weekend Start Hour setting (Hub-level)
-            friday_weekend_start_hour = user_input.get(CONF_FRIDAY_WEEKEND_START_HOUR)
-            if friday_weekend_start_hour is not None:
-                new_data[CONF_FRIDAY_WEEKEND_START_HOUR] = int(
-                    friday_weekend_start_hour
-                )
-
-            # Homeoffice settings (Hub-level)
-            homeoffice_end_hour = user_input.get(CONF_HOMEOFFICE_END_HOUR)
-            if homeoffice_end_hour is not None:
-                new_data[CONF_HOMEOFFICE_END_HOUR] = int(homeoffice_end_hour)
-            new_data[CONF_HOMEOFFICE_SINGLE_DAY] = user_input.get(
-                CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
-            )
-
-            # Valve Protection schedule settings (Hub-level)
-            vp_day = user_input.get(CONF_VALVE_PROTECTION_DAY)
-            if vp_day is not None:
-                new_data[CONF_VALVE_PROTECTION_DAY] = int(vp_day)
-            vp_hour = user_input.get(CONF_VALVE_PROTECTION_HOUR)
-            if vp_hour is not None:
-                new_data[CONF_VALVE_PROTECTION_HOUR] = int(vp_hour)
-            vp_interval = user_input.get(CONF_VALVE_PROTECTION_INTERVAL_WEEKS)
-            if vp_interval is not None:
-                new_data[CONF_VALVE_PROTECTION_INTERVAL_WEEKS] = int(vp_interval)
-
-            # Weather Compensation / Heating Curve settings (Hub-level)
-            new_data[CONF_USE_HEATING_CURVE] = user_input.get(
-                CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
-            )
-            heating_curve_slope = user_input.get(CONF_HEATING_CURVE_SLOPE)
-            if heating_curve_slope is not None:
-                new_data[CONF_HEATING_CURVE_SLOPE] = heating_curve_slope
-
-            # Weather Prediction (Hub-level)
-            new_data[CONF_USE_WEATHER_PREDICTION] = user_input.get(
-                CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
-            )
-
             self.hass.config_entries.async_update_entry(
                 self.config_entry, data=new_data
             )
@@ -405,60 +277,13 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
 
         # Get current settings
         current_data = self.config_entry.data
-        current_show_panel = current_data.get(CONF_SHOW_PANEL, True)
         current_weather = current_data.get(CONF_WEATHER_ENTITY, "")
         current_outdoor_sensor = current_data.get(CONF_OUTDOOR_SENSOR, "")
         current_boiler_sensor = current_data.get(CONF_BOILER_TEMP_SENSOR, "")
         current_dhw_sensor = current_data.get(CONF_DHW_TEMP_SENSOR, "")
         current_persons = current_data.get(CONF_PERSON_ENTITIES, [])
-        current_location_mode = current_data.get(CONF_LOCATION_MODE_ENABLED, False)
-        current_override_timeout = current_data.get(
-            CONF_GLOBAL_OVERRIDE_TIMEOUT, DEFAULT_GLOBAL_OVERRIDE_TIMEOUT
-        )
-        current_early_start_offset = current_data.get(
-            CONF_EARLY_START_OFFSET, DEFAULT_EARLY_START_OFFSET
-        )
-        current_early_start_max = current_data.get(
-            CONF_EARLY_START_MAX, DEFAULT_EARLY_START_MAX
-        )
-        current_use_heating_curve = current_data.get(
-            CONF_USE_HEATING_CURVE, DEFAULT_USE_HEATING_CURVE
-        )
-        current_heating_curve_slope = current_data.get(
-            CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
-        )
-        current_use_weather_prediction = current_data.get(
-            CONF_USE_WEATHER_PREDICTION, DEFAULT_USE_WEATHER_PREDICTION
-        )
-        current_window_open_timeout = current_data.get(
-            CONF_GLOBAL_WINDOW_OPEN_TIMEOUT, DEFAULT_WINDOW_OPEN_TIMEOUT
-        )
-        current_friday_weekend_start_hour = current_data.get(
-            CONF_FRIDAY_WEEKEND_START_HOUR, DEFAULT_FRIDAY_WEEKEND_START_HOUR
-        )
-        current_homeoffice_end_hour = current_data.get(
-            CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
-        )
-        current_homeoffice_single_day = current_data.get(
-            CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
-        )
-        current_vp_day = current_data.get(
-            CONF_VALVE_PROTECTION_DAY, DEFAULT_VALVE_PROTECTION_DAY
-        )
-        current_vp_hour = current_data.get(
-            CONF_VALVE_PROTECTION_HOUR, DEFAULT_VALVE_PROTECTION_HOUR
-        )
-        current_vp_interval = current_data.get(
-            CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
-            DEFAULT_VALVE_PROTECTION_INTERVAL_WEEKS,
-        )
 
-        current_window_close_timeout = current_data.get(
-            CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT, DEFAULT_WINDOW_CLOSE_TIMEOUT
-        )
-
-        # Build schema step-by-step
-        schema_dict = {vol.Required(CONF_SHOW_PANEL, default=current_show_panel): bool}
+        schema_dict = {}
 
         schema_dict[
             vol.Optional(
@@ -518,221 +343,6 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
                 multiple=True,
             )
         )
-
-        schema_dict[
-            vol.Required(
-                CONF_LOCATION_MODE_ENABLED,
-                default=current_location_mode,
-            )
-        ] = bool
-
-        schema_dict[
-            vol.Optional(
-                CONF_GLOBAL_OVERRIDE_TIMEOUT,
-                default=current_override_timeout,
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=[
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_NEVER,
-                        label="Nie (manuelle Änderungen bleiben für immer)",
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_1H, label="1 Stunde"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_2H, label="2 Stunden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_3H, label="3 Stunden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_4H, label="4 Stunden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_NEXT_BLOCK,
-                        label="Bis zum nächsten Zeitplan-Block (Empfohlen)",
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_NEXT_DAY,
-                        label="Bis zum nächsten Tag (Mitternacht)",
-                    ),
-                ],
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
-
-        # Early Start settings
-        schema_dict[
-            vol.Optional(
-                CONF_EARLY_START_OFFSET,
-                default=current_early_start_offset,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=60,
-                unit_of_measurement="min",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_EARLY_START_MAX,
-                default=current_early_start_max,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=360,
-                unit_of_measurement="min",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # Window timeout settings
-        schema_dict[
-            vol.Optional(
-                CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
-                default=current_window_open_timeout,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=1800,
-                step=30,
-                unit_of_measurement="s",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
-                default=current_window_close_timeout,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=600,
-                step=30,
-                unit_of_measurement="s",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_FRIDAY_WEEKEND_START_HOUR,
-                default=current_friday_weekend_start_hour,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=24,
-                step=1,
-                unit_of_measurement="h",
-                mode=selector.NumberSelectorMode.SLIDER,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_HOMEOFFICE_END_HOUR,
-                default=current_homeoffice_end_hour,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=24,
-                step=1,
-                unit_of_measurement="h",
-                mode=selector.NumberSelectorMode.SLIDER,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_HOMEOFFICE_SINGLE_DAY,
-                default=current_homeoffice_single_day,
-            )
-        ] = selector.BooleanSelector()
-
-        # Valve Protection (Anti-Calcification) scheduling
-        schema_dict[
-            vol.Optional(
-                CONF_VALVE_PROTECTION_DAY,
-                default=str(current_vp_day) if current_vp_day is not None else "0",
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=["0", "1", "2", "3", "4", "5", "6"],
-                translation_key="valve_protection_day",
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_VALVE_PROTECTION_HOUR,
-                default=current_vp_hour,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0,
-                max=23,
-                step=1,
-                unit_of_measurement="h",
-                mode=selector.NumberSelectorMode.SLIDER,
-            )
-        )
-
-        schema_dict[
-            vol.Optional(
-                CONF_VALVE_PROTECTION_INTERVAL_WEEKS,
-                default=str(current_vp_interval)
-                if current_vp_interval is not None
-                else "2",
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=["1", "2", "3", "4"],
-                translation_key="valve_protection_interval_weeks",
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
-
-        # Weather Compensation / Heating Curve
-        schema_dict[
-            vol.Optional(
-                CONF_USE_HEATING_CURVE,
-                default=current_use_heating_curve,
-            )
-        ] = selector.BooleanSelector()
-
-        schema_dict[
-            vol.Optional(
-                CONF_HEATING_CURVE_SLOPE,
-                default=current_heating_curve_slope,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=MIN_HEATING_CURVE_SLOPE,
-                max=MAX_HEATING_CURVE_SLOPE,
-                step=0.1,
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # Weather Prediction
-        schema_dict[
-            vol.Optional(
-                CONF_USE_WEATHER_PREDICTION,
-                default=current_use_weather_prediction,
-            )
-        ] = selector.BooleanSelector()
 
         return self.async_show_form(
             step_id="panel_settings",
@@ -1119,281 +729,9 @@ class TaDIYOptionsFlowHandler(ScheduleEditorMixin, OptionsFlow):
             )
         )
 
-        # Override Timeout (Room level, includes "always" option)
-        current_override_timeout = current_data.get(CONF_OVERRIDE_TIMEOUT, "default")
-        schema_dict[
-            vol.Optional(
-                CONF_OVERRIDE_TIMEOUT,
-                default=current_override_timeout,
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=[
-                    selector.SelectOptionDict(
-                        value="default", label="Hub-Einstellung verwenden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_NEVER,
-                        label="Nie (manuelle Änderungen bleiben für immer)",
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_1H, label="1 Stunde"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_2H, label="2 Stunden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_3H, label="3 Stunden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_4H, label="4 Stunden"
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_NEXT_BLOCK,
-                        label="Bis zum nächsten Zeitplan-Block",
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_NEXT_DAY,
-                        label="Bis zum nächsten Tag (Mitternacht)",
-                    ),
-                    selector.SelectOptionDict(
-                        value=OVERRIDE_TIMEOUT_ALWAYS,
-                        label="Immer Zeitplan verwenden (keine manuelle Überschreibung)",
-                    ),
-                ],
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
-
-        # Hysteresis
-        current_hysteresis = current_data.get(CONF_HYSTERESIS, DEFAULT_HYSTERESIS)
-        schema_dict[
-            vol.Optional(
-                CONF_HYSTERESIS,
-                default=current_hysteresis,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=MIN_HYSTERESIS,
-                max=MAX_HYSTERESIS,
-                step=0.1,
-                unit_of_measurement="°C",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # Target Temperature Step
-        current_target_temp_step = current_data.get(
-            CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
-        )
-        schema_dict[
-            vol.Optional(
-                CONF_TARGET_TEMP_STEP,
-                default=current_target_temp_step,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=MIN_TARGET_TEMP_STEP,
-                max=MAX_TARGET_TEMP_STEP,
-                step=0.1,
-                unit_of_measurement="°C",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # PID Control
-        current_use_pid = current_data.get(
-            CONF_USE_PID_CONTROL, DEFAULT_USE_PID_CONTROL
-        )
-        schema_dict[
-            vol.Optional(
-                CONF_USE_PID_CONTROL,
-                default=current_use_pid,
-            )
-        ] = selector.BooleanSelector()
-
-        # PID Parameters (only shown if PID is enabled, but always available in schema)
-        current_pid_kp = current_data.get(CONF_PID_KP, DEFAULT_PID_KP)
-        schema_dict[
-            vol.Optional(
-                CONF_PID_KP,
-                default=current_pid_kp,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0.1,
-                max=5.0,
-                step=0.1,
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        current_pid_ki = current_data.get(CONF_PID_KI, DEFAULT_PID_KI)
-        schema_dict[
-            vol.Optional(
-                CONF_PID_KI,
-                default=current_pid_ki,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0.001,
-                max=0.1,
-                step=0.001,
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        current_pid_kd = current_data.get(CONF_PID_KD, DEFAULT_PID_KD)
-        schema_dict[
-            vol.Optional(
-                CONF_PID_KD,
-                default=current_pid_kd,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0.0,
-                max=1.0,
-                step=0.01,
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # Moes TRV Mode (Use HVAC Off for Low Temperatures)
-        current_use_hvac_off = current_data.get(
-            CONF_USE_HVAC_OFF_FOR_LOW_TEMP, DEFAULT_USE_HVAC_OFF_FOR_LOW_TEMP
-        )
-        schema_dict[
-            vol.Optional(
-                CONF_USE_HVAC_OFF_FOR_LOW_TEMP,
-                default=current_use_hvac_off,
-            )
-        ] = selector.BooleanSelector()
-
-        # Multi-Room Heat Coupling (Phase 3.2)
-        current_use_coupling = current_data.get(
-            CONF_USE_ROOM_COUPLING, DEFAULT_USE_ROOM_COUPLING
-        )
-        schema_dict[
-            vol.Optional(
-                CONF_USE_ROOM_COUPLING,
-                default=current_use_coupling,
-            )
-        ] = selector.BooleanSelector()
-
-        # Adjacent Rooms (for coupling)
-        current_adjacent = current_data.get(CONF_ADJACENT_ROOMS, [])
-        # Get list of other rooms for selection
-        other_rooms = self._get_other_room_names()
-        if other_rooms:
-            schema_dict[
-                vol.Optional(
-                    CONF_ADJACENT_ROOMS,
-                    default=current_adjacent,
-                )
-            ] = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=other_rooms,
-                    multiple=True,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            )
-
-        # Coupling Strength
-        current_coupling_strength = current_data.get(
-            CONF_COUPLING_STRENGTH, DEFAULT_COUPLING_STRENGTH
-        )
-        schema_dict[
-            vol.Optional(
-                CONF_COUPLING_STRENGTH,
-                default=current_coupling_strength,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=0.1,
-                max=1.0,
-                step=0.1,
-                mode=selector.NumberSelectorMode.SLIDER,
-            )
-        )
-
-        # Away Temperature (per-room)
-        current_away_temp = current_data.get(
-            CONF_AWAY_TEMPERATURE, DEFAULT_AWAY_TEMPERATURE
-        )
-        schema_dict[
-            vol.Optional(
-                CONF_AWAY_TEMPERATURE,
-                default=current_away_temp,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=10.0,
-                max=25.0,
-                step=0.5,
-                unit_of_measurement="°C",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # TRV Min/Max Temperature (per-room hardware limits)
-        current_trv_min = current_data.get(CONF_TRV_MIN_TEMP, DEFAULT_TRV_MIN_TEMP)
-        schema_dict[
-            vol.Optional(
-                CONF_TRV_MIN_TEMP,
-                default=current_trv_min,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=1.0,
-                max=15.0,
-                step=0.5,
-                unit_of_measurement="°C",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        current_trv_max = current_data.get(CONF_TRV_MAX_TEMP, DEFAULT_TRV_MAX_TEMP)
-        schema_dict[
-            vol.Optional(
-                CONF_TRV_MAX_TEMP,
-                default=current_trv_max,
-            )
-        ] = selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=20.0,
-                max=40.0,
-                step=0.5,
-                unit_of_measurement="°C",
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        )
-
-        # Disable Valve Protection (Room level override)
-        current_disable_vp = current_data.get(CONF_DISABLE_VALVE_PROTECTION, False)
-        schema_dict[
-            vol.Optional(
-                CONF_DISABLE_VALVE_PROTECTION,
-                default=current_disable_vp,
-            )
-        ] = selector.BooleanSelector()
-
         return self.async_show_form(
             step_id="room_config",
             data_schema=vol.Schema(schema_dict),
-            description_placeholders={
-                "info": (
-                    "Room Configuration:\n\n"
-                    "• Override Timeout: How long manual TRV changes override schedules (leave empty to use hub setting)\n"
-                    "• Hysteresis: Temperature deadband to prevent rapid cycling (°C)\n"
-                    "• PID Control: Enable advanced PID controller for smoother temperature regulation\n"
-                    "• Use HVAC Off for Low Temp: Enable for Moes TRVs - uses HVAC mode 'off' instead of low temperature\n"
-                    "• Room Coupling: Reduce heating when neighbors are actively heating\n"
-                    "• Adjacent Rooms: Select rooms that share walls with this room\n"
-                    "• Away Temperature: Target temperature when nobody is home (default 17°C)\n"
-                    "• Coupling Strength: How much to adjust for neighbor heating (0.1 = subtle, 1.0 = strong)\n\n"
-                    f"Hub Defaults: Hysteresis={DEFAULT_HYSTERESIS}°C"
-                )
-            },
         )
 
     def _get_other_room_names(self) -> list[str]:

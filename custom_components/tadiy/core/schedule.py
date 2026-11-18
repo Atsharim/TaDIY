@@ -9,7 +9,7 @@ from typing import Any, Callable
 from homeassistant.util import dt as dt_util
 
 from ..const import DEFAULT_FROST_PROTECTION_TEMP, MODE_MANUAL, MODE_OFF
-from .schedule_model import RoomSchedule
+from .schedule_model import RoomSchedule, ScheduleBlock
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -247,3 +247,38 @@ class ScheduleEngine:
         if day_schedule is None:
             day_schedule = room_schedule.get_schedule_for_mode("normal")
         return day_schedule is not None and len(day_schedule.blocks) > 0
+
+    def get_current_block(
+        self,
+        room_name: str,
+        mode: str,
+        dt: datetime | None = None,
+        friday_weekend_start_hour: int = 24,
+        homeoffice_end_hour: int = 24,
+    ) -> ScheduleBlock | None:
+        """Get currently active schedule block for room and mode."""
+        if dt is None:
+            dt = dt_util.now()
+
+        room_schedule = self._room_schedules.get(room_name)
+        if not room_schedule:
+            return None
+
+        day_schedule = room_schedule.get_schedule_for_mode(
+            mode, dt, friday_weekend_start_hour, homeoffice_end_hour
+        )
+        if not day_schedule:
+            day_schedule = room_schedule.get_schedule_for_mode(
+                "normal", dt, friday_weekend_start_hour, homeoffice_end_hour
+            )
+            if not day_schedule:
+                return None
+
+        current_time = dt.time()
+        active_block = None
+        for block in day_schedule.blocks:
+            if block.start_time <= current_time:
+                active_block = block
+            else:
+                break
+        return active_block
