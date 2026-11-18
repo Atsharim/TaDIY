@@ -1048,7 +1048,7 @@ async def async_register_services(
             vol.Optional(CONF_EARLY_START_MAX): cv.positive_int,
             vol.Optional(CONF_FRIDAY_WEEKEND_START_HOUR): cv.positive_int,
             vol.Optional(CONF_HOMEOFFICE_END_HOUR): cv.positive_int,
-            vol.Optional(CONF_HOMEOFFICE_SINGLE_DAY): cv.boolean,
+            vol.Optional(CONF_HOMEOFFICE_SINGLE_DAY): vol.Any(cv.boolean, cv.string),
             vol.Optional(CONF_VALVE_PROTECTION_DAY): vol.Coerce(int),
             vol.Optional(CONF_VALVE_PROTECTION_HOUR): vol.Coerce(int),
             vol.Optional(CONF_VALVE_PROTECTION_INTERVAL_WEEKS): vol.Coerce(int),
@@ -1168,6 +1168,14 @@ async def async_register_services(
             new_options[CONF_DEFAULT_DISABLE_VALVE_PROTECTION] = call.data[
                 "default_disable_valve_protection"
             ]
+        if CONF_HOMEOFFICE_SINGLE_DAY in call.data:
+            val = call.data[CONF_HOMEOFFICE_SINGLE_DAY]
+            if val is False or val == "false":
+                new_options[CONF_HOMEOFFICE_SINGLE_DAY] = False
+            elif val in ("midnight", "mitternacht"):
+                new_options[CONF_HOMEOFFICE_SINGLE_DAY] = "midnight"
+            else:
+                new_options[CONF_HOMEOFFICE_SINGLE_DAY] = "feierabend"
 
         # Fehleranalyse: Aktualisiere sowohl data als auch options, um Konsistenz zwischen
         # OptionsFlow, Services und Neustarts zu gewährleisten.

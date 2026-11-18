@@ -335,8 +335,12 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     self.set_hub_mode(HUB_MODE_HOMEOFFICE)
 
             # Auto-reset single-day homeoffice mode at homeoffice_end_hour or midnight
-            if self.hub_mode == HUB_MODE_HOMEOFFICE and self.global_settings.get(
+            single_day = self.global_settings.get(
                 CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
+            )
+            if self.hub_mode == HUB_MODE_HOMEOFFICE and single_day not in (
+                False,
+                "false",
             ):
                 end_hour = self.global_settings.get(
                     CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
@@ -348,7 +352,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                 if started_date is not None:
                     if today != started_date:
                         should_reset = True
-                    elif end_hour < 24 and now.hour >= end_hour:
+                    elif (
+                        single_day not in ("midnight", "mitternacht")
+                        and end_hour < 24
+                        and now.hour >= end_hour
+                    ):
                         if (
                             started_time is None
                             or started_time.hour < end_hour
@@ -358,7 +366,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
 
                 if should_reset:
                     _LOGGER.info(
-                        "TaDIY: Single-day homeoffice mode ended (end hour: %02d:00), resetting hub mode to normal",
+                        "TaDIY: Single-day homeoffice mode ended (mode=%s, end hour: %02d:00), resetting hub mode to normal",
+                        single_day,
                         end_hour if (started_date and today == started_date) else 0,
                     )
                     self.set_hub_mode(HUB_MODE_NORMAL)

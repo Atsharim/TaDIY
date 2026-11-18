@@ -2038,8 +2038,9 @@ class TaDiyPanel extends HTMLElement {
             <div class="setting-item">
               <span class="setting-label">💼 Homeoffice nur Einzeltag</span>
               <select class="setting-input" id="setting-homeoffice-single-day">
-                <option value="true" ${hubAttrs.homeoffice_single_day !== false ? 'selected' : ''}>Ja (Reset um Mitternacht)</option>
-                <option value="false" ${hubAttrs.homeoffice_single_day === false ? 'selected' : ''}>Nein (Dauerhaft bis Deaktivierung)</option>
+                <option value="feierabend" ${hubAttrs.homeoffice_single_day === 'feierabend' || hubAttrs.homeoffice_single_day === true || hubAttrs.homeoffice_single_day === 'true' ? 'selected' : ''}>Ja (Reset zum Feierabend, ${hubAttrs.homeoffice_end_hour ?? 17}:00 Uhr)</option>
+                <option value="midnight" ${hubAttrs.homeoffice_single_day === 'midnight' ? 'selected' : ''}>Ja (Reset um Mitternacht, 24:00 Uhr)</option>
+                <option value="false" ${hubAttrs.homeoffice_single_day === false || hubAttrs.homeoffice_single_day === 'false' ? 'selected' : ''}>Nein (Dauerhaft bis Deaktivierung)</option>
               </select>
             </div>
             <div class="setting-item">
@@ -2565,7 +2566,7 @@ class TaDiyPanel extends HTMLElement {
       try {
         const script = document.createElement('script');
         script.type = 'module';
-        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.12';
+        script.src = '/tadiy/tadiy-schedule-card.js?v=3.1.13';
         document.head.appendChild(script);
         await customElements.whenDefined('tadiy-schedule-card');
       } catch (err) {
@@ -2919,7 +2920,10 @@ class TaDiyPanel extends HTMLElement {
         if (earlyMaxEl && earlyMaxEl.value !== '') serviceData.early_start_max = parseInt(earlyMaxEl.value);
         if (fridayStartEl && fridayStartEl.value !== '') serviceData.friday_weekend_start_hour = parseInt(fridayStartEl.value);
         if (hoEndEl && hoEndEl.value !== '') serviceData.homeoffice_end_hour = parseInt(hoEndEl.value);
-        if (hoSingleEl) serviceData.homeoffice_single_day = hoSingleEl.value === 'true';
+        if (hoSingleEl) {
+          const val = hoSingleEl.value;
+          serviceData.homeoffice_single_day = val === 'false' ? false : val;
+        }
         if (vpDayEl) serviceData.valve_protection_day = parseInt(vpDayEl.value);
         if (vpHourEl && vpHourEl.value !== '') serviceData.valve_protection_hour = parseInt(vpHourEl.value);
         if (vpIntEl) serviceData.valve_protection_interval_weeks = parseInt(vpIntEl.value);

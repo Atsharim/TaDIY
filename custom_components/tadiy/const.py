@@ -167,7 +167,10 @@ DEFAULT_OFF_TEMPERATURE: Final = (
 CONF_OFF_TEMPERATURE: Final = "off_temperature"  # Configurable off mode temperature
 DEFAULT_FRIDAY_WEEKEND_START_HOUR: Final = 24  # 24 = disabled / midnight
 DEFAULT_HOMEOFFICE_END_HOUR: Final = 17  # 17:00 Feierabend, 24 = disabled
-DEFAULT_HOMEOFFICE_SINGLE_DAY: Final = True  # Auto-revert to normal mode at midnight
+DEFAULT_HOMEOFFICE_SINGLE_DAY: Final = "feierabend"  # "feierabend" | "midnight" | False
+HOMEOFFICE_RESET_FEIERABEND: Final = "feierabend"
+HOMEOFFICE_RESET_MIDNIGHT: Final = "midnight"
+HOMEOFFICE_RESET_DISABLED: Final = "false"
 
 # Valve Protection (Anti-Calcification Cycling) - Hub-level settings
 CONF_VALVE_PROTECTION_DAY: Final = "valve_protection_day"  # 0=Mon .. 6=Sun

@@ -5,7 +5,7 @@
 # TaDIY - Adaptive Climate Orchestrator for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
-[![Version](https://img.shields.io/badge/version-3.1.12-blue.svg)](https://github.com/Atsharim/TaDIY/releases/)
+[![Version](https://img.shields.io/badge/version-3.1.13-blue.svg)](https://github.com/Atsharim/TaDIY/releases/)
 [![Tests](https://img.shields.io/badge/tests-75%20passing-brightgreen.svg)](https://github.com/Atsharim/TaDIY)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 

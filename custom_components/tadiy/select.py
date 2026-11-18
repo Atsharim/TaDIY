@@ -55,6 +55,7 @@ from .const import (
     CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
     CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
     CONF_WINDOW_OPEN_TIMEOUT,
+    DEFAULT_HOMEOFFICE_SINGLE_DAY,
     DOMAIN,
     ICON_MODE,
 )
@@ -219,7 +220,9 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
                     CONF_FRIDAY_WEEKEND_START_HOUR, 16
                 ),
                 CONF_HOMEOFFICE_END_HOUR: cfg.get(CONF_HOMEOFFICE_END_HOUR, 17),
-                CONF_HOMEOFFICE_SINGLE_DAY: cfg.get(CONF_HOMEOFFICE_SINGLE_DAY, True),
+                CONF_HOMEOFFICE_SINGLE_DAY: cfg.get(
+                    CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
+                ),
                 CONF_VALVE_PROTECTION_DAY: cfg.get(CONF_VALVE_PROTECTION_DAY, 0),
                 CONF_VALVE_PROTECTION_HOUR: cfg.get(CONF_VALVE_PROTECTION_HOUR, 10),
                 CONF_VALVE_PROTECTION_INTERVAL_WEEKS: cfg.get(

@@ -216,10 +216,17 @@ set_hub_config:
           unit_of_measurement: "h"
     homeoffice_single_day:
       name: Homeoffice Single Day
-      description: Reset homeoffice mode automatically at midnight
+      description: Auto-reset homeoffice mode (feierabend, midnight, or false)
       required: false
       selector:
-        boolean:
+        select:
+          options:
+            - label: "Reset zum Feierabend"
+              value: "feierabend"
+            - label: "Reset um Mitternacht"
+              value: "midnight"
+            - label: "Deaktiviert (dauerhaft)"
+              value: "false"
     valve_protection_day:
       name: Valve Protection Day
       description: Day of the week for anti-calcification exercise (0=Monday, 6=Sunday)
