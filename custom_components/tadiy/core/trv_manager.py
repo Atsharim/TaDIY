@@ -290,12 +290,12 @@ class TrvManager:
                     desired_hvac = "heat"
                     if should_heat is False:
                         # HeatingController / hysteresis / window / off-mode decided heating must stop.
-                        # Never keep target + positive radiator calibration offset when should_heat is False,
-                        # as that forces the TRV valve to stay open above target temperature.
-                        trv_target = min(target, frost_temp, profile.min_temp)
+                        # For TRVs controlled by temperature (e.g. Sonoff with native PID), keep genuine room target
+                        # without radiator calibration boost so the TRV's native PID modulates closed
+                        # while retaining the correct setpoint on the display (avoiding slam down to 5°C).
                         self._debug(
                             "%s: should_heat=False (use_hvac_off=False), "
-                            "lowering TRV setpoint to %.1f to close valve",
+                            "holding unboosted target %.1f (native PID valve modulation)",
                             trv_id,
                             trv_target,
                         )

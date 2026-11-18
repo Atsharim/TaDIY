@@ -12,10 +12,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    CONF_BOILER_MIN_RUN_TIME,
     CONF_BOILER_TEMP_SENSOR,
-    CONF_DHW_TEMP_SENSOR,
     CONF_BOOST_DURATION,
     CONF_BOOST_TEMPERATURE,
+    CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
+    CONF_DHW_TEMP_SENSOR,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
     CONF_FROST_PROTECTION_TEMP,
     CONF_GLOBAL_DONT_HEAT_BELOW,
@@ -119,31 +121,69 @@ class TaDIYHubSelect(CoordinatorEntity, SelectEntity):
         if self.entity_description.key == "hub_mode":
             cfg = getattr(self.coordinator, "config_data", {})
             return {
-                CONF_FROST_PROTECTION_TEMP: getattr(self.coordinator, "frost_protection_temp", 7.0),
+                CONF_FROST_PROTECTION_TEMP: getattr(
+                    self.coordinator, "frost_protection_temp", 7.0
+                ),
                 CONF_BOOST_TEMPERATURE: cfg.get(CONF_BOOST_TEMPERATURE, 24.0),
                 CONF_BOOST_DURATION: cfg.get(CONF_BOOST_DURATION, 60),
                 CONF_WINDOW_OPEN_TIMEOUT: cfg.get(CONF_WINDOW_OPEN_TIMEOUT, 30),
                 CONF_WINDOW_CLOSE_TIMEOUT: cfg.get(CONF_WINDOW_CLOSE_TIMEOUT, 60),
-                CONF_GLOBAL_OVERRIDE_TIMEOUT: cfg.get(CONF_GLOBAL_OVERRIDE_TIMEOUT, 120),
+                CONF_GLOBAL_OVERRIDE_TIMEOUT: cfg.get(
+                    CONF_GLOBAL_OVERRIDE_TIMEOUT, 120
+                ),
                 CONF_DONT_HEAT_BELOW_OUTDOOR: cfg.get(
                     CONF_DONT_HEAT_BELOW_OUTDOOR, cfg.get(CONF_GLOBAL_DONT_HEAT_BELOW)
                 ),
-                CONF_BOILER_TEMP_SENSOR: getattr(self.coordinator, "boiler_temp_sensor", None),
-                "boiler_temperature": getattr(self.coordinator, "boiler_temperature", None),
-                "boiler_sensor_available": getattr(self.coordinator, "boiler_sensor_available", True),
+                CONF_BOILER_MIN_RUN_TIME: cfg.get(CONF_BOILER_MIN_RUN_TIME, 300),
+                CONF_CYCLE_LOCK_ON_SETPOINT_DROP: cfg.get(
+                    CONF_CYCLE_LOCK_ON_SETPOINT_DROP, True
+                ),
+                CONF_BOILER_TEMP_SENSOR: getattr(
+                    self.coordinator, "boiler_temp_sensor", None
+                ),
+                "boiler_temperature": getattr(
+                    self.coordinator, "boiler_temperature", None
+                ),
+                "boiler_sensor_available": getattr(
+                    self.coordinator, "boiler_sensor_available", True
+                ),
                 "boiler_active": getattr(self.coordinator, "boiler_active", False),
-                CONF_DHW_TEMP_SENSOR: getattr(self.coordinator, "dhw_temp_sensor", cfg.get(CONF_DHW_TEMP_SENSOR)),
+                CONF_DHW_TEMP_SENSOR: getattr(
+                    self.coordinator, "dhw_temp_sensor", cfg.get(CONF_DHW_TEMP_SENSOR)
+                ),
                 "dhw_temperature": getattr(self.coordinator, "dhw_temperature", None),
-                "dhw_sensor_available": getattr(self.coordinator, "dhw_sensor_available", True),
-                "homeoffice_tomorrow": getattr(self.coordinator, "_homeoffice_tomorrow", False),
-                CONF_PERSON_ENTITIES: getattr(self.coordinator, "person_entities", cfg.get(CONF_PERSON_ENTITIES, [])),
-                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: getattr(self.coordinator, "window_neighbor_setback_enabled", True),
-                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: getattr(self.coordinator, "window_neighbor_setback_delta", 1.5),
-                CONF_WINDOW_HOUSE_SETBACK_DELTA: getattr(self.coordinator, "window_house_setback_delta", 1.0),
-                CONF_GLOBAL_OFFSET_STEP: getattr(self.coordinator, "global_offset_step", 1.5),
-                CONF_GLOBAL_OFFSET_MODE: getattr(self.coordinator, "global_offset_mode", "next_block"),
-                CONF_GLOBAL_OFFSET_DURATION_HOURS: getattr(self.coordinator, "global_offset_duration_hours", 3.0),
-                "global_offset_temp": getattr(self.coordinator, "global_offset_temp", 0.0),
+                "dhw_sensor_available": getattr(
+                    self.coordinator, "dhw_sensor_available", True
+                ),
+                "homeoffice_tomorrow": getattr(
+                    self.coordinator, "_homeoffice_tomorrow", False
+                ),
+                CONF_PERSON_ENTITIES: getattr(
+                    self.coordinator,
+                    "person_entities",
+                    cfg.get(CONF_PERSON_ENTITIES, []),
+                ),
+                CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED: getattr(
+                    self.coordinator, "window_neighbor_setback_enabled", True
+                ),
+                CONF_WINDOW_NEIGHBOR_SETBACK_DELTA: getattr(
+                    self.coordinator, "window_neighbor_setback_delta", 1.5
+                ),
+                CONF_WINDOW_HOUSE_SETBACK_DELTA: getattr(
+                    self.coordinator, "window_house_setback_delta", 1.0
+                ),
+                CONF_GLOBAL_OFFSET_STEP: getattr(
+                    self.coordinator, "global_offset_step", 1.5
+                ),
+                CONF_GLOBAL_OFFSET_MODE: getattr(
+                    self.coordinator, "global_offset_mode", "next_block"
+                ),
+                CONF_GLOBAL_OFFSET_DURATION_HOURS: getattr(
+                    self.coordinator, "global_offset_duration_hours", 3.0
+                ),
+                "global_offset_temp": getattr(
+                    self.coordinator, "global_offset_temp", 0.0
+                ),
                 "global_offset_until": (
                     getattr(self.coordinator, "global_offset_until", None).isoformat()
                     if getattr(self.coordinator, "global_offset_until", None)

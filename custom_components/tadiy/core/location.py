@@ -108,12 +108,18 @@ class LocationManager:
         else:
             if immediate:
                 # Bypass grace and partial period for explicit manual away command
-                self._away_since = dt_util.utcnow() - timedelta(seconds=AWAY_PARTIAL_PERIOD + 1)
-                _LOGGER.info("Location override: forced to AWAY (immediate away target)")
+                self._away_since = dt_util.utcnow() - timedelta(
+                    seconds=AWAY_PARTIAL_PERIOD + 1
+                )
+                _LOGGER.info(
+                    "Location override: forced to AWAY (immediate away target)"
+                )
             else:
                 if self._away_since is None:
                     self._away_since = dt_util.utcnow()
-                _LOGGER.info("Location override: forced to AWAY (gradual timer started)")
+                _LOGGER.info(
+                    "Location override: forced to AWAY (gradual timer started)"
+                )
 
         self.update_location_state()
 

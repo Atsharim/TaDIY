@@ -211,10 +211,16 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
                 else None
             )
             attrs["active_temp_sensor"] = getattr(data, "active_temp_sensor", None)
-            attrs["sensor_fallback_active"] = getattr(data, "sensor_fallback_active", False)
+            attrs["sensor_fallback_active"] = getattr(
+                data, "sensor_fallback_active", False
+            )
             attrs["heating_rate"] = getattr(data, "heating_rate", None)
-            attrs["heating_rate_samples"] = getattr(data, "heating_rate_sample_count", 0)
-            attrs["heating_rate_confidence"] = getattr(data, "heating_rate_confidence", 0.0)
+            attrs["heating_rate_samples"] = getattr(
+                data, "heating_rate_sample_count", 0
+            )
+            attrs["heating_rate_confidence"] = getattr(
+                data, "heating_rate_confidence", 0.0
+            )
             attrs["heating_rate_last_updated"] = (
                 data.heating_rate_last_updated.isoformat()
                 if getattr(data, "heating_rate_last_updated", None)
@@ -224,8 +230,15 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
 
             # TRV target exposure for panel diagnosis
             trv_target = None
-            if hasattr(self.coordinator, "_last_trv_targets") and self.coordinator._last_trv_targets:
-                trv_targets = [t for t in self.coordinator._last_trv_targets.values() if t is not None]
+            if (
+                hasattr(self.coordinator, "_last_trv_targets")
+                and self.coordinator._last_trv_targets
+            ):
+                trv_targets = [
+                    t
+                    for t in self.coordinator._last_trv_targets.values()
+                    if t is not None
+                ]
                 if trv_targets:
                     trv_target = round(sum(trv_targets) / len(trv_targets), 1)
             attrs["trv_target_temperature"] = trv_target
@@ -234,15 +247,31 @@ class TaDIYClimateEntity(CoordinatorEntity, ClimateEntity):
         if self.coordinator and hasattr(self.coordinator, "room_config"):
             cfg = self.coordinator.room_config
             opts = self._entry.options if self._entry else {}
-            attrs["away_temperature"] = getattr(cfg, "away_temperature", opts.get("away_temperature", 15.0))
+            attrs["away_temperature"] = getattr(
+                cfg, "away_temperature", opts.get("away_temperature", 15.0)
+            )
             attrs["tolerance"] = getattr(cfg, "tolerance", opts.get("tolerance", 0.5))
-            attrs["early_start_max_minutes"] = getattr(cfg, "early_start_max_minutes", opts.get("early_start_max_minutes", 120))
-            attrs["window_open_timeout"] = getattr(cfg, "window_open_timeout", opts.get("window_open_timeout", 30))
-            attrs["window_close_timeout"] = getattr(cfg, "window_close_timeout", opts.get("window_close_timeout", 60))
-            attrs["min_heating_rate"] = getattr(cfg, "min_heating_rate", opts.get("min_heating_rate", 0.5))
-            attrs["max_heating_rate"] = getattr(cfg, "max_heating_rate", opts.get("max_heating_rate", 3.0))
-            attrs["dont_heat_below_outdoor"] = getattr(cfg, "dont_heat_below_outdoor", opts.get("dont_heat_below_outdoor"))
-            attrs["adjacent_rooms"] = getattr(cfg, "adjacent_rooms", opts.get("adjacent_rooms", []))
+            attrs["early_start_max_minutes"] = getattr(
+                cfg, "early_start_max_minutes", opts.get("early_start_max_minutes", 120)
+            )
+            attrs["window_open_timeout"] = getattr(
+                cfg, "window_open_timeout", opts.get("window_open_timeout", 30)
+            )
+            attrs["window_close_timeout"] = getattr(
+                cfg, "window_close_timeout", opts.get("window_close_timeout", 60)
+            )
+            attrs["min_heating_rate"] = getattr(
+                cfg, "min_heating_rate", opts.get("min_heating_rate", 0.5)
+            )
+            attrs["max_heating_rate"] = getattr(
+                cfg, "max_heating_rate", opts.get("max_heating_rate", 3.0)
+            )
+            attrs["dont_heat_below_outdoor"] = getattr(
+                cfg, "dont_heat_below_outdoor", opts.get("dont_heat_below_outdoor")
+            )
+            attrs["adjacent_rooms"] = getattr(
+                cfg, "adjacent_rooms", opts.get("adjacent_rooms", [])
+            )
 
         return attrs
 

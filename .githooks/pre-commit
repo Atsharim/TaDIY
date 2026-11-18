@@ -1,0 +1,56 @@
+#!/usr/bin/env sh
+# Pre-commit hook for TaDIY: runs unit tests and JSON validations before commit
+
+echo "Running TaDIY pre-commit checks..."
+
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_CMD=python3
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_CMD=python
+else
+    echo "ERROR: python or python3 not found on PATH. Aborting commit."
+    exit 1
+fi
+
+$PYTHON_CMD -m unittest discover -s tests
+if [ $? -ne 0 ]; then
+    echo "ERROR: Unit tests failed. Commit aborted."
+    exit 1
+fi
+
+$PYTHON_CMD -m json.tool hacs.json >/dev/null
+$PYTHON_CMD -m json.tool custom_components/tadiy/manifest.json >/dev/null
+$PYTHON_CMD -m json.tool custom_components/tadiy/strings.json >/dev/null
+$PYTHON_CMD -m json.tool custom_components/tadiy/translations/de.json >/dev/null
+$PYTHON_CMD -m json.tool custom_components/tadiy/translations/en.json >/dev/null
+if [ $? -ne 0 ]; then
+    echo "ERROR: JSON validation failed. Commit aborted."
+    exit 1
+fi
+
+if $PYTHON_CMD -m ruff --version >/dev/null 2>&1; then
+    $PYTHON_CMD -m ruff check custom_components/tadiy/ >/dev/null
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Ruff lint check failed. Commit aborted."
+        exit 1
+    fi
+    $PYTHON_CMD -m ruff format --check custom_components/tadiy/ >/dev/null
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Ruff format check failed. Commit aborted."
+        exit 1
+    fi
+fi
+
+if command -v node >/dev/null 2>&1; then
+    node -c custom_components/tadiy/www/tadiy-panel.js
+    node -c custom_components/tadiy/www/tadiy-schedule-card.js
+    node -c custom_components/tadiy/www/tadiy-energy-card.js
+    if [ $? -ne 0 ]; then
+        echo "ERROR: JavaScript validation failed. Commit aborted."
+        exit 1
+    fi
+fi
+
+echo "TaDIY pre-commit checks passed successfully."
+exit 0
+

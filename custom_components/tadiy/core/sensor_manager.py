@@ -7,9 +7,9 @@ jitter and prevent erratic heating decisions.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import logging
 import time as _time
+from datetime import datetime, timezone
 from typing import Any, NamedTuple
 
 _LOGGER = logging.getLogger(__package__)
@@ -162,9 +162,7 @@ class SensorManager:
             # Fallback: TRV sensors only (no main sensor)
             self.is_fallback_active = bool(config.main_temp_sensor_id)
             self.active_sensor_id = (
-                "TRV intern (Fallback)"
-                if config.main_temp_sensor_id
-                else "TRV intern"
+                "TRV intern (Fallback)" if config.main_temp_sensor_id else "TRV intern"
             )
             trv_readings: list[SensorReading] = []
             for trv_id in config.trv_entity_ids:

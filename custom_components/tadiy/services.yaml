@@ -173,6 +173,101 @@ set_hub_config:
           max: 25.0
           step: 0.5
           unit_of_measurement: "°C"
+    boiler_temp_sensor:
+      name: Boiler Flow Sensor
+      description: Entity ID of boiler flow temperature sensor
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    dhw_temp_sensor:
+      name: DHW Circulation Sensor
+      description: Entity ID of DHW circulation temperature sensor
+      required: false
+      selector:
+        entity:
+          domain: sensor
+    boiler_min_run_time:
+      name: Boiler Minimum Run Time
+      description: Minimum run time for boiler in seconds
+      required: false
+      selector:
+        number:
+          min: 60
+          max: 1800
+          step: 30
+          unit_of_measurement: "s"
+    cycle_lock_on_setpoint_drop:
+      name: Cycle Lock on Setpoint Drop
+      description: Immediately release cycle lock when room target is lowered
+      required: false
+      selector:
+        boolean:
+    window_neighbor_setback_enabled:
+      name: Neighbor Window Setback Enabled
+      description: Enable temperature setback when neighboring window opens
+      required: false
+      selector:
+        boolean:
+    window_neighbor_setback_delta:
+      name: Neighbor Window Setback Delta
+      description: Temperature setback when adjacent room window opens (°C)
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 5.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    window_house_setback_delta:
+      name: House Fallback Window Setback Delta
+      description: Temperature setback when any other window opens (°C)
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 5.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    global_offset_step:
+      name: Global Offset Step
+      description: Step size for quick offset buttons (°C)
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 5.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    global_offset_mode:
+      name: Global Offset Mode
+      description: Duration mode for quick offset
+      required: false
+      selector:
+        select:
+          options:
+            - label: "Bis zum nächsten Zeitplan-Block"
+              value: "next_block"
+            - label: "Feste Dauer (Stunden)"
+              value: "duration"
+    global_offset_duration_hours:
+      name: Global Offset Duration
+      description: Duration for quick offset when mode is duration (hours)
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 24.0
+          step: 0.5
+          unit_of_measurement: "h"
+    person_entities:
+      name: Person Entities
+      description: List of person entities counted for presence
+      required: false
+      selector:
+        entity:
+          multiple: true
+          domain: person
 
 set_global_offset:
   name: Set Global Quick Offset
@@ -262,11 +357,52 @@ set_room_config:
           max: 300
           step: 5
           unit_of_measurement: "s"
+    window_close_timeout:
+      name: Window Close Cooldown
+      description: Wait time before resuming heating after window closes (s)
+      required: false
+      selector:
+        number:
+          min: 5
+          max: 300
+          step: 5
+          unit_of_measurement: "s"
+    dont_heat_below_outdoor:
+      name: Room Summer Switch-off Outdoor Temperature
+      description: Do not heat when outdoor temperature is above this value (°C)
+      required: false
+      selector:
+        number:
+          min: 10.0
+          max: 25.0
+          step: 0.5
+          unit_of_measurement: "°C"
+    min_heating_rate:
+      name: Minimum Heating Rate
+      description: Minimum heating rate constraint (°C/h)
+      required: false
+      selector:
+        number:
+          min: 0.1
+          max: 5.0
+          step: 0.1
+          unit_of_measurement: "°C/h"
+    max_heating_rate:
+      name: Maximum Heating Rate
+      description: Maximum heating rate constraint (°C/h)
+      required: false
+      selector:
+        number:
+          min: 0.5
+          max: 10.0
+          step: 0.1
+          unit_of_measurement: "°C/h"
     adjacent_rooms:
       name: Adjacent Rooms
       description: List of neighboring rooms for window setback and thermal coupling
       required: false
       selector:
         select:
+          options: []
           multiple: true
           custom_value: true

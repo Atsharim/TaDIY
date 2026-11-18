@@ -18,16 +18,14 @@ from .const import (
     CONF_ADJACENT_ROOMS,
     CONF_AWAY_TEMPERATURE,
     CONF_BOILER_TEMP_SENSOR,
-    CONF_DHW_TEMP_SENSOR,
     CONF_COUPLING_STRENGTH,
     CONF_CUSTOM_MODES,
+    CONF_DHW_TEMP_SENSOR,
     CONF_DISABLE_VALVE_PROTECTION,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
     CONF_EARLY_START_MAX,
     CONF_EARLY_START_OFFSET,
     CONF_FRIDAY_WEEKEND_START_HOUR,
-    CONF_HOMEOFFICE_END_HOUR,
-    CONF_HOMEOFFICE_SINGLE_DAY,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_EARLY_START_MAX,
     CONF_GLOBAL_EARLY_START_OFFSET,
@@ -40,6 +38,8 @@ from .const import (
     CONF_GLOBAL_WINDOW_CLOSE_TIMEOUT,
     CONF_GLOBAL_WINDOW_OPEN_TIMEOUT,
     CONF_HEATING_CURVE_SLOPE,
+    CONF_HOMEOFFICE_END_HOUR,
+    CONF_HOMEOFFICE_SINGLE_DAY,
     CONF_HUMIDITY_SENSOR,
     CONF_HYSTERESIS,
     CONF_LOCATION_MODE_ENABLED,
@@ -327,11 +327,8 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     self.set_hub_mode(HUB_MODE_HOMEOFFICE)
 
             # Auto-reset single-day homeoffice mode at homeoffice_end_hour or midnight
-            if (
-                self.hub_mode == HUB_MODE_HOMEOFFICE
-                and self.global_settings.get(
-                    CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
-                )
+            if self.hub_mode == HUB_MODE_HOMEOFFICE and self.global_settings.get(
+                CONF_HOMEOFFICE_SINGLE_DAY, DEFAULT_HOMEOFFICE_SINGLE_DAY
             ):
                 end_hour = self.global_settings.get(
                     CONF_HOMEOFFICE_END_HOUR, DEFAULT_HOMEOFFICE_END_HOUR
@@ -344,7 +341,11 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
                     if today != started_date:
                         should_reset = True
                     elif end_hour < 24 and now.hour >= end_hour:
-                        if started_time is None or started_time.hour < end_hour or (now - started_time).total_seconds() > 3600:
+                        if (
+                            started_time is None
+                            or started_time.hour < end_hour
+                            or (now - started_time).total_seconds() > 3600
+                        ):
                             should_reset = True
 
                 if should_reset:
@@ -358,7 +359,10 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             await self._update_weather_forecast()
 
             # Auto-reset global quick offset if duration expired
-            if self.global_offset_until and dt_util.utcnow() >= self.global_offset_until:
+            if (
+                self.global_offset_until
+                and dt_util.utcnow() >= self.global_offset_until
+            ):
                 _LOGGER.info(
                     "TaDIY: Global offset (%.1f°C) duration expired, resetting to 0.0°C",
                     self.global_offset_temp,
@@ -393,16 +397,21 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             # Optional boiler supply flow temperature probe
             if self.boiler_temp_sensor:
                 sensor_state = self.hass.states.get(self.boiler_temp_sensor)
-                if (
-                    sensor_state
-                    and sensor_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, "")
+                if sensor_state and sensor_state.state not in (
+                    STATE_UNAVAILABLE,
+                    STATE_UNKNOWN,
+                    None,
+                    "",
                 ):
                     try:
                         self.boiler_temperature = round(float(sensor_state.state), 1)
                         self.boiler_sensor_available = True
                     except (ValueError, TypeError):
                         self.boiler_sensor_available = False
-                elif sensor_state and sensor_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                elif sensor_state and sensor_state.state in (
+                    STATE_UNAVAILABLE,
+                    STATE_UNKNOWN,
+                ):
                     # Sensor is temporarily unavailable/offline - preserve last known temperature
                     self.boiler_sensor_available = False
                 else:
@@ -420,16 +429,21 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
             # Optional DHW / circulation temperature probe
             if self.dhw_temp_sensor:
                 sensor_state = self.hass.states.get(self.dhw_temp_sensor)
-                if (
-                    sensor_state
-                    and sensor_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN, None, "")
+                if sensor_state and sensor_state.state not in (
+                    STATE_UNAVAILABLE,
+                    STATE_UNKNOWN,
+                    None,
+                    "",
                 ):
                     try:
                         self.dhw_temperature = round(float(sensor_state.state), 1)
                         self.dhw_sensor_available = True
                     except (ValueError, TypeError):
                         self.dhw_sensor_available = False
-                elif sensor_state and sensor_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                elif sensor_state and sensor_state.state in (
+                    STATE_UNAVAILABLE,
+                    STATE_UNKNOWN,
+                ):
                     self.dhw_sensor_available = False
                 else:
                     self.dhw_sensor_available = False
@@ -475,23 +489,57 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         # Synchronize dynamic hub attributes from config_data if present
         if hasattr(self, "config_data") and isinstance(self.config_data, dict):
             if CONF_PERSON_ENTITIES in self.config_data:
-                self.person_entities = list(self.config_data.get(CONF_PERSON_ENTITIES) or [])
+                self.person_entities = list(
+                    self.config_data.get(CONF_PERSON_ENTITIES) or []
+                )
             if CONF_BOILER_TEMP_SENSOR in self.config_data:
-                self.boiler_temp_sensor = self.config_data.get(CONF_BOILER_TEMP_SENSOR) or None
+                self.boiler_temp_sensor = (
+                    self.config_data.get(CONF_BOILER_TEMP_SENSOR) or None
+                )
             if CONF_DHW_TEMP_SENSOR in self.config_data:
-                self.dhw_temp_sensor = self.config_data.get(CONF_DHW_TEMP_SENSOR) or None
+                self.dhw_temp_sensor = (
+                    self.config_data.get(CONF_DHW_TEMP_SENSOR) or None
+                )
             if CONF_GLOBAL_OFFSET_STEP in self.config_data:
-                self.global_offset_step = float(self.config_data.get(CONF_GLOBAL_OFFSET_STEP, DEFAULT_GLOBAL_OFFSET_STEP))
+                self.global_offset_step = float(
+                    self.config_data.get(
+                        CONF_GLOBAL_OFFSET_STEP, DEFAULT_GLOBAL_OFFSET_STEP
+                    )
+                )
             if CONF_GLOBAL_OFFSET_MODE in self.config_data:
-                self.global_offset_mode = str(self.config_data.get(CONF_GLOBAL_OFFSET_MODE, DEFAULT_GLOBAL_OFFSET_MODE))
+                self.global_offset_mode = str(
+                    self.config_data.get(
+                        CONF_GLOBAL_OFFSET_MODE, DEFAULT_GLOBAL_OFFSET_MODE
+                    )
+                )
             if CONF_GLOBAL_OFFSET_DURATION_HOURS in self.config_data:
-                self.global_offset_duration_hours = float(self.config_data.get(CONF_GLOBAL_OFFSET_DURATION_HOURS, DEFAULT_GLOBAL_OFFSET_DURATION_HOURS))
+                self.global_offset_duration_hours = float(
+                    self.config_data.get(
+                        CONF_GLOBAL_OFFSET_DURATION_HOURS,
+                        DEFAULT_GLOBAL_OFFSET_DURATION_HOURS,
+                    )
+                )
             if CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED in self.config_data:
-                self.window_neighbor_setback_enabled = bool(self.config_data.get(CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED, DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED))
+                self.window_neighbor_setback_enabled = bool(
+                    self.config_data.get(
+                        CONF_WINDOW_NEIGHBOR_SETBACK_ENABLED,
+                        DEFAULT_WINDOW_NEIGHBOR_SETBACK_ENABLED,
+                    )
+                )
             if CONF_WINDOW_NEIGHBOR_SETBACK_DELTA in self.config_data:
-                self.window_neighbor_setback_delta = float(self.config_data.get(CONF_WINDOW_NEIGHBOR_SETBACK_DELTA, DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA))
+                self.window_neighbor_setback_delta = float(
+                    self.config_data.get(
+                        CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
+                        DEFAULT_WINDOW_NEIGHBOR_SETBACK_DELTA,
+                    )
+                )
             if CONF_WINDOW_HOUSE_SETBACK_DELTA in self.config_data:
-                self.window_house_setback_delta = float(self.config_data.get(CONF_WINDOW_HOUSE_SETBACK_DELTA, DEFAULT_WINDOW_HOUSE_SETBACK_DELTA))
+                self.window_house_setback_delta = float(
+                    self.config_data.get(
+                        CONF_WINDOW_HOUSE_SETBACK_DELTA,
+                        DEFAULT_WINDOW_HOUSE_SETBACK_DELTA,
+                    )
+                )
 
         early_offset = self.config_data.get(
             CONF_EARLY_START_OFFSET,
@@ -1080,6 +1128,7 @@ class TaDIYHubCoordinator(DataUpdateCoordinator):
         self.async_update_listeners()
 
         from .const import DOMAIN
+
         for entry_id, entry_data in self.hass.data.get(DOMAIN, {}).items():
             if isinstance(entry_data, dict) and entry_data.get("type") == "room":
                 coord = entry_data.get("coordinator")
@@ -1505,7 +1554,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 if room_data.get("dont_heat_below_outdoor") is not None
                 else hub_settings.get(
                     CONF_DONT_HEAT_BELOW_OUTDOOR,
-                    hub_settings.get(CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW),
+                    hub_settings.get(
+                        CONF_GLOBAL_DONT_HEAT_BELOW, DEFAULT_DONT_HEAT_BELOW
+                    ),
                 )
             ),
             "use_early_start": room_data.get(
@@ -1537,9 +1588,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             ),
             "heating_curve_slope": room_data.get(
                 CONF_HEATING_CURVE_SLOPE,
-                hub_settings.get(
-                    CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE
-                ),
+                hub_settings.get(CONF_HEATING_CURVE_SLOPE, DEFAULT_HEATING_CURVE_SLOPE),
             ),
             "use_humidity_compensation": room_data.get(
                 "use_humidity_compensation", False
@@ -1598,11 +1647,6 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         """Create and save a default schedule for the room."""
         from datetime import time
 
-        from .const import (
-            SCHEDULE_TYPE_DAILY,
-            SCHEDULE_TYPE_WEEKDAY,
-            SCHEDULE_TYPE_WEEKEND,
-        )
         from .core.schedule_model import DaySchedule, RoomSchedule, ScheduleBlock
 
         # Default weekday schedule: 00:00-06:00 at 18°C, 06:00-22:00 at 21°C, 22:00-24:00 at 18°C
@@ -2400,7 +2444,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     delta = getattr(
                         self.hub_coordinator, "window_neighbor_setback_delta", 1.5
                     )
-                    min_limit = getattr(self.room_config, "min_temp", getattr(self.room_config, "trv_min_temp", MIN_TEMP))
+                    min_limit = getattr(
+                        self.room_config,
+                        "min_temp",
+                        getattr(self.room_config, "trv_min_temp", MIN_TEMP),
+                    )
                     adjusted = max(min_limit, base_target - delta)
                     self.debug(
                         "rooms",
@@ -2417,7 +2465,11 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     delta = getattr(
                         self.hub_coordinator, "window_house_setback_delta", 1.0
                     )
-                    min_limit = getattr(self.room_config, "min_temp", getattr(self.room_config, "trv_min_temp", MIN_TEMP))
+                    min_limit = getattr(
+                        self.room_config,
+                        "min_temp",
+                        getattr(self.room_config, "trv_min_temp", MIN_TEMP),
+                    )
                     adjusted = max(min_limit, base_target - delta)
                     self.debug(
                         "rooms",
@@ -2459,8 +2511,16 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 )
             else:
                 offset_val = self.hub_coordinator.global_offset_temp
-                min_limit = getattr(self.room_config, "min_temp", getattr(self.room_config, "trv_min_temp", MIN_TEMP))
-                max_limit = getattr(self.room_config, "max_temp", getattr(self.room_config, "trv_max_temp", MAX_TEMP))
+                min_limit = getattr(
+                    self.room_config,
+                    "min_temp",
+                    getattr(self.room_config, "trv_min_temp", MIN_TEMP),
+                )
+                max_limit = getattr(
+                    self.room_config,
+                    "max_temp",
+                    getattr(self.room_config, "trv_max_temp", MAX_TEMP),
+                )
                 adjusted = max(
                     min_limit,
                     min(max_limit, base_target + offset_val),
@@ -2557,7 +2617,8 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
 
             # If new temp matches last sent command (calibrated or uncalibrated), it's just the TRV obeying us
             matches_commanded = abs(new_temp - last_sent_temp) < 2.0 or (
-                uncalibrated_temp is not None and abs(new_temp - uncalibrated_temp) < 2.0
+                uncalibrated_temp is not None
+                and abs(new_temp - uncalibrated_temp) < 2.0
             )
             if matches_commanded:
                 _LOGGER.debug(
@@ -2709,11 +2770,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                                 DEFAULT_FRIDAY_WEEKEND_START_HOUR,
                             )
                         )
-                        homeoffice_end_hour = (
-                            self.hub_coordinator.global_settings.get(
-                                CONF_HOMEOFFICE_END_HOUR,
-                                DEFAULT_HOMEOFFICE_END_HOUR,
-                            )
+                        homeoffice_end_hour = self.hub_coordinator.global_settings.get(
+                            CONF_HOMEOFFICE_END_HOUR,
+                            DEFAULT_HOMEOFFICE_END_HOUR,
                         )
                     next_change = self.schedule_engine.get_next_schedule_change(
                         self.room_config.name,
@@ -2973,7 +3032,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                 hvac_mode="heat",
             )
 
-            #Hub mode "off" or window open timeout reached: never heat
+            # Hub mode "off" or window open timeout reached: never heat
             if hub_mode == "off" or window_state.heating_should_stop:
                 should_heat = False
 
@@ -3046,7 +3105,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
             if st:
                 if st.attributes.get("current_temperature") is not None:
                     try:
-                        trv_current_temps.append(float(st.attributes["current_temperature"]))
+                        trv_current_temps.append(
+                            float(st.attributes["current_temperature"])
+                        )
                     except (ValueError, TypeError):
                         pass
                 if st.attributes.get("temperature") is not None:
@@ -3087,7 +3148,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     notification_id=f"tadiy_alert_{self.entry_id}",
                 )
             except Exception as notif_err:
-                _LOGGER.warning("Could not create persistent notification: %s", notif_err)
+                _LOGGER.warning(
+                    "Could not create persistent notification: %s", notif_err
+                )
         elif not is_problem and self._last_problem_active:
             try:
                 from homeassistant.components import persistent_notification
@@ -3119,7 +3182,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
                     time_delta = (now - prev_time).total_seconds() / 60.0
                     if time_delta >= 5.0:
                         temp_increase = fused_temp - prev_temp
-                        if temp_increase >= 0.05 or (time_delta >= 15.0 and temp_increase > 0.01):
+                        if temp_increase >= 0.05 or (
+                            time_delta >= 15.0 and temp_increase > 0.01
+                        ):
                             try:
                                 self._heat_model.update_with_measurement(
                                     temp_increase, time_delta
@@ -3168,7 +3233,9 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         elif self._manual_room_off:
             target_source = "Raum manuell AUS"
         elif hub_mode == "away":
-            target_source = f"Abwesend-Modus ({self.room_config.away_temperature:.1f}°C)"
+            target_source = (
+                f"Abwesend-Modus ({self.room_config.away_temperature:.1f}°C)"
+            )
         elif hub_mode == "homeoffice":
             target_source = (
                 f"Homeoffice ({scheduled_target:.1f}°C)"
@@ -3178,9 +3245,7 @@ class TaDIYRoomCoordinator(DataUpdateCoordinator):
         elif hub_mode == "off":
             target_source = "System AUS (Frostschutz)"
         elif scheduled_target is not None:
-            sched_label = (
-                "Wochenende" if dt_util.now().weekday() >= 5 else "Wochentag"
-            )
+            sched_label = "Wochenende" if dt_util.now().weekday() >= 5 else "Wochentag"
             target_source = f"Zeitplan ({sched_label}: {scheduled_target:.1f}°C)"
         else:
             target_source = "Standard-Sollwert"

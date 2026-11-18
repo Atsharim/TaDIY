@@ -2158,7 +2158,16 @@ class TaDiyPanel extends HTMLElement {
       const targetTemp = climateState.attributes.temperature;
       const roomTarget = assignedRoom && typeof assignedRoom.target_temp === 'number' ? assignedRoom.target_temp : null;
 
-      const hasDiscrepancy = (targetTemp !== null && targetTemp !== undefined && roomTarget !== null && Math.abs(targetTemp - roomTarget) > 0.4);
+      const expectedTarget = assignedRoom && typeof assignedRoom.trv_target === 'number'
+        ? assignedRoom.trv_target
+        : (roomTarget !== null ? roomTarget : null);
+
+      const isStandbyOrOff = assignedRoom && (assignedRoom.hvac_action === 'idle' || assignedRoom.hvac_mode === 'off');
+      const isTargetAtFrost = targetTemp !== null && targetTemp <= 7.0;
+
+      const hasDiscrepancy = targetTemp !== null && targetTemp !== undefined && expectedTarget !== null
+        ? (isStandbyOrOff && isTargetAtFrost ? false : Math.abs(targetTemp - expectedTarget) > 0.4)
+        : false;
 
       return {
         entity_id: climateState.entity_id,
@@ -2170,6 +2179,7 @@ class TaDiyPanel extends HTMLElement {
         current_temp: currentTemp,
         target_temp: targetTemp,
         room_target: roomTarget,
+        expected_target: expectedTarget,
         has_discrepancy: hasDiscrepancy,
         is_heating: isHeating,
         is_offline: isOffline,
@@ -2268,11 +2278,11 @@ class TaDiyPanel extends HTMLElement {
                     ${t.is_heating ? '🔥 Heizen' : (t.state === 'off' ? '⏹️ Aus' : '🟢 Standby')}
                   </span>
                   ${t.has_discrepancy ? `
-                    <span class="trv-discrepancy-pill" title="TRV-Sollwert weicht vom TaDIY Raum-Sollwert (${t.room_target}°C) ab">
-                      ⚠️ TaDIY: ${t.room_target}°C
+                    <span class="trv-discrepancy-pill" title="TRV-Sollwert (${t.target_temp}°C) weicht vom TaDIY-Sollwert (${t.expected_target ?? t.room_target}°C) ab">
+                      ⚠️ TaDIY: ${t.expected_target ?? t.room_target}°C
                     </span>
                   ` : (t.room_target !== null ? `
-                    <span style="font-size: 11px; color: var(--secondary-text-color);">TaDIY: ${t.room_target}°C</span>
+                    <span style="font-size: 11px; color: var(--secondary-text-color);">TaDIY: ${t.expected_target ?? t.room_target}°C</span>
                   ` : '')}
                 </div>
 

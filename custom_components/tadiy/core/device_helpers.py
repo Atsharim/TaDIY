@@ -45,11 +45,16 @@ def get_device_info(
         if target_hub_id and hass:
             try:
                 from homeassistant.helpers import device_registry as dr
+
                 dev_reg = dr.async_get(hass)
                 if hasattr(dev_reg, "async_get_device_by_identifier"):
-                    hub_device = dev_reg.async_get_device_by_identifier((DOMAIN, target_hub_id))
+                    hub_device = dev_reg.async_get_device_by_identifier(
+                        (DOMAIN, target_hub_id)
+                    )
                 else:
-                    hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, target_hub_id)})
+                    hub_device = dev_reg.async_get_device(
+                        identifiers={(DOMAIN, target_hub_id)}
+                    )
                 if hub_device:
                     # HA 2024.8+ deprecated via_device tuple in favor of via_device_id
                     device_info["via_device_id"] = hub_device.id

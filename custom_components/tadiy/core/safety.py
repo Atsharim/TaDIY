@@ -23,18 +23,28 @@ _LOGGER = logging.getLogger(__name__)
 # Thresholds
 OVERHEAT_TEMP: float = 28.0  # Force heating off above this (absolute ceiling)
 FROST_FLOOR_TEMP: float = 5.0  # Force heating on below this (absolute floor)
-OVERHEAT_SETPOINT_DELTA: float = 1.5  # °C above setpoint before stuck-open heating detection begins
-HEATING_FAILURE_SETPOINT_DELTA: float = 0.8  # °C below setpoint before stuck-closed / boiler failure detection begins
+OVERHEAT_SETPOINT_DELTA: float = (
+    1.5  # °C above setpoint before stuck-open heating detection begins
+)
+HEATING_FAILURE_SETPOINT_DELTA: float = (
+    0.8  # °C below setpoint before stuck-closed / boiler failure detection begins
+)
 VALVE_STUCK_TIMEOUT: int = 1800  # 30 min evaluation window
-VALVE_STUCK_MIN_DELTA: float = 0.5  # Expected min climb in that period to declare active runaway heating
-MIN_TEMP_RISE_ON_HEAT: float = 0.0  # Must not be stagnant or falling (temp_rise <= 0.0) when heating
+VALVE_STUCK_MIN_DELTA: float = (
+    0.5  # Expected min climb in that period to declare active runaway heating
+)
+MIN_TEMP_RISE_ON_HEAT: float = (
+    0.0  # Must not be stagnant or falling (temp_rise <= 0.0) when heating
+)
 
 
 @dataclass
 class SafetyAlert:
     """A safety alert."""
 
-    alert_type: str  # "valve_stuck_open", "heating_failure", "overheat", "frost", "valve_stuck"
+    alert_type: (
+        str  # "valve_stuck_open", "heating_failure", "overheat", "frost", "valve_stuck"
+    )
     message: str
     timestamp: datetime = field(default_factory=dt_util.utcnow)
     resolved: bool = False
@@ -266,7 +276,9 @@ class SafetyManager:
         self.check_frost(current_temp, heating_active)
 
         # TRV sensor cross-check
-        valid_trvs = [t for t in (trv_temperatures or []) if isinstance(t, (int, float))]
+        valid_trvs = [
+            t for t in (trv_temperatures or []) if isinstance(t, (int, float))
+        ]
         trv_is_hot = True
         trv_actively_heating = False
         if valid_trvs:
@@ -352,8 +364,15 @@ class SafetyManager:
                             # Diagnose whether TRV failed to follow command or boiler/pipes are cold
                             trv_not_responding = False
                             if trv_targets:
-                                valid_targets = [t for t in trv_targets if isinstance(t, (int, float))]
-                                if valid_targets and all(t <= (current_temp or 20.0) or t <= 10.0 for t in valid_targets):
+                                valid_targets = [
+                                    t
+                                    for t in trv_targets
+                                    if isinstance(t, (int, float))
+                                ]
+                                if valid_targets and all(
+                                    t <= (current_temp or 20.0) or t <= 10.0
+                                    for t in valid_targets
+                                ):
                                     trv_not_responding = True
                             if trv_modes and all(m == "off" for m in trv_modes):
                                 trv_not_responding = True

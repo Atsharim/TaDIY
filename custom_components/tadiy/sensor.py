@@ -33,6 +33,7 @@ from .const import (
     WINDOW_STATE_OPEN_HEATING_STOPPED,
 )
 from .core.device_helpers import get_device_info
+from .core.temperature import calculate_comfort as _calculate_comfort
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -258,11 +259,15 @@ HUB_SENSOR_TYPES: tuple[TaDIYSensorEntityDescription, ...] = (
         available_fn=lambda data: (
             data is not None and data.get("boiler_temperature") is not None
         ),
-        attr_fn=lambda data: {
-            "source_sensor": data.get("boiler_temp_sensor_id"),
-            "sensor_available": data.get("boiler_sensor_available", True),
-            "boiler_active": data.get("boiler_active", False),
-        } if data else {},
+        attr_fn=lambda data: (
+            {
+                "source_sensor": data.get("boiler_temp_sensor_id"),
+                "sensor_available": data.get("boiler_sensor_available", True),
+                "boiler_active": data.get("boiler_active", False),
+            }
+            if data
+            else {}
+        ),
     ),
 )
 
@@ -542,11 +547,16 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
                 ent_reg = er.async_get(self.hass)
                 entry = ent_reg.async_get(entity_id)
                 if entry and entry.device_id:
-                    for sibling in er.async_entries_for_device(ent_reg, entry.device_id):
+                    for sibling in er.async_entries_for_device(
+                        ent_reg, entry.device_id
+                    ):
                         if sibling.entity_id == entity_id:
                             continue
                         sib_state = self.hass.states.get(sibling.entity_id)
-                        if not sib_state or sib_state.state in ("unavailable", "unknown"):
+                        if not sib_state or sib_state.state in (
+                            "unavailable",
+                            "unknown",
+                        ):
                             continue
 
                         # Check battery sensor
@@ -657,7 +667,12 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
             friendly_name = (
                 state.attributes.get("friendly_name", entity_id) if state else entity_id
             )
-            key = entity_id.replace("climate.", "").replace("sensor.", "").replace("binary_sensor.", "").replace(".", "_")
+            key = (
+                entity_id.replace("climate.", "")
+                .replace("sensor.", "")
+                .replace("binary_sensor.", "")
+                .replace(".", "_")
+            )
 
             if is_offline:
                 attributes["offline_devices"].append(entity_id)
@@ -674,13 +689,23 @@ class TaDIYBatteryStatusSensor(CoordinatorEntity, SensorEntity):
 
             if entity_id.startswith("climate."):
                 dev_type = "trv"
-            elif dev_class == "door" or any(k in clean_lower or k in name_lower for k in ("tuer", "tür", "door", "tor", "gate")):
+            elif dev_class == "door" or any(
+                k in clean_lower or k in name_lower
+                for k in ("tuer", "tür", "door", "tor", "gate")
+            ):
                 dev_type = "door"
-            elif dev_class == "window" or any(k in clean_lower or k in name_lower for k in ("window", "fenster", "roof")):
+            elif dev_class == "window" or any(
+                k in clean_lower or k in name_lower
+                for k in ("window", "fenster", "roof")
+            ):
                 dev_type = "window"
-            elif dev_class == "humidity" or any(k in clean_lower or k in name_lower for k in ("humidity", "feucht")):
+            elif dev_class == "humidity" or any(
+                k in clean_lower or k in name_lower for k in ("humidity", "feucht")
+            ):
                 dev_type = "humidity"
-            elif dev_class == "temperature" or any(k in clean_lower or k in name_lower for k in ("temp", "temperatur")):
+            elif dev_class == "temperature" or any(
+                k in clean_lower or k in name_lower for k in ("temp", "temperatur")
+            ):
                 dev_type = "temp"
             else:
                 dev_type = "sensor"
@@ -783,25 +808,6 @@ class TaDIYOverrideDetailSensor(CoordinatorEntity, SensorEntity):
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         self.async_write_ha_state()
-
-
-from .core.temperature import (
-    COMFORT_HUMIDITY_ACCEPTABLE_MAX,
-    COMFORT_HUMIDITY_ACCEPTABLE_MIN,
-    COMFORT_HUMIDITY_DRY,
-    COMFORT_HUMIDITY_IDEAL,
-    COMFORT_HUMIDITY_MAX,
-    COMFORT_HUMIDITY_MIN,
-    COMFORT_HUMIDITY_WET,
-    COMFORT_TEMP_ACCEPTABLE_MAX,
-    COMFORT_TEMP_ACCEPTABLE_MIN,
-    COMFORT_TEMP_COLD,
-    COMFORT_TEMP_IDEAL,
-    COMFORT_TEMP_MAX,
-    COMFORT_TEMP_MIN,
-    COMFORT_TEMP_WARM,
-    calculate_comfort as _calculate_comfort,
-)
 
 
 class TaDIYRoomComfortSensor(CoordinatorEntity, SensorEntity):

@@ -286,9 +286,7 @@ class RoomData:
             "target_source": self.target_source,
             "decision_reason": self.decision_reason,
             "decision_time": (
-                self.decision_time.isoformat()
-                if self.decision_time
-                else None
+                self.decision_time.isoformat() if self.decision_time else None
             ),
             "active_temp_sensor": self.active_temp_sensor,
             "sensor_fallback_active": self.sensor_fallback_active,

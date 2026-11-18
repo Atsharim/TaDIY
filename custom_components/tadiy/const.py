@@ -32,10 +32,18 @@ CONF_WINDOW_SENSORS: Final = "window_sensors"
 CONF_OUTDOOR_SENSOR: Final = "outdoor_sensor"
 CONF_HUMIDITY_SENSOR: Final = "humidity_sensor"  # Optional humidity sensor for room
 CONF_WEATHER_ENTITY: Final = "weather_entity"  # Optional weather entity for hub (fallback outdoor temp + forecast)
-CONF_BOILER_TEMP_SENSOR: Final = "boiler_temp_sensor"  # Optional hot water / boiler supply flow temperature probe
-CONF_DHW_TEMP_SENSOR: Final = "dhw_temp_sensor"  # Optional domestic hot water / circulation temperature probe
-CONF_BOILER_MIN_RUN_TIME: Final = "boiler_min_run_time"  # Minimum boiler run time in seconds
-CONF_CYCLE_LOCK_ON_SETPOINT_DROP: Final = "cycle_lock_on_setpoint_drop"  # Cycle lock release on setpoint drop
+CONF_BOILER_TEMP_SENSOR: Final = (
+    "boiler_temp_sensor"  # Optional hot water / boiler supply flow temperature probe
+)
+CONF_DHW_TEMP_SENSOR: Final = (
+    "dhw_temp_sensor"  # Optional domestic hot water / circulation temperature probe
+)
+CONF_BOILER_MIN_RUN_TIME: Final = (
+    "boiler_min_run_time"  # Minimum boiler run time in seconds
+)
+CONF_CYCLE_LOCK_ON_SETPOINT_DROP: Final = (
+    "cycle_lock_on_setpoint_drop"  # Cycle lock release on setpoint drop
+)
 CONF_PERSON_ENTITIES: Final = (
     "person_entities"  # Optional person entities for location-based control
 )

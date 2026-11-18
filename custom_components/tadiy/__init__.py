@@ -32,6 +32,7 @@ from .const import (
     CONF_BOILER_TEMP_SENSOR,
     CONF_BOOST_DURATION,
     CONF_BOOST_TEMPERATURE,
+    CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
     CONF_DEBUG_CALIBRATION,
     CONF_DEBUG_CARDS,
     CONF_DEBUG_EARLY_START,
@@ -44,10 +45,8 @@ from .const import (
     CONF_DEBUG_TRV,
     CONF_DEBUG_UI,
     CONF_DEBUG_VERBOSE,
-    CONF_CYCLE_LOCK_ON_SETPOINT_DROP,
     CONF_DHW_TEMP_SENSOR,
     CONF_DONT_HEAT_BELOW_OUTDOOR,
-    CONF_EARLY_START_MAX,
     CONF_FROST_PROTECTION_TEMP,
     CONF_GLOBAL_DONT_HEAT_BELOW,
     CONF_GLOBAL_OFFSET_DURATION_HOURS,
@@ -58,7 +57,6 @@ from .const import (
     CONF_PERSON_ENTITIES,
     CONF_ROOM_NAME,
     CONF_SHOW_PANEL,
-    CONF_TOLERANCE,
     CONF_WINDOW_CLOSE_TIMEOUT,
     CONF_WINDOW_HOUSE_SETBACK_DELTA,
     CONF_WINDOW_NEIGHBOR_SETBACK_DELTA,
@@ -82,9 +80,9 @@ from .const import (
     SERVICE_GET_SCHEDULE,
     SERVICE_REFRESH_WEATHER_FORECAST,
     SERVICE_RESET_LEARNING,
+    SERVICE_SET_GLOBAL_OFFSET,
     SERVICE_SET_HEATING_CURVE,
     SERVICE_SET_HOMEOFFICE_TOMORROW,
-    SERVICE_SET_GLOBAL_OFFSET,
     SERVICE_SET_HUB_CONFIG,
     SERVICE_SET_HUB_MODE,
     SERVICE_SET_LOCATION_OVERRIDE,
@@ -319,7 +317,12 @@ async def async_setup_hub(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Path already registered, that's fine
         pass
 
-    hub_coordinator = TaDIYHubCoordinator(hass, entry.entry_id, entry.data, entry)
+    # Fehleranalyse: Coordinator muss immer aus den zusammengeführten Werten aus entry.data und entry.options
+    # initialisiert werden, da Optionen sonst nach Reload/Neustart verloren gehen.
+    combined_hub_data = {**entry.data, **entry.options}
+    hub_coordinator = TaDIYHubCoordinator(
+        hass, entry.entry_id, combined_hub_data, entry
+    )
     await hub_coordinator.async_load_learning_data()
     await hub_coordinator.async_load_schedules()
     await hub_coordinator.async_load_location_data()
@@ -388,8 +391,10 @@ async def async_setup_room(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         raise ConfigEntryNotReady("Hub coordinator not found")
 
+    # Fehleranalyse: Raum-Optionen (z. B. adjacent_rooms) müssen beim Starten aus entry.options und entry.data geladen werden.
+    combined_room_data = {**entry.data, **entry.options}
     room_coordinator = TaDIYRoomCoordinator(
-        hass, entry.entry_id, entry.data, hub_coordinator
+        hass, entry.entry_id, combined_room_data, hub_coordinator
     )
     await room_coordinator.async_load_schedules()
     await room_coordinator.async_load_heat_model()
@@ -450,7 +455,8 @@ async def async_register_services(
                 await room_coord.async_request_refresh()
         await hub_coordinator.async_save_learning_data()
         _LOGGER.info(
-            "Learning data reset for %s", f"room: {room_name}" if room_name else "all rooms"
+            "Learning data reset for %s",
+            f"room: {room_name}" if room_name else "all rooms",
         )
 
     async def handle_boost_all_rooms(call: ServiceCall) -> None:
@@ -981,7 +987,9 @@ async def async_register_services(
             vol.Optional(CONF_WINDOW_OPEN_TIMEOUT): cv.positive_int,
             vol.Optional(CONF_WINDOW_CLOSE_TIMEOUT): cv.positive_int,
             vol.Optional(CONF_GLOBAL_OVERRIDE_TIMEOUT): cv.positive_int,
-            vol.Optional(CONF_DONT_HEAT_BELOW_OUTDOOR): vol.Any(None, vol.Coerce(float)),
+            vol.Optional(CONF_DONT_HEAT_BELOW_OUTDOOR): vol.Any(
+                None, vol.Coerce(float)
+            ),
             vol.Optional(CONF_BOILER_TEMP_SENSOR): cv.string,
             vol.Optional(CONF_DHW_TEMP_SENSOR): cv.string,
             vol.Optional(CONF_BOILER_MIN_RUN_TIME): cv.positive_int,
@@ -1039,7 +1047,11 @@ async def async_register_services(
                     if key == CONF_DONT_HEAT_BELOW_OUTDOOR:
                         new_options[CONF_GLOBAL_DONT_HEAT_BELOW] = val
 
-        hass.config_entries.async_update_entry(hub_entry, options=new_options)
+        # Fehleranalyse: Aktualisiere sowohl data als auch options, um Konsistenz zwischen
+        # OptionsFlow, Services und Neustarts zu gewährleisten.
+        hass.config_entries.async_update_entry(
+            hub_entry, data={**hub_entry.data, **new_options}, options=new_options
+        )
         # Apply immediately to running hub coordinator
         entry_data = hass.data.get(DOMAIN, {}).get(hub_entry.entry_id, {})
         coord = entry_data.get("coordinator") if isinstance(entry_data, dict) else None
@@ -1117,10 +1129,17 @@ async def async_register_services(
 
         # Pass 1: exact match by config entry ID
         for entry in hass.config_entries.async_entries(DOMAIN):
-            if not entry.data.get("is_hub", False) and entry.data.get("entry_type") != "hub":
+            if (
+                not entry.data.get("is_hub", False)
+                and entry.data.get("entry_type") != "hub"
+            ):
                 if entry.entry_id == entity_id:
                     room_entry = entry
-                    matched_coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
+                    matched_coordinator = (
+                        hass.data.get(DOMAIN, {})
+                        .get(entry.entry_id, {})
+                        .get("coordinator")
+                    )
                     break
 
         # Pass 2: match by state machine attributes if entity_id is a climate entity
@@ -1131,17 +1150,34 @@ async def async_register_services(
                 for entry in hass.config_entries.async_entries(DOMAIN):
                     if entry.entry_id == matched_id:
                         room_entry = entry
-                        matched_coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
+                        matched_coordinator = (
+                            hass.data.get(DOMAIN, {})
+                            .get(entry.entry_id, {})
+                            .get("coordinator")
+                        )
                         break
 
         # Pass 3: match by coordinator room_config name
         if not room_entry:
             for entry in hass.config_entries.async_entries(DOMAIN):
-                if not entry.data.get("is_hub", False) and entry.data.get("entry_type") != "hub":
-                    room_coord = hass.data.get(DOMAIN, {}).get(entry.entry_id, {}).get("coordinator")
+                if (
+                    not entry.data.get("is_hub", False)
+                    and entry.data.get("entry_type") != "hub"
+                ):
+                    room_coord = (
+                        hass.data.get(DOMAIN, {})
+                        .get(entry.entry_id, {})
+                        .get("coordinator")
+                    )
                     if room_coord and hasattr(room_coord, "room_config"):
                         c_name = room_coord.room_config.name.strip().lower()
-                        clean_target = entity_id.lower().replace("climate.", "").replace("tadiy_", "").replace("ta_", "").strip()
+                        clean_target = (
+                            entity_id.lower()
+                            .replace("climate.", "")
+                            .replace("tadiy_", "")
+                            .replace("ta_", "")
+                            .strip()
+                        )
                         if c_name == clean_target or c_name in clean_target:
                             room_entry = entry
                             matched_coordinator = room_coord
@@ -1151,7 +1187,9 @@ async def async_register_services(
                         break
 
         if not room_entry:
-            _LOGGER.error("Cannot set room config: Room entry not found for %s", entity_id)
+            _LOGGER.error(
+                "Cannot set room config: Room entry not found for %s", entity_id
+            )
             return
 
         new_options = dict(room_entry.options)
@@ -1173,36 +1211,61 @@ async def async_register_services(
                 else:
                     new_options[key] = val
 
-        hass.config_entries.async_update_entry(room_entry, options=new_options)
+        # Fehleranalyse: Aktualisiere sowohl data als auch options, damit adjacent_rooms und
+        # Raumeinstellungen auch bei ConfigEntry-Reload erhalten bleiben.
+        hass.config_entries.async_update_entry(
+            room_entry, data={**room_entry.data, **new_options}, options=new_options
+        )
 
         # Apply immediately to running room coordinator if available
         if matched_coordinator and hasattr(matched_coordinator, "room_config"):
             if CONF_AWAY_TEMPERATURE in call.data:
-                matched_coordinator.room_config.away_temperature = call.data[CONF_AWAY_TEMPERATURE]
+                matched_coordinator.room_config.away_temperature = call.data[
+                    CONF_AWAY_TEMPERATURE
+                ]
             if "tolerance" in call.data:
                 matched_coordinator.room_config.tolerance = call.data["tolerance"]
             if "early_start_max_minutes" in call.data:
-                matched_coordinator.room_config.early_start_max_minutes = call.data["early_start_max_minutes"]
+                matched_coordinator.room_config.early_start_max_minutes = call.data[
+                    "early_start_max_minutes"
+                ]
             if "window_open_timeout" in call.data:
-                matched_coordinator.room_config.window_open_timeout = call.data["window_open_timeout"]
+                matched_coordinator.room_config.window_open_timeout = call.data[
+                    "window_open_timeout"
+                ]
             if "window_close_timeout" in call.data:
-                matched_coordinator.room_config.window_close_timeout = call.data["window_close_timeout"]
-            if hasattr(matched_coordinator, "window_detector") and matched_coordinator.window_detector:
+                matched_coordinator.room_config.window_close_timeout = call.data[
+                    "window_close_timeout"
+                ]
+            if (
+                hasattr(matched_coordinator, "window_detector")
+                and matched_coordinator.window_detector
+            ):
                 matched_coordinator.window_detector.update_timeouts(
                     matched_coordinator.room_config.window_open_timeout,
                     matched_coordinator.room_config.window_close_timeout,
                 )
             if "dont_heat_below_outdoor" in call.data:
-                matched_coordinator.room_config.dont_heat_below_outdoor = call.data["dont_heat_below_outdoor"]
+                matched_coordinator.room_config.dont_heat_below_outdoor = call.data[
+                    "dont_heat_below_outdoor"
+                ]
             if "min_heating_rate" in call.data:
-                matched_coordinator.room_config.min_heating_rate = call.data["min_heating_rate"]
+                matched_coordinator.room_config.min_heating_rate = call.data[
+                    "min_heating_rate"
+                ]
             if "max_heating_rate" in call.data:
-                matched_coordinator.room_config.max_heating_rate = call.data["max_heating_rate"]
+                matched_coordinator.room_config.max_heating_rate = call.data[
+                    "max_heating_rate"
+                ]
             if CONF_ADJACENT_ROOMS in call.data:
-                matched_coordinator.room_config.adjacent_rooms = call.data[CONF_ADJACENT_ROOMS]
+                matched_coordinator.room_config.adjacent_rooms = call.data[
+                    CONF_ADJACENT_ROOMS
+                ]
             matched_coordinator.async_update_listeners()
 
-        _LOGGER.info("Room options updated via service for %s: %s", room_entry.title, call.data)
+        _LOGGER.info(
+            "Room options updated via service for %s: %s", room_entry.title, call.data
+        )
 
     hass.services.async_register(
         DOMAIN,
